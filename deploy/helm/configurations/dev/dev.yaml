@@ -1,0 +1,3 @@
+# Helm values for the "dev" Vader deployment configuration.
+# Referenced by tools/scripts/devs/install-vader-into-kind.sh and
+# tools/scripts/devs/install-vader-into-kind-full-local.sh

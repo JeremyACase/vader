@@ -1,0 +1,93 @@
+#!/bin/bash
+# Purpose: Build local artifacts into containers, load into KIND, then install Vader.
+
+set -euo pipefail
+
+# ----------- CONFIGURATION -------------
+OPENJDK_VERSION="${OPENJDK_VERSION:-21}"                    # For Java service images that declare ARG OPENJDK_VERSION
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-vader-agent-0}"     # KIND cluster name
+UI_BASE_PATH="${UI_BASE_PATH:-/}"                           # Angular base-href (/, /workbench, etc.)
+WORKBENCH_PATH="services/dag/workbench/ts/dag-workbench-ui" # UI subproject root (Angular/NGINX)
+
+echo "Using OPENJDK_VERSION=${OPENJDK_VERSION}"
+echo "Using KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME}"
+echo "Using UI_BASE_PATH=${UI_BASE_PATH}"
+
+# ----------- PREREQS -------------------
+for cmd in kind helm kubectl docker; do
+  command -v "$cmd" >/dev/null || { echo "ERROR: '$cmd' not found in PATH."; exit 1; }
+done
+
+# ----------- KIND CLUSTER --------------
+if kind get clusters | grep -q "^${KIND_CLUSTER_NAME}$"; then
+  echo "✅ KIND cluster '${KIND_CLUSTER_NAME}' already exists."
+else
+  echo "🔧 Creating KIND cluster '${KIND_CLUSTER_NAME}'..."
+  kind create cluster --name "${KIND_CLUSTER_NAME}"
+fi
+
+# Namespace
+kubectl get namespace vader >/dev/null 2>&1 || kubectl create namespace vader
+
+# ----------- BUILD & LOAD --------------
+# Find Dockerfiles (skip node_modules to keep it tidy)
+mapfile -t DOCKERFILES < <(find . -type d -name node_modules -prune -o -type f -name 'Dockerfile' -print | sort)
+
+for dockerfile in "${DOCKERFILES[@]}"; do
+  dir=$(dirname "$dockerfile")
+  short_name=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
+  image_name="vader/${short_name}"
+
+  echo "----"
+  echo "🔨 Building Docker image: ${image_name} from ${dockerfile}"
+
+  if [[ "$dir" == *"/${WORKBENCH_PATH}" ]]; then
+    # Angular/NGINX image. Avoid MSYS path mangling: only pass APP_BASE_PATH when not "/"
+    if [[ "${UI_BASE_PATH}" == "/" ]]; then
+      docker build -t "${image_name}:latest" "$dir"
+    else
+      MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*" \
+      docker build --build-arg APP_BASE_PATH="${UI_BASE_PATH}" \
+                   -t "${image_name}:latest" "$dir"
+    fi
+
+  # Java services: only pass OPENJDK_VERSION if the Dockerfile declares it
+  elif grep -q -E '^[[:space:]]*ARG[[:space:]]+OPENJDK_VERSION' "$dockerfile"; then
+    docker build --build-arg OPENJDK_VERSION="${OPENJDK_VERSION}" \
+                 -t "${image_name}:latest" "$dir"
+
+  else
+    # Python services, React/NGINX frontends, and anything else that needs no extra build args.
+    docker build -t "${image_name}:latest" "$dir"
+  fi
+
+  echo "📦 Loading image into KIND: ${image_name}:latest"
+  kind load docker-image "${image_name}:latest" --name "${KIND_CLUSTER_NAME}"
+done
+
+echo "✅ All Docker images built and loaded into KIND."
+
+# ----------- INSTALL / UPGRADE ---------
+echo "Installing Vader into KIND..."
+
+helm dependency update deploy/helm/
+
+# Shared PV in KinD node for belief-state jars
+docker exec "${KIND_CLUSTER_NAME}-control-plane" mkdir -p /mnt/data/belief-state-jars || true
+
+# RBAC/service account for dev
+kubectl apply -f deploy/config/dev/vader_dev_service_account.yaml -n vader
+# PV/PVC for belief state generator
+kubectl apply -f deploy/config/dev/vader_dev_kind_pv.yaml -n vader
+
+if helm status vader -n vader >/dev/null 2>&1; then
+  echo "Helm release 'vader' exists — upgrading..."
+  helm upgrade vader deploy/helm/ \
+    --values deploy/helm/configurations/dev/dev.yaml \
+    -n vader
+else
+  echo "Installing Helm release 'vader'..."
+  helm install vader deploy/helm/ \
+    --values deploy/helm/configurations/dev/dev.yaml \
+    -n vader
+fi

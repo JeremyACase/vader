@@ -1,0 +1,68 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.springframework.boot:spring-boot-gradle-plugin:${SPRING_BOOT_VERSION}"
+    }
+}
+
+plugins {
+    id 'org.springframework.boot' version "${SPRING_BOOT_VERSION}" apply false
+    id 'io.spring.dependency-management' version '1.1.4' apply false
+}
+
+allprojects {
+    group = 'org.vader'
+    version = '0.1.0'
+
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+
+    apply plugin: 'checkstyle'
+    apply plugin: 'jacoco'
+    apply plugin: 'io.spring.dependency-management'
+
+    checkstyle {
+        toolVersion = '10.23.1'
+        config = resources.text.fromFile("$rootDir/common/java/checkstyle/checkstyle.xml")
+        configProperties = [
+            'basedir': rootDir,
+            'org.checkstyle.google.suppressionfilter.config': "${rootDir}/common/java/checkstyle/checkstyle-suppressions.xml"
+        ]
+    }
+
+    tasks.withType(Checkstyle).configureEach {
+        reports { xml.required = false; html.required = true }
+    }
+
+    jacoco { toolVersion = '0.8.14' }
+}
+
+subprojects {
+
+    if (file("$projectDir/src/main/java").exists()) {
+        apply plugin: 'java'
+
+        // Apply Boot only to services with a main class
+        if (project.path.startsWith(':services:core:java') ||
+            project.path.startsWith(':services:test:java')) {
+            apply plugin: 'org.springframework.boot'
+        }
+
+        dependencies {
+            testImplementation "org.springframework:spring-test"
+            testImplementation "org.springframework.boot:spring-boot-starter-test"
+
+            testImplementation "org.junit.jupiter:junit-jupiter-api:${JUNIT_JUPITER_VERSION}"
+            testImplementation "org.junit.jupiter:junit-jupiter-engine:${JUNIT_JUPITER_VERSION}"
+            testImplementation "org.mockito:mockito-core:${MOCKITO_VERSION}"
+            testImplementation "org.mockito:mockito-junit-jupiter:${MOCKITO_VERSION}"
+
+            testRuntimeOnly "org.junit.platform:junit-platform-launcher:${JUNIT_PLATFORM_VERSION}"
+            testRuntimeOnly "org.junit.platform:junit-platform-commons:${JUNIT_PLATFORM_VERSION}"
+        }
+    }
+}

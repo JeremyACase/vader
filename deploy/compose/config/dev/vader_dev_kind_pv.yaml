@@ -1,0 +1,3 @@
+# Dev PersistentVolume for Vader belief-state jars in KIND.
+# Referenced by tools/scripts/devs/install-vader-into-kind.sh and
+# tools/scripts/devs/install-vader-into-kind-full-local.sh
