@@ -1,3 +1,23 @@
 # Helm values for the "dev" Vader deployment configuration.
-# Referenced by tools/scripts/devs/install-vader-into-kind.sh and
-# tools/scripts/devs/install-vader-into-kind-full-local.sh
+logging:
+  vader: DEBUG
+
+vader:
+  mode: DEV
+  database:
+    type: HSQL
+  components:
+    core:
+      coreServer:
+        image:
+          registry: docker.io/vader
+          repository: core-server
+          tag: latest
+
+infrastructure:
+  image:
+    pullPolicy: Never
+
+telemetry:
+  prometheus:
+    enabled: false

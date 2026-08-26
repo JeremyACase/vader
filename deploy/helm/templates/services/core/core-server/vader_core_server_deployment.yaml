@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vader-core-server
+  labels:
+    {{- include "vader.labels" . | nindent 4 }}
+    component: vader-core-server
+spec:
+  {{- if not .Values.k8s.autoscaling.enabled }}
+  replicas: {{ .Values.vader.components.core.coreServer.replicas | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "vader.selectorLabels" . | nindent 6 }}
+      component: vader-core-server
+
+  template:
+    metadata:
+      {{- if .Values.telemetry.prometheus.enabled }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/actuator/prometheus'
+        prometheus.io/port: "{{ .Values.convenience.variables.spring.port }}"
+      {{- end }}
+      labels:
+        {{- include "vader.selectorLabels" . | nindent 8 }}
+        {{- include "vader.podLabels" . | nindent 8 }}
+        component: vader-core-server
+
+    spec:
+      {{- with .Values.infrastructure.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vader.serviceAccountName" . }}
+
+      volumes:
+        - name: config
+          configMap:
+            name: vader-core-server-config
+
+      containers:
+        - name: core-server
+          volumeMounts:
+            - name: config
+              mountPath: /app/etc
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.convenience.variables.spring.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.convenience.variables.spring.port }}
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.convenience.variables.spring.port }}
+            periodSeconds: 10
+            failureThreshold: 3
+          image: {{ include "vader.core.coreServer.image" . }}
+          imagePullPolicy: {{ .Values.infrastructure.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.convenience.variables.spring.port }}
+              protocol: TCP

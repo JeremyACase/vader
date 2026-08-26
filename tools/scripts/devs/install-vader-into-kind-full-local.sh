@@ -72,13 +72,13 @@ echo "Installing Vader into KIND..."
 
 helm dependency update deploy/helm/
 
-# Shared PV in KinD node for belief-state jars
-docker exec "${KIND_CLUSTER_NAME}-control-plane" mkdir -p /mnt/data/belief-state-jars || true
+# Shared data mount inside the KinD node
+docker exec "${KIND_CLUSTER_NAME}-control-plane" mkdir -p /mnt/data/vader || true
 
 # RBAC/service account for dev
-kubectl apply -f deploy/config/dev/vader_dev_service_account.yaml -n vader
+kubectl apply -f deploy/compose/config/dev/vader_dev_service_account.yaml -n vader
 # PV/PVC for belief state generator
-kubectl apply -f deploy/config/dev/vader_dev_kind_pv.yaml -n vader
+kubectl apply -f deploy/compose/config/dev/vader_dev_kind_pv.yaml -n vader
 
 if helm status vader -n vader >/dev/null 2>&1; then
   echo "Helm release 'vader' exists — upgrading..."

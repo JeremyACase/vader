@@ -1,3 +1,13 @@
-# Dev PersistentVolume for Vader belief-state jars in KIND.
-# Referenced by tools/scripts/devs/install-vader-into-kind.sh and
-# tools/scripts/devs/install-vader-into-kind-full-local.sh
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: vader-dev-data-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: standard
+  hostPath:
+    path: /mnt/data/vader

@@ -36,14 +36,14 @@ else
     kubectl create namespace vader
 fi
 
-# Create a mount for KIND to mount into to store our generated belief state jars
-docker exec vader-agent-0-control-plane mkdir -p /mnt/data/belief-state-jars
+# Create a shared data mount inside the KIND node
+docker exec vader-agent-0-control-plane mkdir -p /mnt/data/vader
 
-# This is to ensure the flow-service can manipulate the Kubernetes cluster; it will likely be a different service account in prod
-kubectl apply -f deploy/config/dev/vader_dev_service_account.yaml -n vader
+# This is to ensure core-server can manipulate the Kubernetes cluster; it will likely be a different service account in prod
+kubectl apply -f deploy/compose/config/dev/vader_dev_service_account.yaml -n vader
 
-# This is to ensure the belief state generator has a shared mount path between it and the belief states it will be deploying in KIND
-kubectl apply -f deploy/config/dev/vader_dev_kind_pv.yaml -n vader
+# This is to ensure services have a shared mount path for anything they deploy in KIND
+kubectl apply -f deploy/compose/config/dev/vader_dev_kind_pv.yaml -n vader
 
 if helm status vader -n vader > /dev/null 2>&1; then
     echo "Helm release 'vader' exists — upgrading..."
