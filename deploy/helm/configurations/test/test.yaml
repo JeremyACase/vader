@@ -1,1 +1,15 @@
 # Helm values for the "test" Vader deployment configuration.
+vader:
+  database:
+    type: HSQL
+  components:
+    core:
+      coreServer:
+        image:
+          registry: jeremyacase
+          repository: vader-core-server
+          tag: latest
+
+infrastructure:
+  image:
+    pullPolicy: IfNotPresent
