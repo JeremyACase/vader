@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * Entry point for the Vader Core Server.
  *
- * <p>Datasource autoconfiguration is left enabled: the persistence backend (HSQL by default,
+ * <p>Datasource autoconfiguration is left enabled: the persistence backend (H2,
  * see {@code vader.database.type} in Helm values) is wired up via {@code application.yaml}
  * rather than excluded here.</p>
  */

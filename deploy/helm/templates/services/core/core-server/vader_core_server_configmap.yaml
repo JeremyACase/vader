@@ -40,12 +40,10 @@ data:
         name: core-server
 
       datasource:
-        {{- if eq .Values.vader.database.type "HSQL" }}
-        driverClassName: org.hsqldb.jdbc.JDBCDriver
-        url: jdbc:hsqldb:mem:vaderDb;sql.syntax_pgs=true
-        username: SA
+        driverClassName: org.h2.Driver
+        url: jdbc:h2:mem:vaderDb;DB_CLOSE_DELAY=-1
+        username: sa
         password: ""
-        {{- end }}
         hikari:
           transaction-isolation: {{ .Values.vader.database.transactionIsolation }}
       jpa:
@@ -55,6 +53,10 @@ data:
           hibernate:
             generate_statistics: false
             format_sql: true
+      h2:
+        console:
+          enabled: true
+          path: /h2-console
 
     vader:
       mode: {{ .Values.vader.mode | default "PROD" }}

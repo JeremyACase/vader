@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vader-core-ui-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.6.0
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+
+          test_endpoint() {
+            local METHOD=$1
+            local URL=$2
+            local EXPECT_CODE=$3
+            local NAME=$4
+
+            echo "Testing $NAME ($METHOD $URL)..."
+
+            local RESPONSE_FILE=$(mktemp)
+            local STATUS=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" -X "$METHOD" "$URL")
+            local BODY=$(cat "$RESPONSE_FILE")
+            rm "$RESPONSE_FILE"
+
+            if [ "$STATUS" != "$EXPECT_CODE" ]; then
+              echo "❌ $NAME failed (expected $EXPECT_CODE, got $STATUS)"
+              echo "🔍 Response body:"
+              echo "$BODY"
+              exit 1
+            fi
+
+            echo "✅ $NAME passed (HTTP $STATUS)"
+          }
+
+          BASE_URL="http://vader-core-ui:8080"
+
+          # -- Health check --
+          test_endpoint GET "$BASE_URL/healthz" 200 "Health Check"
+
+          echo "🎉 All endpoint checks passed!"

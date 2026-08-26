@@ -1,0 +1,56 @@
+**************************************************
+
+
+SUCCESS! Vader is installed!
+
+
+**************************************************
+Vader Core Server:
+
+The best way to interact with Core Server directly is via port-forwarding:
+
+1. $ kubectl port-forward svc/vader-core-server -n {{ .Release.Namespace }} {{ .Values.convenience.variables.spring.port }}:{{ .Values.convenience.variables.spring.port }}
+2. Navigate to "http://localhost:{{ .Values.convenience.variables.spring.port }}/actuator/health"
+
+**************************************************
+Vader Database (H2):
+
+Core Server is running with an embedded H2 in-memory database. H2 ships a
+browser-based console that runs inside the Core Server process itself, so
+once you've port-forwarded Core Server (see above), it can be viewed as
+follows:
+
+1. $ kubectl port-forward svc/vader-core-server -n {{ .Release.Namespace }} {{ .Values.convenience.variables.spring.port }}:{{ .Values.convenience.variables.spring.port }}
+2. Navigate to "http://localhost:{{ .Values.convenience.variables.spring.port }}/h2-console"
+3. Replace the connection URL with "jdbc:h2:mem:vaderDb;DB_CLOSE_DELAY=-1"
+4. Input "sa" for the username, and leave the password blank.
+5. Select "Connect."
+**************************************************
+Vader Core UI:
+
+Core UI accepts a client prompt (text plus optional file attachments) and
+submits it to Core Server.
+
+It's exposed as a NodePort Service, so it's reachable directly at
+"http://localhost:{{ .Values.vader.components.core.coreUi.service.nodePort }}"
+with no port-forwarding needed -- as long as your local cluster publishes
+NodePorts to localhost. That's true out of the box for Docker Desktop's
+Kubernetes and for `minikube tunnel`. If you're using a plain `kind` cluster,
+NodePorts aren't published to the host unless the cluster itself was created
+with a matching port mapping, e.g.:
+
+  kind create cluster --config - <<EOF
+  kind: Cluster
+  apiVersion: kind.x-k8s.io/v1alpha4
+  nodes:
+    - role: control-plane
+      extraPortMappings:
+        - containerPort: {{ .Values.vader.components.core.coreUi.service.nodePort }}
+          hostPort: {{ .Values.vader.components.core.coreUi.service.nodePort }}
+  EOF
+
+Otherwise, or on any other cluster type, you can always fall back to:
+
+1. $ kubectl port-forward svc/vader-core-ui -n {{ .Release.Namespace }} {{ .Values.vader.components.core.coreUi.service.nodePort }}:8080
+2. Navigate to "http://localhost:{{ .Values.vader.components.core.coreUi.service.nodePort }}"
+**************************************************

@@ -4,14 +4,17 @@ logging:
 
 vader:
   mode: DEV
-  database:
-    type: HSQL
   components:
     core:
       coreServer:
         image:
           registry: docker.io/jeremyacase
           repository: vader-core-server
+          tag: latest
+      coreUi:
+        image:
+          registry: docker.io/jeremyacase
+          repository: vader-core-ui
           tag: latest
 
 infrastructure:

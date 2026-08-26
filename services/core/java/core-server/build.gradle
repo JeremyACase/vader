@@ -27,7 +27,7 @@ dependencies {
 
     implementation project(':common:java:model:vader')
 
-    runtimeOnly "org.hsqldb:hsqldb"
+    runtimeOnly "com.h2database:h2:${H2_VERSION}"
 
     testImplementation "org.springframework.boot:spring-boot-starter-test"
 }

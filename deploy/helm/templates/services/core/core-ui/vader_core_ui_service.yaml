@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vader-core-ui
+  labels:
+    component: vader-core-ui
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+      nodePort: {{ .Values.vader.components.core.coreUi.service.nodePort }}
+  selector:
+    component: vader-core-ui
