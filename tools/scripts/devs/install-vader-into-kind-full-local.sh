@@ -8,6 +8,7 @@ OPENJDK_VERSION="${OPENJDK_VERSION:-21}"                    # For Java service i
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-vader-agent-0}"     # KIND cluster name
 UI_BASE_PATH="${UI_BASE_PATH:-/}"                           # Angular base-href (/, /workbench, etc.)
 WORKBENCH_PATH="services/dag/workbench/ts/dag-workbench-ui" # UI subproject root (Angular/NGINX)
+DOCKER_REPO="${DOCKER_REPO:-jeremyacase}"                   # Docker Hub repository/namespace
 
 echo "Using OPENJDK_VERSION=${OPENJDK_VERSION}"
 echo "Using KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME}"
@@ -36,7 +37,7 @@ mapfile -t DOCKERFILES < <(find . -type d -name node_modules -prune -o -type f -
 for dockerfile in "${DOCKERFILES[@]}"; do
   dir=$(dirname "$dockerfile")
   short_name=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
-  image_name="vader/${short_name}"
+  image_name="${DOCKER_REPO}/vader-${short_name}"
 
   echo "----"
   echo "🔨 Building Docker image: ${image_name} from ${dockerfile}"

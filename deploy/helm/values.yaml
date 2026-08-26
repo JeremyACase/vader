@@ -1,0 +1,46 @@
+convenience:
+  variables:
+    spring:
+      port: 8080
+    tls:
+      enabled: &tlsEnabled false
+
+config:
+  podLabels:
+
+logging:
+  # Allowable values are: OFF, ERROR, WARN, INFO, DEBUG, TRACE, ALL
+  vader: INFO
+
+vader:
+  mode: DEV
+  database:
+    # Allowable values are: HSQL
+    # (Postgres/YugabyteDB-style swaps can be added here later, following the same pattern.)
+    type: HSQL
+    ddlAutoSetting: update
+    # ANSI Database Level Isolation (https://en.wikipedia.org/wiki/Isolation_(database_systems))
+    # values are: TRANSACTION_READ_UNCOMMITTED (0), TRANSACTION_READ_COMMITTED (1), TRANSACTION_REPEATABLE_READ (2), TRANSACTION_SERIALIZABLE (3)
+    transactionIsolation: TRANSACTION_READ_COMMITTED
+  components:
+    core:
+      coreServer:
+        image:
+          registry: jeremyacase
+          repository: vader-core-server
+          tag: latest
+
+k8s:
+  serviceAccount:
+    create: true
+    name: vader
+  autoscaling:
+    enabled: false
+
+infrastructure:
+  image:
+    pullPolicy: IfNotPresent
+
+telemetry:
+  prometheus:
+    enabled: true
