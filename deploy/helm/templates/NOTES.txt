@@ -54,3 +54,15 @@ Otherwise, or on any other cluster type, you can always fall back to:
 1. $ kubectl port-forward svc/vader-core-ui -n {{ .Release.Namespace }} {{ .Values.vader.components.core.coreUi.service.nodePort }}:8080
 2. Navigate to "http://localhost:{{ .Values.vader.components.core.coreUi.service.nodePort }}"
 **************************************************
+{{- if eq .Values.vader.orchestrator.type "local" }}
+Vader Orchestrator (Ollama):
+
+Core Server is configured to orchestrate against a local Ollama instance,
+installed alongside Vader as the "vader-ollama" Deployment/Service. It's
+reachable in-cluster at "http://vader-ollama:{{ .Values.vader.components.core.ollama.service.port }}", and can be
+port-forwarded for direct access:
+
+1. $ kubectl port-forward svc/vader-ollama -n {{ .Release.Namespace }} {{ .Values.vader.components.core.ollama.service.port }}:{{ .Values.vader.components.core.ollama.service.port }}
+2. Navigate to "http://localhost:{{ .Values.vader.components.core.ollama.service.port }}"
+**************************************************
+{{- end }}

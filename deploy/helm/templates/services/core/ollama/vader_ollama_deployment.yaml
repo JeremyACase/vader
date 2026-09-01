@@ -1,0 +1,70 @@
+{{- if eq .Values.vader.orchestrator.type "local" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vader-ollama
+  labels:
+    {{- include "vader.labels" . | nindent 4 }}
+    component: vader-ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "vader.selectorLabels" . | nindent 6 }}
+      component: vader-ollama
+
+  template:
+    metadata:
+      labels:
+        {{- include "vader.selectorLabels" . | nindent 8 }}
+        {{- include "vader.podLabels" . | nindent 8 }}
+        component: vader-ollama
+
+    spec:
+      {{- with .Values.infrastructure.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vader.serviceAccountName" . }}
+
+      containers:
+        - name: ollama
+          env:
+            - name: OLLAMA_MODEL
+              value: {{ .Values.vader.orchestrator.local.model | quote }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    until ollama list >/dev/null 2>&1; do sleep 1; done
+                    ollama pull "$OLLAMA_MODEL"
+                    ollama run "$OLLAMA_MODEL" "" >/dev/null 2>&1 || true
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          image: {{ include "vader.core.ollama.image" . }}
+          imagePullPolicy: {{ .Values.vader.components.core.ollama.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.vader.components.core.ollama.service.port }}
+              protocol: TCP
+{{- end }}

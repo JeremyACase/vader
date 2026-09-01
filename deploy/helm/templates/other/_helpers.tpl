@@ -77,3 +77,7 @@ Create the name of the service account to use
 {{- define "vader.core.coreUi.image" -}}
 {{ .Values.vader.components.core.coreUi.image.registry }}/{{ .Values.vader.components.core.coreUi.image.repository }}:{{ .Values.vader.components.core.coreUi.image.tag }}
 {{- end }}
+
+{{- define "vader.core.ollama.image" -}}
+{{ .Values.vader.components.core.ollama.image.registry }}/{{ .Values.vader.components.core.ollama.image.repository }}:{{ .Values.vader.components.core.ollama.image.tag }}
+{{- end }}

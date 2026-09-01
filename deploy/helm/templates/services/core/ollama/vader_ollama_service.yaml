@@ -1,0 +1,17 @@
+{{- if eq .Values.vader.orchestrator.type "local" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: vader-ollama
+  labels:
+    component: vader-ollama
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.vader.components.core.ollama.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    component: vader-ollama
+{{- end }}
