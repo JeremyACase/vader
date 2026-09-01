@@ -73,3 +73,7 @@ Create the name of the service account to use
 {{- define "vader.core.coreServer.image" -}}
 {{ .Values.vader.components.core.coreServer.image.registry }}/{{ .Values.vader.components.core.coreServer.image.repository }}:{{ .Values.vader.components.core.coreServer.image.tag }}
 {{- end }}
+
+{{- define "vader.core.coreUi.image" -}}
+{{ .Values.vader.components.core.coreUi.image.registry }}/{{ .Values.vader.components.core.coreUi.image.repository }}:{{ .Values.vader.components.core.coreUi.image.tag }}
+{{- end }}

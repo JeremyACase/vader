@@ -1,0 +1,58 @@
+<main class="wrap">
+  <header class="brand">
+    <img class="mascot" src="darth-vader.png" alt="Darth Vader">
+    <div class="logo">VADER</div>
+    <div class="divider"></div>
+    <div class="product">CORE UI</div>
+  </header>
+
+  <section class="card">
+    <h1>Submit a client prompt</h1>
+    <p class="muted">Send a prompt, with optional file attachments, to core-server.</p>
+
+    <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
+      <textarea
+        [formControl]="text"
+        rows="6"
+        placeholder="Describe what you'd like Vader to do…">
+      </textarea>
+
+      <input
+        type="file"
+        multiple
+        (change)="onFilesSelected($event)">
+
+      <div class="row">
+        <div class="hint" [class.error]="text.invalid">
+          @if (text.hasError('required')) {
+            <span>Prompt is required.</span>
+          } @else {
+            <span>{{chars()}} / {{max}} characters</span>
+          }
+        </div>
+
+        <button type="submit"
+                (click)="submit()"
+                [disabled]="text.invalid || sending()"
+                [attr.aria-busy]="sending()">
+          @if (!sending()) {
+            <span>Send prompt</span>
+          } @else {
+            <span>Sending…</span>
+          }
+        </button>
+      </div>
+    </form>
+
+    @if (sent()) {
+      <p class="ok">✅ Prompt sent.</p>
+    }
+    @if (error()) {
+      <p class="err">⚠️ {{error()}}</p>
+    }
+  </section>
+
+  <footer class="foot">
+    <span>Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send.</span>
+  </footer>
+</main>

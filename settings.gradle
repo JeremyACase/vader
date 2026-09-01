@@ -3,3 +3,4 @@ rootProject.name = 'vader'
 include ':common:java:model:vader'
 
 include ':services:core:java:core-server'
+include ':services:core:ts:core-ui'

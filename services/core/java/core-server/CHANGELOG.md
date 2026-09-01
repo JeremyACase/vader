@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0]
+### Changed
+- Database backend switched from HSQL to H2. Datasource/JPA config, the `hsqldb` runtime
+  dependency, and the `Application` javadoc were all updated accordingly. H2's built-in
+  browser console is now enabled at `/h2-console` via `spring.h2.console`.
+
 ## [0.2.1]
 ### Changed
 - Docker image renamed to `jeremyacase/vader-core-server`.

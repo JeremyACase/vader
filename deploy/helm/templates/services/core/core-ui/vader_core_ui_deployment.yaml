@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vader-core-ui
+  labels:
+    {{- include "vader.labels" . | nindent 4 }}
+    component: vader-core-ui
+spec:
+  {{- if not .Values.k8s.autoscaling.enabled }}
+  replicas: {{ .Values.vader.components.core.coreUi.replicas | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "vader.selectorLabels" . | nindent 6 }}
+      component: vader-core-ui
+
+  template:
+    metadata:
+      labels:
+        {{- include "vader.selectorLabels" . | nindent 8 }}
+        {{- include "vader.podLabels" . | nindent 8 }}
+        component: vader-core-ui
+
+    spec:
+      {{- with .Values.infrastructure.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vader.serviceAccountName" . }}
+
+      containers:
+        - name: core-ui
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          image: {{ include "vader.core.coreUi.image" . }}
+          imagePullPolicy: {{ .Values.infrastructure.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP

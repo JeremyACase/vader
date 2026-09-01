@@ -15,9 +15,9 @@ logging:
 vader:
   mode: DEV
   database:
-    # Allowable values are: HSQL
+    # Allowable values are: H2
     # (Postgres/YugabyteDB-style swaps can be added here later, following the same pattern.)
-    type: HSQL
+    type: H2
     ddlAutoSetting: update
     # ANSI Database Level Isolation (https://en.wikipedia.org/wiki/Isolation_(database_systems))
     # values are: TRANSACTION_READ_UNCOMMITTED (0), TRANSACTION_READ_COMMITTED (1), TRANSACTION_REPEATABLE_READ (2), TRANSACTION_SERIALIZABLE (3)
@@ -29,6 +29,14 @@ vader:
           registry: jeremyacase
           repository: vader-core-server
           tag: latest
+      coreUi:
+        replicas: 1
+        image:
+          registry: jeremyacase
+          repository: vader-core-ui
+          tag: latest
+        service:
+          nodePort: 30081
 
 k8s:
   serviceAccount:
