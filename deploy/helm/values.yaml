@@ -22,6 +22,13 @@ vader:
     # ANSI Database Level Isolation (https://en.wikipedia.org/wiki/Isolation_(database_systems))
     # values are: TRANSACTION_READ_UNCOMMITTED (0), TRANSACTION_READ_COMMITTED (1), TRANSACTION_REPEATABLE_READ (2), TRANSACTION_SERIALIZABLE (3)
     transactionIsolation: TRANSACTION_READ_COMMITTED
+  orchestrator:
+    # Allowable values are: local
+    # (Remote/cloud-hosted LLM backends can be added here later, following the same pattern.)
+    type: local
+    local:
+      # The Ollama model to download and run. Only used when orchestrator.type is "local".
+      model: deepseek-r1:1.5b
   components:
     core:
       coreServer:
@@ -37,6 +44,16 @@ vader:
           tag: latest
         service:
           nodePort: 30081
+      ollama:
+        image:
+          registry: docker.io
+          repository: ollama/ollama
+          tag: latest
+          # Always pulled from the registry, unlike core-server/core-ui which get built and
+          # loaded locally in dev -- so this isn't tied to infrastructure.image.pullPolicy.
+          pullPolicy: IfNotPresent
+        service:
+          port: 11434
 
 k8s:
   serviceAccount:

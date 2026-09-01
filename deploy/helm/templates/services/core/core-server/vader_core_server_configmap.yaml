@@ -60,3 +60,10 @@ data:
 
     vader:
       mode: {{ .Values.vader.mode | default "PROD" }}
+      orchestrator:
+        type: {{ .Values.vader.orchestrator.type | default "local" }}
+        {{- if eq .Values.vader.orchestrator.type "local" }}
+        local:
+          base-url: http://vader-ollama:{{ .Values.vader.components.core.ollama.service.port }}
+          model: {{ .Values.vader.orchestrator.local.model }}
+        {{- end }}

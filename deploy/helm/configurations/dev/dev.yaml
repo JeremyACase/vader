@@ -19,7 +19,7 @@ vader:
 
 infrastructure:
   image:
-    pullPolicy: Never
+    pullPolicy: IfNotPresent
 
 telemetry:
   prometheus:
