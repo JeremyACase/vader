@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+### Changed
+- The submit flow now renders the decomposition `core-server` returns -- the objective plus the
+  task list (and one level of subtasks) -- instead of just a "sent" confirmation. `postPrompt`
+  returns the `Workflow` response body, and `client-prompt.model.ts` gained
+  `Workflow`/`TaskPlan`/`TaskGraph`/`Task`/`OrchestratorError` interfaces mirroring the Java DTOs.
+
 ## [0.3.0]
 ### Added
 - Initial module: an Angular app that submits a client prompt (text plus optional file

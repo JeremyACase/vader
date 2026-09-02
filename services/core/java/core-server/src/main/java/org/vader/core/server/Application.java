@@ -2,6 +2,7 @@ package org.vader.core.server;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 
 /**
  * Entry point for the Vader Core Server.
@@ -10,7 +11,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * see {@code vader.database.type} in Helm values) is wired up via {@code application.yaml}
  * rather than excluded here.</p>
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"org.vader.core.server", "org.vader.common.library"})
+@EntityScan("org.vader.common.model.vader.entity")
 public class Application {
 
     /**

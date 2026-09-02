@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Inheritance;
 import jakarta.persistence.InheritanceType;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -15,20 +14,21 @@ import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-/** Abstract base JPA entity for models, providing identity and audit fields. */
+/**
+ * Abstract base JPA entity for models, providing identity and audit fields.
+ *
+ * <p>{@code id} is assigned eagerly, at field-initialization time, rather than in a
+ * {@code @PrePersist} callback. Deferring it to {@code @PrePersist} would leave {@code id} (and
+ * therefore {@link #hashCode()}) {@code null} for any entity added to a {@code HashSet}-backed
+ * collection before it's persisted -- its hash bucket would be computed from the pre-persist
+ * hash, then silently stop matching once {@code id} changed underneath it.</p>
+ */
 @Entity
 @Inheritance(strategy = InheritanceType.JOINED)
 public abstract class AbstractModelEntity {
 
     @Id
-    private String id = null;
-
-    @PrePersist
-    private void generateId() {
-        if (Objects.isNull(this.id)) {
-            this.id = UUID.randomUUID().toString();
-        }
-    }
+    private String id = UUID.randomUUID().toString();
 
     @CreationTimestamp
     @Column(updatable = false)

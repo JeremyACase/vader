@@ -6,8 +6,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Lob;
 import jakarta.persistence.OneToMany;
 import jakarta.validation.constraints.NotNull;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /** JPA entity representing a client-submitted prompt, with optional file attachments. */
 @Entity
@@ -18,7 +18,10 @@ public class ClientPromptEntity extends AbstractModelEntity {
     private String text;
 
     @OneToMany(mappedBy = "clientPrompt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    private List<ObjectMetadataEntity> files = new ArrayList<>();
+    private Set<ObjectMetadataEntity> files = new LinkedHashSet<>();
+
+    @OneToMany(mappedBy = "clientPrompt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Set<WorkflowEntity> workflows = new LinkedHashSet<>();
 
     @Override
     public String getModelType() {
@@ -33,11 +36,19 @@ public class ClientPromptEntity extends AbstractModelEntity {
         this.text = text;
     }
 
-    public List<ObjectMetadataEntity> getFiles() {
+    public Set<ObjectMetadataEntity> getFiles() {
         return this.files;
     }
 
-    public void setFiles(List<ObjectMetadataEntity> files) {
+    public void setFiles(Set<ObjectMetadataEntity> files) {
         this.files = files;
+    }
+
+    public Set<WorkflowEntity> getWorkflows() {
+        return this.workflows;
+    }
+
+    public void setWorkflows(Set<WorkflowEntity> workflows) {
+        this.workflows = workflows;
     }
 }

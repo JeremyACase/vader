@@ -23,7 +23,9 @@ vader:
     # values are: TRANSACTION_READ_UNCOMMITTED (0), TRANSACTION_READ_COMMITTED (1), TRANSACTION_REPEATABLE_READ (2), TRANSACTION_SERIALIZABLE (3)
     transactionIsolation: TRANSACTION_READ_COMMITTED
   orchestrator:
-    # Allowable values are: local
+    # Allowable values are:
+    #   local  - route prompts through an in-cluster Ollama instance
+    #   static - return a fixed, canned decomposition (no LLM; used for deterministic tests)
     # (Remote/cloud-hosted LLM backends can be added here later, following the same pattern.)
     type: local
     local:

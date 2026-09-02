@@ -26,6 +26,7 @@ dependencies {
     implementation "org.springframework.boot:spring-boot-starter-web"
 
     implementation project(':common:java:model:vader')
+    implementation project(':common:java:library:implementation')
 
     runtimeOnly "com.h2database:h2:${H2_VERSION}"
 

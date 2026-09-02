@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ClientPromptService } from './client-prompt.service';
+import { Workflow } from './client-prompt.model';
 
 @Component({
   selector: 'app-root',
@@ -33,6 +34,7 @@ export class App {
   sending = signal(false);
   sent = signal(false);
   error = signal<string | null>(null);
+  plan = signal<Workflow | null>(null);
 
   constructor() {
     document.addEventListener('keydown', (e) => {
@@ -48,6 +50,7 @@ export class App {
   async submit() {
     this.error.set(null);
     this.sent.set(false);
+    this.plan.set(null);
     if (this.text.invalid || this.sending()) return;
 
     this.sending.set(true);
@@ -61,6 +64,7 @@ export class App {
         throw new Error(`Non-2xx status: ${res.status}`);
       }
       this.sent.set(true);
+      this.plan.set(res.body);
       this.text.reset('');
       this.files = [];
     } catch (e: any) {
