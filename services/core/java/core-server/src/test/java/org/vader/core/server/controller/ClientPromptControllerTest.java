@@ -58,7 +58,7 @@ class ClientPromptControllerTest {
         var workflow = new WorkflowEntity();
         var clientPromptEntity = new ClientPromptEntity();
         workflow.setClientPrompt(clientPromptEntity);
-        when(this.workflowService.decompose(any())).thenReturn(workflow);
+        when(this.workflowService.decompose(any(), any())).thenReturn(workflow);
 
         var response = this.controller.receivePrompt(prompt("What's the weather like?"));
 
@@ -71,7 +71,7 @@ class ClientPromptControllerTest {
         var clientPrompt = prompt("Summarize the attached file.");
         clientPrompt.setFiles(List.of(new MockMultipartFile(
             "files", "notes.txt", "text/plain", "some content".getBytes())));
-        when(this.workflowService.decompose(any())).thenReturn(new WorkflowEntity());
+        when(this.workflowService.decompose(any(), any())).thenReturn(new WorkflowEntity());
 
         var response = this.controller.receivePrompt(clientPrompt);
 

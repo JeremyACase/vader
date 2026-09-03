@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
+import java.util.List;
 import org.vader.common.library.implementation.service.mapper.TaskGraphDtoToEntityMapper;
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
 import org.vader.common.model.vader.dto.ClientPrompt;
@@ -24,6 +25,7 @@ import org.vader.core.server.orchestrator.OrchestratorResponseException;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.WorkflowRepository;
+import org.vader.core.server.storage.interfaces.InterfaceFileStorageStrategy;
 
 class WorkflowServiceTest {
 
@@ -32,6 +34,7 @@ class WorkflowServiceTest {
             + "[{\"title\":\"t\",\"description\":\"d\"}]}}";
 
     private InterfaceLlmOrchestrationStrategy orchestrator;
+    private InterfaceFileStorageStrategy fileStorageStrategy;
     private ClientPromptRepository clientPromptRepository;
     private WorkflowRepository workflowRepository;
     private TaskPlanDtoToEntityMapper taskPlanDtoToEntityMapper;
@@ -40,11 +43,13 @@ class WorkflowServiceTest {
     @BeforeEach
     void setUp() {
         this.orchestrator = mock(InterfaceLlmOrchestrationStrategy.class);
+        this.fileStorageStrategy = mock(InterfaceFileStorageStrategy.class);
         this.clientPromptRepository = mock(ClientPromptRepository.class);
         this.workflowRepository = mock(WorkflowRepository.class);
         this.taskPlanDtoToEntityMapper = mock(TaskPlanDtoToEntityMapper.class);
         this.service = new WorkflowService(
             this.orchestrator,
+            this.fileStorageStrategy,
             new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
             newValidator(),
             new ClientPromptDtoMapper(),
@@ -67,7 +72,7 @@ class WorkflowServiceTest {
         when(this.orchestrator.orchestrate(any(ClientPrompt.class)))
             .thenReturn(orchestratorResponse);
 
-        assertThatThrownBy(() -> this.service.decompose(prompt()))
+        assertThatThrownBy(() -> this.service.decompose(prompt(), List.of()))
             .isInstanceOf(OrchestratorResponseException.class)
             .hasMessageContaining(expectedFragment);
 
@@ -126,6 +131,7 @@ class WorkflowServiceTest {
             realMapper, "taskGraphDtoToEntityMapper", new TaskGraphDtoToEntityMapper());
         var wired = new WorkflowService(
             this.orchestrator,
+            this.fileStorageStrategy,
             new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
             newValidator(),
             new ClientPromptDtoMapper(),
@@ -137,7 +143,7 @@ class WorkflowServiceTest {
         when(this.clientPromptRepository.save(any())).thenAnswer(call -> call.getArgument(0));
         when(this.workflowRepository.save(any())).thenAnswer(call -> call.getArgument(0));
 
-        var workflow = wired.decompose(prompt());
+        var workflow = wired.decompose(prompt(), List.of());
 
         assertThat(workflow.getClientPrompt()).isNotNull();
         assertThat(workflow.getTaskPlan()).isNotNull();

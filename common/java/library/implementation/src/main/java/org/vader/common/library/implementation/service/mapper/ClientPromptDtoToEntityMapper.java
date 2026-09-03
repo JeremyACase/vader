@@ -9,9 +9,8 @@ import org.vader.common.model.vader.entity.ClientPromptEntity;
 /**
  * Maps a {@link ClientPrompt} DTO to a transient {@link ClientPromptEntity}.
  *
- * <p>Only the prompt text is carried over. The DTO's {@code files} are inbound
- * {@code MultipartFile} uploads; persisting their contents needs an object store that is not yet
- * wired up, so they are dropped here rather than half-persisted.</p>
+ * <p>Only the prompt text is carried over here. Attached files are handled separately by the
+ * active file-storage strategy in {@code WorkflowService} before the entity is persisted.</p>
  */
 @Service
 public class ClientPromptDtoToEntityMapper

@@ -39,6 +39,12 @@ data:
       application:
         name: core-server
 
+      servlet:
+        multipart:
+          max-file-size: {{ .Values.vader.multipart.maxFileSize | default "10MB" }}
+          max-request-size: {{ .Values.vader.multipart.maxRequestSize | default "51MB" }}
+          file-size-threshold: {{ .Values.vader.multipart.fileSizeThreshold | default "1MB" }}
+
       datasource:
         driverClassName: org.h2.Driver
         url: jdbc:h2:mem:vaderDb;DB_CLOSE_DELAY=-1
@@ -66,4 +72,13 @@ data:
         local:
           base-url: http://vader-ollama:{{ .Values.vader.components.core.ollama.service.port }}
           model: {{ .Values.vader.orchestrator.local.model }}
+        {{- end }}
+      storage:
+        type: {{ .Values.vader.storage.type | default "database" }}
+        {{- if eq .Values.vader.storage.type "minio" }}
+        minio:
+          endpoint: {{ .Values.vader.storage.minio.endpoint }}
+          access-key: {{ .Values.vader.storage.minio.accessKey }}
+          secret-key: {{ .Values.vader.storage.minio.secretKey }}
+          bucket: {{ .Values.vader.storage.minio.bucket | default "vader-files" }}
         {{- end }}

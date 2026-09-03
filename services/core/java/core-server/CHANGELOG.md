@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+### Added
+- `storage.interfaces.InterfaceFileStorageStrategy` — mirrors the orchestrator strategy
+  pattern; the active implementation is selected via
+  `@ConditionalOnProperty(prefix="vader.storage", name="type")`.
+- `storage.DatabaseFileStorageStrategy` (`matchIfMissing=true`, active by default) — reads
+  each `MultipartFile`, creates a `FileContentEntity` for the raw bytes, links it to an
+  `ObjectMetadataEntity`, and returns the metadata. No extra infrastructure required.
+- `storage.MinioFileStorageStrategy` (active when `vader.storage.type=minio`) — uploads each
+  file to MinIO under a UUID-prefixed object name, creates the target bucket on first use if
+  absent, and returns only the `ObjectMetadataEntity` (no `FileContentEntity`).
+- `storage.MinioConfig` — `@Configuration` / `@ConditionalOnProperty` that constructs the
+  `MinioClient` bean from `vader.storage.minio.*` properties; kept separate from the strategy
+  so the client is injectable in tests without a running MinIO.
+- `storage.FileStorageException` — unchecked; thrown by either strategy on I/O or transport
+  failure; mapped to HTTP 500 (`file_storage_failed`) by the controller.
+- `io.minio:minio:8.5.17` implementation dependency.
+### Changed
+- `WorkflowService.decompose()` gains a `List<MultipartFile> files` parameter; calls
+  `InterfaceFileStorageStrategy.store()` and attaches the results to the prompt entity before
+  `clientPromptRepository.save()`, so the JPA cascade persists files in the same transaction.
+- `ClientPromptController`: passes `clientPrompt.getFiles()` through to `WorkflowService`;
+  new `@ExceptionHandler` for `BindException` (→ 400 `validation_failed`) and
+  `FileStorageException` (→ 500 `file_storage_failed`).
+- Helm ConfigMap emits `spring.servlet.multipart` (10 MB/file, 51 MB/request, 1 MB threshold)
+  and `vader.storage` blocks; limits are driven by `vader.multipart.*` Helm values with
+  in-template defaults.
+- Helm test: added multipart upload and 6-file rejection cases; test pod annotated with its
+  `test.yaml` (static orchestrator) dependency; prompt test `--max-time` reduced 60 s → 10 s.
+
 ## [0.5.0]
 ### Added
 - End-to-end problem decomposition. A submitted client prompt is now routed

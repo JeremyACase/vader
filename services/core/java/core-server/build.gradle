@@ -29,6 +29,7 @@ dependencies {
     implementation project(':common:java:library:implementation')
 
     runtimeOnly "com.h2database:h2:${H2_VERSION}"
+    implementation "io.minio:minio:${MINIO_VERSION}"
 
     testImplementation "org.springframework.boot:spring-boot-starter-test"
 }

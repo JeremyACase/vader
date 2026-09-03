@@ -18,9 +18,24 @@
       </textarea>
 
       <input
+        #fileInput
         type="file"
         multiple
         (change)="onFilesSelected($event)">
+
+      @if (fileError()) {
+        <p class="err">{{fileError()}}</p>
+      }
+      @if (files().length) {
+        <div class="hint">
+          {{files().length}} / {{maxFiles}} files selected
+          <ul class="file-list">
+            @for (f of files(); track $index) {
+              <li>{{f.name}}</li>
+            }
+          </ul>
+        </div>
+      }
 
       <div class="row">
         <div class="hint" [class.error]="text.invalid">
@@ -33,7 +48,7 @@
 
         <button type="submit"
                 (click)="submit()"
-                [disabled]="text.invalid || sending()"
+                [disabled]="text.invalid || sending() || !!fileError()"
                 [attr.aria-busy]="sending()">
           @if (!sending()) {
             <span>Send prompt</span>

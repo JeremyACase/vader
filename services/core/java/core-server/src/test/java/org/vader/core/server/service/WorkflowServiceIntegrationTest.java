@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -72,7 +73,7 @@ class WorkflowServiceIntegrationTest {
     void decompose_persistsTheDecompositionUnderWorkflowAndLinksThePlanBackToIt() {
         when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(VALID_PLAN);
 
-        var saved = this.workflowService.decompose(prompt("Help me ship onboarding"));
+        var saved = this.workflowService.decompose(prompt("Help me ship onboarding"), List.of());
 
         var workflow = this.workflowRepository.findById(saved.getId()).orElseThrow();
         assertThat(workflow.getClientPrompt()).isNotNull();
@@ -106,7 +107,7 @@ class WorkflowServiceIntegrationTest {
         when(this.orchestrator.orchestrate(any(ClientPrompt.class)))
             .thenReturn("{\"objective\":\"no task graph here\"}");
 
-        assertThatThrownBy(() -> this.workflowService.decompose(prompt("whatever")))
+        assertThatThrownBy(() -> this.workflowService.decompose(prompt("whatever"), List.of()))
             .isInstanceOf(OrchestratorResponseException.class);
 
         assertThat(this.workflowRepository.count()).isZero();

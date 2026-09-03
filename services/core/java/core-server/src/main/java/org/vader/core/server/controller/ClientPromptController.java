@@ -1,11 +1,13 @@
 package org.vader.core.server.controller;
 
 import jakarta.validation.Valid;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.BindException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +19,7 @@ import org.vader.common.model.vader.dto.Workflow;
 import org.vader.core.server.orchestrator.OrchestratorResponseException;
 import org.vader.core.server.orchestrator.OrchestratorUnavailableException;
 import org.vader.core.server.service.WorkflowService;
+import org.vader.core.server.storage.FileStorageException;
 
 /**
  * Accepts client-submitted prompts and returns the problem decomposition the orchestrator LLM
@@ -65,8 +68,25 @@ public class ClientPromptController {
             clientPrompt.getFiles().size());
 
         var promptEntity = this.clientPromptDtoToEntityMapper.map(clientPrompt);
-        var workflow = this.workflowService.decompose(promptEntity);
+        var workflow = this.workflowService.decompose(promptEntity, clientPrompt.getFiles());
         return ResponseEntity.ok(this.workflowDtoMapper.map(workflow));
+    }
+
+    /**
+     * Translates a constraint violation on the submitted prompt (e.g. too many attached files)
+     * into a 400 so the caller knows to fix its request.
+     *
+     * @param exception the binding failure from {@code @Valid}
+     * @return a 400 response listing each violated constraint
+     */
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ErrorResponse> handleBindException(final BindException exception) {
+        var message = exception.getBindingResult().getAllErrors().stream()
+            .map(org.springframework.validation.ObjectError::getDefaultMessage)
+            .collect(Collectors.joining("; "));
+        logger.warn("Prompt rejected due to constraint violations: {}", message);
+        return ResponseEntity.badRequest()
+            .body(new ErrorResponse("validation_failed", message));
     }
 
     /**
@@ -99,6 +119,22 @@ public class ClientPromptController {
         logger.warn("Orchestrator is unavailable: {}", exception.getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
             .body(new ErrorResponse("orchestrator_unavailable", exception.getMessage()));
+    }
+
+    /**
+     * Translates a file storage failure into a 500; the upload reached the server but could not
+     * be written to the backing store.
+     *
+     * @param exception the storage failure
+     * @return a 500 response describing the failure
+     */
+    @ExceptionHandler(FileStorageException.class)
+    public ResponseEntity<ErrorResponse> handleFileStorage(
+        final FileStorageException exception) {
+
+        logger.error("File storage failed: {}", exception.getMessage(), exception);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(new ErrorResponse("file_storage_failed", exception.getMessage()));
     }
 
     /**

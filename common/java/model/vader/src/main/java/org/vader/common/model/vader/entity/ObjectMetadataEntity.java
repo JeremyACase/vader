@@ -1,9 +1,11 @@
 package org.vader.common.model.vader.entity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 
 /** JPA entity representing storage metadata for an uploaded object. */
 @Entity
@@ -16,6 +18,14 @@ public class ObjectMetadataEntity extends AbstractModelEntity {
     private String contentType;
 
     private Long size;
+
+    /**
+     * Points to the stored file content when the database storage strategy is active.
+     * Null when the MinIO strategy is active (content lives in the object store instead).
+     */
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "file_content_id")
+    private FileContentEntity fileContent;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "object_metadata_client_prompt_join_id")
@@ -64,5 +74,13 @@ public class ObjectMetadataEntity extends AbstractModelEntity {
 
     public void setSize(Long size) {
         this.size = size;
+    }
+
+    public FileContentEntity getFileContent() {
+        return this.fileContent;
+    }
+
+    public void setFileContent(FileContentEntity fileContent) {
+        this.fileContent = fileContent;
     }
 }

@@ -102,6 +102,13 @@ button:disabled {
   color: #f08080;
 }
 
+.file-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: #9aa3b2;
+}
+
 .foot {
   margin-top: 1.5rem;
   color: #9aa3b2;
