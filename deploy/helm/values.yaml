@@ -14,6 +14,13 @@ logging:
 
 vader:
   mode: DEV
+  multipart:
+    # Per-file upload limit. Applies to each individual file in a multipart request.
+    maxFileSize: 10MB
+    # Total request body limit. 51MB = 5 files × 10MB + 1MB for form fields.
+    maxRequestSize: 51MB
+    # Files larger than this threshold are buffered to disk rather than held in memory.
+    fileSizeThreshold: 1MB
   database:
     # Allowable values are: H2
     # (Postgres/YugabyteDB-style swaps can be added here later, following the same pattern.)
@@ -23,12 +30,27 @@ vader:
     # values are: TRANSACTION_READ_UNCOMMITTED (0), TRANSACTION_READ_COMMITTED (1), TRANSACTION_REPEATABLE_READ (2), TRANSACTION_SERIALIZABLE (3)
     transactionIsolation: TRANSACTION_READ_COMMITTED
   orchestrator:
-    # Allowable values are: local
+    # Allowable values are:
+    #   local  - route prompts through an in-cluster Ollama instance
+    #   static - return a fixed, canned decomposition (no LLM; used for deterministic tests)
     # (Remote/cloud-hosted LLM backends can be added here later, following the same pattern.)
     type: local
     local:
       # The Ollama model to download and run. Only used when orchestrator.type is "local".
       model: deepseek-r1:1.5b
+  storage:
+    # Allowable values are:
+    #   database - store uploaded file contents as BLOBs in the relational database (default;
+    #              requires no additional infrastructure)
+    #   minio    - store uploaded file contents in an in-cluster MinIO object store
+    # (Additional object-store backends can be added here later, following the same pattern.)
+    type: database
+    minio:
+      # Only used when storage.type is "minio".
+      endpoint: ""
+      accessKey: ""
+      secretKey: ""
+      bucket: vader-files
   components:
     core:
       coreServer:

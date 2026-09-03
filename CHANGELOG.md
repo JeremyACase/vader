@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This is a project-level summary. Individual modules under `common/` and `services/` keep
 their own, more detailed changelogs.
 
+## [0.6.0]
+### Added
+- File storage strategy pattern (`vader.storage.type`), selected at startup via
+  `@ConditionalOnProperty` — the same approach as the orchestrator strategy:
+  - `database` (default, no extra infrastructure) — stores uploaded file bytes as BLOBs in
+    the relational database via a new `FileContentEntity`, linked to `ObjectMetadataEntity`
+    by a nullable FK.
+  - `minio` — uploads to a MinIO object store and persists only the storage metadata;
+    `FileContentEntity` is not populated in this path.
+- `FileContentEntity` in `common:java:model:vader` — holds raw file bytes, kept separate from
+  `ObjectMetadataEntity` so metadata queries never load binary content.
+- `ObjectMetadataEntity` gains an optional `@OneToOne fileContent` FK (`file_content_id`),
+  cascade all, orphan removal; null in the MinIO path.
+- Server-side file count guard: `ClientPrompt.files` is annotated `@Size(max=5)`; the
+  controller maps the resulting `BindException` to HTTP 400 (`validation_failed`).
+- `core-ui`: file selection capped at 5 — selecting more clears the batch and shows an inline
+  error. Selected filenames are listed below the input, and the native file input is reset
+  after a successful submit.
+- `spring.servlet.multipart` limits injected via Helm: 10 MB per file, 51 MB per request,
+  1 MB memory threshold before buffering to disk. Configurable via `vader.multipart.*` values.
+- Helm test: multipart upload case (prompt + one file → 200 + decomposition) and a 6-file
+  rejection case (→ 400 `validation_failed`). Prompt test timeouts tightened from 60 s to
+  10 s now that tests run against the static orchestrator.
+### Changed
+- `WorkflowService.decompose()` accepts `List<MultipartFile>` as a second parameter; files are
+  stored via the active strategy before the prompt is persisted so the JPA cascade handles both
+  in one transaction.
+
+## [0.5.0]
+### Added
+- End-to-end problem decomposition. A client prompt now flows UI -> `core-server` -> orchestrator
+  LLM: `core-server` asks the orchestrator to decompose the prompt, validates the response
+  against the `TaskPlan` schema (jakarta bean validation) before persisting anything, saves the
+  task plan / task graph / tasks under a new `Workflow`, and returns that `Workflow` as JSON.
+  `core-ui` renders the returned objective and task list.
+- `common:java:library:implementation`: a new module of entity<->DTO mappers (egress and
+  ingress), used by `core-server` to build the persisted graph and shape the HTTP response.
+- `vader.orchestrator.type=static`: a `StaticLlmOrchestrationStrategy` that returns a fixed,
+  schema-valid decomposition with no LLM call. The `test` Helm configuration uses it, so the
+  end-to-end Helm test runs deterministically with no Ollama deployment or model download.
+- `core-server` maps orchestrator failures to HTTP status: `502` when the LLM response is
+  unusable, `503` when the LLM is unreachable.
+### Changed
+- `LocalLlmOrchestrationStrategy` now instructs the model to decompose the problem and pins
+  Ollama's structured-output `format` to the task-plan JSON schema; added request timeouts.
+- The `core-server` Helm test hook drives a full prompt -> decomposition round trip instead of
+  only checking that the endpoint returns `200`.
+
 ## [0.4.0]
 ### Added
 - A `local` LLM orchestrator option (`vader.orchestrator.type`, defaulted to `local`). When set,

@@ -5,6 +5,9 @@ metadata:
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Requires the release to be installed with configurations/test/test.yaml, which sets
+    # vader.orchestrator.type=static. The static strategy returns a canned decomposition
+    # immediately; no Ollama deployment or model download is required.
 spec:
   restartPolicy: Never
   containers:
@@ -13,46 +16,71 @@ spec:
       command: ["/bin/sh", "-c"]
       args:
         - |
-          set -e
+          SERVER="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
+          PROMPT_URL="$SERVER/vader/core-server/client-prompt"
 
-          test_endpoint() {
-            local METHOD=$1
-            local URL=$2
-            local EXPECT_CODE=$3
-            local NAME=$4
-            shift 4
+          echo "== Health check =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER/actuator/health" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ health check got $STATUS"; exit 1; }
+          echo "✅ core-server healthy"
 
-            echo "Testing $NAME ($METHOD $URL)..."
+          echo "== End-to-end: prompt -> core-server -> decomposition =="
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 10 \
+            -X POST "$PROMPT_URL" \
+            -F "text=Plan a simple birthday party for a friend." || true)
+          BODY=$(cat "$BODY_FILE")
 
-            local RESPONSE_FILE=$(mktemp)
-            local STATUS=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" -X "$METHOD" "$URL" "$@")
-            local BODY=$(cat "$RESPONSE_FILE")
-            rm "$RESPONSE_FILE"
+          echo "HTTP $STATUS"
+          echo "🔍 Response body:"
+          echo "$BODY"
 
-            if [ "$STATUS" != "$EXPECT_CODE" ]; then
-              echo "❌ $NAME failed (expected $EXPECT_CODE, got $STATUS)"
-              echo "🔍 Response body:"
-              echo "$BODY"
-              exit 1
-            fi
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200, got $STATUS"; exit 1; }
+          echo "$BODY" | grep -q '"objective"' || { echo "❌ response has no objective"; exit 1; }
+          echo "$BODY" | grep -q '"tasks"' || { echo "❌ response has no tasks"; exit 1; }
 
-            echo "✅ $NAME passed (HTTP $STATUS)"
-          }
+          echo "✅ prompt was routed through core-server and a decomposition came back"
 
-          BASE_URL="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
+          echo "== Multipart: prompt with one attached file =="
+          echo "hello world" > /tmp/test-attachment.txt
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 10 \
+            -X POST "$PROMPT_URL" \
+            -F "text=Plan a simple birthday party for a friend." \
+            -F "files=@/tmp/test-attachment.txt;type=text/plain" || true)
+          BODY=$(cat "$BODY_FILE")
 
-          # -- Health check --
-          test_endpoint GET "$BASE_URL/actuator/health" 200 "Health Check"
+          echo "HTTP $STATUS"
+          echo "🔍 Response body:"
+          echo "$BODY"
 
-          # -- Client prompt controller --
-          test_endpoint POST "$BASE_URL/vader/core-server/client-prompt" 200 "Client Prompt: Text Only" \
-            -F "text=Hello from the Helm test hook"
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 with file attachment, got $STATUS"; exit 1; }
+          echo "$BODY" | grep -q '"objective"' || { echo "❌ response has no objective"; exit 1; }
+          echo "$BODY" | grep -q '"tasks"' || { echo "❌ response has no tasks"; exit 1; }
 
-          ATTACHMENT_FILE=$(mktemp)
-          echo "some file contents" > "$ATTACHMENT_FILE"
-          test_endpoint POST "$BASE_URL/vader/core-server/client-prompt" 200 "Client Prompt: Text With Attachment" \
-            -F "text=Hello with an attachment" \
-            -F "files=@${ATTACHMENT_FILE};filename=notes.txt;type=text/plain"
-          rm "$ATTACHMENT_FILE"
+          echo "✅ prompt with one attached file was accepted and decomposed"
 
-          echo "🎉 All endpoint checks passed!"
+          echo "== Validation: 6 files should be rejected with 400 =="
+          i=1; while [ $i -le 6 ]; do printf "content %d" $i > "/tmp/excess-file-$i.txt"; i=$((i+1)); done
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 10 \
+            -X POST "$PROMPT_URL" \
+            -F "text=This should be rejected." \
+            -F "files=@/tmp/excess-file-1.txt" \
+            -F "files=@/tmp/excess-file-2.txt" \
+            -F "files=@/tmp/excess-file-3.txt" \
+            -F "files=@/tmp/excess-file-4.txt" \
+            -F "files=@/tmp/excess-file-5.txt" \
+            -F "files=@/tmp/excess-file-6.txt" || true)
+          BODY=$(cat "$BODY_FILE")
+
+          echo "HTTP $STATUS"
+          echo "🔍 Response body:"
+          echo "$BODY"
+
+          [ "$STATUS" = "400" ] || { echo "❌ expected HTTP 400 for 6 files, got $STATUS"; exit 1; }
+          echo "$BODY" | grep -q '"validation_failed"' || { echo "❌ response missing validation_failed error code"; exit 1; }
+
+          echo "✅ 6-file upload was correctly rejected"
+
+          echo "🎉 all core-server checks passed"

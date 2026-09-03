@@ -1,8 +1,9 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ClientPromptService } from './client-prompt.service';
+import { Workflow } from './client-prompt.model';
 
 @Component({
   selector: 'app-root',
@@ -13,8 +14,11 @@ import { ClientPromptService } from './client-prompt.service';
 })
 export class App {
   private svc = inject(ClientPromptService);
+  private fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   title = 'Vader Core UI';
+
+  readonly maxFiles = 5;
 
   text = new FormControl('', {
     nonNullable: true,
@@ -28,11 +32,13 @@ export class App {
   readonly chars = computed(() => this.textValue()?.length ?? 0);
   readonly max = 2000;
 
-  private files: File[] = [];
+  files = signal<File[]>([]);
+  fileError = signal<string | null>(null);
 
   sending = signal(false);
   sent = signal(false);
   error = signal<string | null>(null);
+  plan = signal<Workflow | null>(null);
 
   constructor() {
     document.addEventListener('keydown', (e) => {
@@ -42,27 +48,39 @@ export class App {
 
   onFilesSelected(event: Event) {
     const input = event.target as HTMLInputElement;
-    this.files = input.files ? Array.from(input.files) : [];
+    const selected = input.files ? Array.from(input.files) : [];
+    if (selected.length > this.maxFiles) {
+      this.fileError.set(`Too many files. Maximum is ${this.maxFiles}; please select up to ${this.maxFiles} files.`);
+      this.files.set([]);
+      input.value = '';
+      return;
+    }
+    this.fileError.set(null);
+    this.files.set(selected);
   }
 
   async submit() {
     this.error.set(null);
     this.sent.set(false);
-    if (this.text.invalid || this.sending()) return;
+    this.plan.set(null);
+    if (this.text.invalid || this.sending() || this.fileError()) return;
 
     this.sending.set(true);
     try {
       const res = await firstValueFrom(this.svc.postPrompt({
         modelType: 'ClientPrompt',
         text: this.text.value,
-        files: this.files
+        files: this.files()
       }));
       if (res.status < 200 || res.status >= 300) {
         throw new Error(`Non-2xx status: ${res.status}`);
       }
       this.sent.set(true);
+      this.plan.set(res.body);
       this.text.reset('');
-      this.files = [];
+      this.files.set([]);
+      const inputEl = this.fileInput();
+      if (inputEl) inputEl.nativeElement.value = '';
     } catch (e: any) {
       const msg = e?.error?.message || e?.message || 'Failed to send prompt';
       this.error.set(String(msg));

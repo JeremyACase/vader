@@ -1,5 +1,9 @@
 # Helm values for the "test" Vader deployment configuration.
 vader:
+  orchestrator:
+    # Static, canned decomposition: no Ollama deployment, no model download, deterministic
+    # Helm test. Swap to "local" to exercise the real LLM path.
+    type: static
   components:
     core:
       coreServer:

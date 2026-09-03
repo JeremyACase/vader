@@ -18,9 +18,24 @@
       </textarea>
 
       <input
+        #fileInput
         type="file"
         multiple
         (change)="onFilesSelected($event)">
+
+      @if (fileError()) {
+        <p class="err">{{fileError()}}</p>
+      }
+      @if (files().length) {
+        <div class="hint">
+          {{files().length}} / {{maxFiles}} files selected
+          <ul class="file-list">
+            @for (f of files(); track $index) {
+              <li>{{f.name}}</li>
+            }
+          </ul>
+        </div>
+      }
 
       <div class="row">
         <div class="hint" [class.error]="text.invalid">
@@ -33,7 +48,7 @@
 
         <button type="submit"
                 (click)="submit()"
-                [disabled]="text.invalid || sending()"
+                [disabled]="text.invalid || sending() || !!fileError()"
                 [attr.aria-busy]="sending()">
           @if (!sending()) {
             <span>Send prompt</span>
@@ -49,6 +64,35 @@
     }
     @if (error()) {
       <p class="err">⚠️ {{error()}}</p>
+    }
+
+    @if (plan(); as workflow) {
+      @if (workflow.taskPlan; as taskPlan) {
+        <div class="plan">
+          <h2>Decomposition</h2>
+          <p class="objective">{{taskPlan.objective}}</p>
+          <ol class="tasks">
+            @for (task of taskPlan.taskGraph.tasks; track $index) {
+              <li>
+                <span class="task-title">{{task.title}}</span>
+                <p class="task-desc">{{task.description}}</p>
+                @if (task.subTasks.length) {
+                  <ul class="subtasks">
+                    @for (sub of task.subTasks; track $index) {
+                      <li>
+                        <span class="task-title">{{sub.title}}</span>
+                        <p class="task-desc">{{sub.description}}</p>
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ol>
+        </div>
+      } @else {
+        <p class="muted">The orchestrator did not return a task plan for this prompt.</p>
+      }
     }
   </section>
 

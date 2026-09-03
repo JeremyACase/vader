@@ -14,4 +14,7 @@ startup.
 
 - `GET /actuator/health` — Spring Boot Actuator health check.
 - `POST /vader/core-server/client-prompt` — accepts a `ClientPrompt` (multipart form: `text`
-  plus optional `files`), logs it. Persistence is not yet wired up.
+  plus optional `files`), asks the orchestrator LLM to decompose the problem, validates and
+  persists the resulting task plan under a new workflow, and returns that `Workflow` as JSON.
+  Returns `502` if the LLM's response fails the task-plan schema, `503` if the LLM is
+  unreachable. Attached file contents are not yet persisted.

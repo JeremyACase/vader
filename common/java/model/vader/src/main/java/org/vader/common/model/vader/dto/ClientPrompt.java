@@ -2,6 +2,7 @@ package org.vader.common.model.vader.dto;
 
 import jakarta.persistence.Lob;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,6 +14,7 @@ public class ClientPrompt extends AbstractModel {
     @NotNull
     private String text;
 
+    @Size(max = 5, message = "No more than 5 files may be attached to a single prompt")
     private List<MultipartFile> files = new ArrayList<>();
 
     @Override

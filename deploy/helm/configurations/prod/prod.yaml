@@ -1,1 +1,5 @@
 # Helm values for the "prod" Vader deployment configuration.
+vader:
+  mode: PROD
+  # orchestrator.type defaults to "local" (values.yaml), which deploys Ollama in-cluster and
+  # routes client prompts through it for problem decomposition.
