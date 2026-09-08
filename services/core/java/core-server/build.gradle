@@ -11,6 +11,7 @@ bootJar {
 dependencyManagement {
     imports {
         mavenBom "org.springframework.boot:spring-boot-dependencies:${SPRING_BOOT_VERSION}"
+        mavenBom "org.springframework.ai:spring-ai-bom:${SPRING_AI_VERSION}"
     }
 }
 
@@ -25,13 +26,21 @@ dependencies {
     implementation "org.springframework.boot:spring-boot-starter-validation"
     implementation "org.springframework.boot:spring-boot-starter-web"
 
+    implementation "org.springframework.ai:spring-ai-starter-mcp-server-webmvc"
+    implementation "org.springframework.ai:spring-ai-starter-model-ollama"
+    implementation "io.fabric8:kubernetes-client:${FABRIC8_VERSION}"
+    implementation "org.apache.commons:commons-lang3"
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${SPRINGDOC_VERSION}"
+
     implementation project(':common:java:model:vader')
     implementation project(':common:java:library:implementation')
+    implementation project(':common:java:library:dao')
 
     runtimeOnly "com.h2database:h2:${H2_VERSION}"
     implementation "io.minio:minio:${MINIO_VERSION}"
 
     testImplementation "org.springframework.boot:spring-boot-starter-test"
+    testImplementation "io.fabric8:kubernetes-server-mock:${FABRIC8_VERSION}"
 }
 
 jacocoTestReport {

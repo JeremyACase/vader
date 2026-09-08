@@ -22,35 +22,9 @@ public class StaticLlmOrchestrationStrategy implements InterfaceLlmOrchestration
     private static final Logger logger =
         LoggerFactory.getLogger(StaticLlmOrchestrationStrategy.class);
 
-    private static final String STATIC_TASK_PLAN = """
-        {
-          "objective": "Plan and run a small birthday party for a friend.",
-          "taskGraph": {
-            "tasks": [
-              {
-                "title": "Set the date and guest list",
-                "description": "Pick a date and invite a handful of close friends."
-              },
-              {
-                "title": "Arrange food and cake",
-                "description": "Order a cake and decide on snacks for the headcount."
-              },
-              {
-                "title": "Handle venue and decorations",
-                "description": "Prepare the space and buy simple decorations."
-              },
-              {
-                "title": "Coordinate the day-of schedule",
-                "description": "Confirm timings and assign setup and cleanup helpers."
-              }
-            ]
-          }
-        }
-        """;
-
     @Override
     public String orchestrate(final ClientPrompt clientPrompt) {
         logger.info("Returning the static task plan for prompt: '{}'", clientPrompt.getText());
-        return STATIC_TASK_PLAN;
+        return StaticTaskPlan.JSON;
     }
 }

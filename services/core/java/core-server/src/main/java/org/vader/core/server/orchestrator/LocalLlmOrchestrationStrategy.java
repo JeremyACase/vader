@@ -1,33 +1,48 @@
 package org.vader.core.server.orchestrator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
-import java.util.Map;
+import jakarta.annotation.PostConstruct;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.retry.TransientAiException;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.dto.ClientPrompt;
+import org.vader.common.model.vader.dto.Task;
+import org.vader.common.model.vader.dto.TaskGraph;
+import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 
 /**
- * Coordinates RESTful traffic to/from a local Ollama instance.
+ * Coordinates problem decomposition with a local Ollama instance via Spring AI's
+ * {@link ChatClient}.
  *
- * <p>Active only when {@code vader.orchestrator.type} is set to {@code local}, in which case the
- * Helm chart also installs an Ollama deployment for this strategy to talk to.</p>
+ * <p>Active only when {@code vader.orchestrator.type} is {@code local}, in which case the Helm
+ * chart also installs an Ollama deployment and {@code spring.ai.ollama.*} points this client at
+ * it.</p>
  *
- * <p>The prompt is wrapped with decomposition instructions and the request pins Ollama's
- * structured-output {@code format} to the task-plan JSON schema, so the model is constrained to
- * return a single JSON object that the caller can parse and validate as a task plan.</p>
+ * <p>The client prompt is sent alongside every tool currently registered in the application
+ * (every {@code ToolCallbackProvider} bean — today the MCP operator tools), so the model may
+ * call them while it plans. Structured output is handled by {@code ChatClient.entity(...)}
+ * against the lean {@link LlmTaskPlan} shape (objective + tasks only); this strategy then builds
+ * a full {@link TaskPlan} from it and re-serializes to JSON to satisfy the
+ * {@link InterfaceLlmOrchestrationStrategy} contract.</p>
+ *
+ * <p>When the LLM is unreachable and {@code vader.orchestrator.local.fallback-to-static} is
+ * {@code true} (the default), this returns the canned {@link StaticTaskPlan} instead of failing,
+ * so {@code helm test} and CI pass with no Ollama in the cluster. A reachable LLM that returns
+ * an unusable response still fails with {@link OrchestratorResponseException}.</p>
  */
 @Component
 @ConditionalOnProperty(prefix = "vader.orchestrator", name = "type", havingValue = "local")
@@ -37,104 +52,89 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
         LoggerFactory.getLogger(LocalLlmOrchestrationStrategy.class);
 
     private static final String DECOMPOSITION_INSTRUCTIONS = """
-        You are Vader, a planning assistant. Decompose the user's problem into a concrete plan.
-        Respond with a single JSON object and nothing else, of the form:
-          {"objective": "<one sentence restating the goal>",
-           "taskGraph": {"tasks": [{"title": "<short>", "description": "<what to do>"}]}}
-        Break the objective into 2 to 6 top-level tasks. No commentary, no markdown.
+        You are Vader, a planning assistant. Decompose the user's problem into a concrete plan
+        of 2 to 6 top-level tasks, each with a short title and a description of what to do.
 
-        User problem:
+        You have been given a set of tools. Call a tool only when doing so materially helps you
+        plan or gather information the plan needs; otherwise just plan. Do not call tools
+        speculatively.
         """;
 
-    private static final String TASK_PLAN_JSON_SCHEMA = """
-        {
-          "type": "object",
-          "properties": {
-            "objective": {"type": "string"},
-            "taskGraph": {
-              "type": "object",
-              "properties": {
-                "tasks": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "title": {"type": "string"},
-                      "description": {"type": "string"}
-                    },
-                    "required": ["title", "description"]
-                  }
-                }
-              },
-              "required": ["tasks"]
-            }
-          },
-          "required": ["objective", "taskGraph"]
-        }
-        """;
+    @Autowired
+    private ChatClient.Builder chatClientBuilder;
 
-    private final RestTemplate restTemplate;
-    private final String baseUrl;
-    private final String model;
-    private final Map<String, Object> taskPlanSchema;
+    @Autowired
+    private ObjectProvider<ToolCallbackProvider> toolCallbackProviders;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Value("${vader.orchestrator.local.fallback-to-static:true}")
+    private boolean fallbackToStatic;
+
+    private ChatClient chatClient;
+    private List<ToolCallback> toolCallbacks;
 
     /**
-     * Constructs the strategy.
-     *
-     * @param restTemplateBuilder builder used to construct the {@link RestTemplate}
-     * @param objectMapper mapper used to parse the embedded task-plan JSON schema
-     * @param baseUrl the base URL of the local Ollama instance
-     * @param model the Ollama model to prompt, if configured
+     * Builds the chat client and flattens the registered tool providers into a single tool set,
+     * once dependencies are injected.
      */
-    public LocalLlmOrchestrationStrategy(
-        final RestTemplateBuilder restTemplateBuilder,
-        final ObjectMapper objectMapper,
-        @Value("${vader.orchestrator.local.base-url}") final String baseUrl,
-        @Value("${vader.orchestrator.local.model:}") final String model) {
-
-        this.restTemplate = restTemplateBuilder
-            .connectTimeout(Duration.ofSeconds(10))
-            .readTimeout(Duration.ofMinutes(4))
-            .build();
-        this.baseUrl = baseUrl;
-        this.model = model;
-        try {
-            this.taskPlanSchema = objectMapper.readValue(
-                TASK_PLAN_JSON_SCHEMA, new TypeReference<Map<String, Object>>() {});
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Embedded task-plan JSON schema is invalid.", e);
-        }
+    @PostConstruct
+    void wire() {
+        this.chatClient = this.chatClientBuilder.build();
+        this.toolCallbacks = this.toolCallbackProviders.stream()
+            .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
+            .toList();
     }
 
     @Override
     public String orchestrate(final ClientPrompt clientPrompt) {
-        if (this.model == null || this.model.isBlank()) {
-            throw new IllegalStateException(
-                "No Ollama model is configured; model selection is not yet implemented.");
-        }
+        logger.info("Requesting a decomposition from the local LLM with {} tool(s) available",
+            this.toolCallbacks.size());
 
-        logger.info("Requesting a problem decomposition from Ollama at {}", this.baseUrl);
-
-        Map<String, Object> request = Map.of(
-            "model", this.model,
-            "prompt", DECOMPOSITION_INSTRUCTIONS + clientPrompt.getText(),
-            "stream", false,
-            "format", this.taskPlanSchema);
-
-        ParameterizedTypeReference<Map<String, Object>> responseType =
-            new ParameterizedTypeReference<>() {};
         try {
-            var response = this.restTemplate.exchange(
-                this.baseUrl + "/api/generate",
-                HttpMethod.POST,
-                new HttpEntity<>(request),
-                responseType);
+            var llmPlan = this.chatClient.prompt()
+                .system(DECOMPOSITION_INSTRUCTIONS)
+                .user(clientPrompt.getText())
+                .toolCallbacks(this.toolCallbacks)
+                .call()
+                .entity(LlmTaskPlan.class);
 
-            Map<String, Object> body = response.getBody();
-            return body == null ? null : String.valueOf(body.get("response"));
-        } catch (RestClientException e) {
-            throw new OrchestratorUnavailableException(
-                "Could not reach the Ollama instance at " + this.baseUrl, e);
+            if (Objects.isNull(llmPlan)
+                || Objects.isNull(llmPlan.objective())
+                || Objects.isNull(llmPlan.tasks())
+                || llmPlan.tasks().isEmpty()) {
+                throw new OrchestratorResponseException(
+                    "The local LLM did not return a usable task plan.");
+            }
+            return this.objectMapper.writeValueAsString(toTaskPlan(llmPlan));
+        } catch (ResourceAccessException | TransientAiException e) {
+            if (this.fallbackToStatic) {
+                logger.warn("Local LLM unreachable ({}); returning the static fallback plan.",
+                    e.getMessage());
+                return StaticTaskPlan.JSON;
+            }
+            throw new OrchestratorUnavailableException("Could not reach the local LLM.", e);
+        } catch (OrchestratorResponseException e) {
+            throw e;
+        } catch (JsonProcessingException | RuntimeException e) {
+            throw new OrchestratorResponseException(
+                "The local LLM's response was not a usable task plan: " + e.getMessage(), e);
         }
+    }
+
+    private static TaskPlan toTaskPlan(final LlmTaskPlan llmPlan) {
+        var taskGraph = new TaskGraph();
+        taskGraph.setTasks(llmPlan.tasks().stream().map(source -> {
+            var task = new Task();
+            task.setTitle(source.title());
+            task.setDescription(source.description());
+            return task;
+        }).toList());
+
+        var taskPlan = new TaskPlan();
+        taskPlan.setObjective(llmPlan.objective());
+        taskPlan.setTaskGraph(taskGraph);
+        return taskPlan;
     }
 }

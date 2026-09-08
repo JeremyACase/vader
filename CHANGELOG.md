@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This is a project-level summary. Individual modules under `common/` and `services/` keep
 their own, more detailed changelogs.
 
+## [0.8.0]
+### Added
+- **Kubernetes operator framework + Python Sandbox operator.** `core-server/tools/operators`
+  ports and de-duplicates ubiquia's `BeliefStateOperator` / `ComponentOperator` into an
+  `InterfaceOperator` contract and a fabric8-based `AbstractOperator` (owner-Deployment caching
+  with retry, a self-deletion watch that cascade-cleans managed resources, ownership labels +
+  owner references, label-scoped list/delete). The first operator — **Python Sandbox**
+  (`vader.operators.enabled` + `vader.operators.python-sandbox.enabled`) — manages the lifecycle
+  of hardened, idling `python:3.12-slim` sandbox pods and is exposed to LLMs as MCP tools
+  `create_sandbox` / `list_sandboxes` / `delete_sandbox`, plus a REST surface backing the Helm
+  smoke test. Helm gains the RBAC `Role`/`RoleBinding`, a `vader.operators` values block, and a
+  gated end-to-end test hook.
+- **The vader database is queryable by LLMs.** New `common:java:library:dao` module — ubiquia's
+  dynamic JPA Criteria query engine (structured `QueryFilter` and URL-param queries, dotted
+  keychains through associations, `LIKE` / range / `null` operators, sort, pagination), trimmed
+  of `getPageMultiSelect` and the micrometer / ingress / logger plumbing. `core-server` wires
+  it over its six mapped entities (`Workflow`, `ClientPrompt`, `TaskPlan`, `TaskGraph`, `Task`,
+  `ObjectMetadata`) as read-only REST controllers under `/vader/core-server/data/{entity}` and
+  as MCP tools `list_queryable_entities` / `query_database` / `count_matching`
+  (`vader.mcp.database-query.enabled`, default true). `FileContentEntity` is never registered,
+  so file bytes stay unreachable; `vader.dao.max-page-size` (default 100) caps every query.
+- **OpenAPI / Swagger UI** for `core-server` (`springdoc-openapi-starter-webmvc-ui`): spec at
+  `/v3/api-docs`, UI at `/swagger-ui.html`, gated on `vader.swagger.enabled` (default true).
+  The Helm `NOTES.txt` now points at Swagger rather than `/actuator/health`.
+### Changed
+- **The orchestrator LLM is handed the registered tools and calls them while it plans.**
+  `LocalLlmOrchestrationStrategy` moved off the hand-rolled Ollama `/api/generate` call onto
+  Spring AI's `ChatClient` (`spring-ai-starter-model-ollama`): native tool-calling loop +
+  structured output into a lean `LlmTaskPlan` (objective + tasks only), mapped to a full
+  `TaskPlan`. Every `ToolCallbackProvider` bean is offered to the model; the dev default model
+  moved to `qwen2.5:3b`. New `vader.orchestrator.local.fallback-to-static` (default true)
+  returns the canned static plan when the LLM is unreachable — so `helm test` / CI pass with no
+  Ollama — while a reachable-but-broken response still fails (502). `spring.ai.model.chat` is
+  `none` outside the `local` orchestrator.
+- **Dependency injection** across `core-server` moved from constructor injection to `@Autowired`
+  / `@Value` field injection, matching the existing mapper layer.
+- The `core-server` Helm test's decomposition-check timeout was raised 10s → 120s so the hook
+  also passes against a `local` release (first request loads the Ollama model).
+### Dependencies
+- `spring-ai-bom:1.0.9` (MCP server + Ollama chat client), `io.fabric8:kubernetes-client:7.8.0`,
+  `org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9`,
+  `org.reflections:reflections:0.10.2`, `commons-lang3`.
+
 ## [0.6.0]
 ### Added
 - File storage strategy pattern (`vader.storage.type`), selected at startup via

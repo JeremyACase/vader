@@ -1,0 +1,60 @@
+{{- if .Values.vader.operators.pythonSandbox.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vader-python-sandbox-operator-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Only rendered when vader.operators.pythonSandbox.enabled is true. Drives the operator's
+    # REST surface (which shares its service layer with the MCP tools) through a full
+    # create -> list -> delete -> list round trip against the real cluster.
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.6.0
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          SERVER="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
+          BASE="$SERVER/vader/core-server/python-sandbox/sandboxes"
+
+          echo "== Health check =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER/actuator/health" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ health check got $STATUS"; exit 1; }
+          echo "✅ core-server healthy"
+
+          echo "== Create a sandbox =="
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 30 \
+            -X POST "$BASE" -H "Content-Type: application/json" \
+            -d '{"name":"helm-test"}' || true)
+          BODY=$(cat "$BODY_FILE")
+          echo "HTTP $STATUS -- $BODY"
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200, got $STATUS"; exit 1; }
+          NAME=$(echo "$BODY" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
+          [ -n "$NAME" ] || { echo "❌ no sandbox name in response"; exit 1; }
+          echo "✅ created sandbox $NAME"
+
+          echo "== List includes the new sandbox =="
+          BODY=$(curl -s --max-time 15 "$BASE" || true)
+          echo "$BODY"
+          echo "$BODY" | grep -q "\"$NAME\"" || { echo "❌ list missing $NAME"; exit 1; }
+          echo "✅ list contains $NAME"
+
+          echo "== Delete the sandbox =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            -X DELETE "$BASE/$NAME" || true)
+          [ "$STATUS" = "204" ] || { echo "❌ expected HTTP 204 on delete, got $STATUS"; exit 1; }
+          echo "✅ deleted $NAME"
+
+          echo "== List no longer includes the sandbox =="
+          sleep 2
+          BODY=$(curl -s --max-time 15 "$BASE" || true)
+          echo "$BODY"
+          echo "$BODY" | grep -q "\"$NAME\"" && { echo "❌ $NAME still listed"; exit 1; }
+          echo "✅ $NAME is gone"
+
+          echo "🎉 python-sandbox operator round trip passed"
+{{- end }}

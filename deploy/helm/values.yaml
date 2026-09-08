@@ -14,6 +14,10 @@ logging:
 
 vader:
   mode: DEV
+  swagger:
+    # When true, core-server serves the OpenAPI spec at /v3/api-docs and Swagger UI at
+    # /swagger-ui.html (documenting every REST controller, including the /data/* query API).
+    enabled: true
   multipart:
     # Per-file upload limit. Applies to each individual file in a multipart request.
     maxFileSize: 10MB
@@ -37,7 +41,13 @@ vader:
     type: local
     local:
       # The Ollama model to download and run. Only used when orchestrator.type is "local".
-      model: deepseek-r1:1.5b
+      # Must support tool-calling and structured output for the orchestrator to work: qwen2.5
+      # does both. Reasoning models (e.g. deepseek-r1) and sub-2B models tend to return
+      # malformed plans and rarely call tools.
+      model: qwen2.5:3b
+      # When the in-cluster LLM is unreachable, fall back to the canned static task plan rather
+      # than returning a 503. Keeps `helm test` / CI green without an Ollama deployment.
+      fallbackToStatic: true
   storage:
     # Allowable values are:
     #   database - store uploaded file contents as BLOBs in the relational database (default;
@@ -51,6 +61,37 @@ vader:
       accessKey: ""
       secretKey: ""
       bucket: vader-files
+  dao:
+    # Upper bound on the page size any dynamic query (REST or MCP) may request.
+    maxPageSize: 100
+  mcp:
+    databaseQuery:
+      # When true, core-server exposes read-only vader-database query tools
+      # (list_queryable_entities / query_database / count_matching) over the MCP endpoint.
+      enabled: true
+  operators:
+    # Kubernetes operators core-server runs, each also exposed to LLMs as MCP tools.
+    # Master switch: constructs the shared Kubernetes client and enables the RBAC the
+    # operators need. Must be true for ANY individual operator below to start.
+    # (Additional operators can be added here later, following the same pattern.)
+    enabled: false
+    pythonSandbox:
+      # When true (and operators.enabled is true), core-server runs the Python sandbox
+      # operator and publishes its create/list/delete tools over the MCP SSE endpoint.
+      enabled: false
+      # The Deployment running core-server; the operator watches it and cascade-deletes every
+      # sandbox if core-server itself is removed from the cluster.
+      ownerDeploymentName: vader-core-server
+      sandbox:
+        # Container image every sandbox pod runs.
+        image: python:3.12-slim
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
   components:
     core:
       coreServer:

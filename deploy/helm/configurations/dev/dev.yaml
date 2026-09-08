@@ -4,6 +4,10 @@ logging:
 
 vader:
   mode: DEV
+  operators:
+    enabled: true
+    pythonSandbox:
+      enabled: true
   components:
     core:
       coreServer:

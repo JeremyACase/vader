@@ -9,6 +9,13 @@ data:
       level:
         org.vader: {{ .Values.logging.vader }}
 
+    springdoc:
+      api-docs:
+        enabled: {{ .Values.vader.swagger.enabled }}
+      swagger-ui:
+        enabled: {{ .Values.vader.swagger.enabled }}
+        path: /swagger-ui.html
+
     management:
       endpoint:
         info:
@@ -38,6 +45,37 @@ data:
 
       application:
         name: core-server
+
+      ai:
+        # Only wire an Ollama chat model when the local orchestrator is active; otherwise
+        # disable chat-model autoconfig entirely so the static / test contexts need no LLM.
+        model:
+          chat: {{ if eq .Values.vader.orchestrator.type "local" }}ollama{{ else }}none{{ end }}
+        {{- if eq .Values.vader.orchestrator.type "local" }}
+        ollama:
+          base-url: http://vader-ollama:{{ .Values.vader.components.core.ollama.service.port }}
+          chat:
+            options:
+              model: {{ .Values.vader.orchestrator.local.model }}
+              temperature: 0
+        # Bounded retry so an unreachable LLM degrades to the fallback plan in seconds, not
+        # minutes, when fallback-to-static is on.
+        retry:
+          max-attempts: 2
+          backoff:
+            initial-interval: 1s
+            max-interval: 5s
+        {{- end }}
+        mcp:
+          server:
+            name: vader-core-server
+            version: {{ .Chart.Version | quote }}
+            type: SYNC
+
+      http:
+        client:
+          connect-timeout: 10s
+          read-timeout: 5m
 
       servlet:
         multipart:
@@ -70,8 +108,10 @@ data:
         type: {{ .Values.vader.orchestrator.type | default "local" }}
         {{- if eq .Values.vader.orchestrator.type "local" }}
         local:
-          base-url: http://vader-ollama:{{ .Values.vader.components.core.ollama.service.port }}
           model: {{ .Values.vader.orchestrator.local.model }}
+          # When the in-cluster LLM is unreachable, return the canned static plan instead of
+          # failing -- lets `helm test` / CI pass with no Ollama in the cluster.
+          fallback-to-static: {{ .Values.vader.orchestrator.local.fallbackToStatic }}
         {{- end }}
       storage:
         type: {{ .Values.vader.storage.type | default "database" }}
@@ -82,3 +122,24 @@ data:
           secret-key: {{ .Values.vader.storage.minio.secretKey }}
           bucket: {{ .Values.vader.storage.minio.bucket | default "vader-files" }}
         {{- end }}
+      dao:
+        max-page-size: {{ .Values.vader.dao.maxPageSize }}
+      mcp:
+        database-query:
+          enabled: {{ .Values.vader.mcp.databaseQuery.enabled }}
+      kubernetes:
+        namespace: {{ .Release.Namespace }}
+      operators:
+        enabled: {{ .Values.vader.operators.enabled }}
+        python-sandbox:
+          enabled: {{ .Values.vader.operators.pythonSandbox.enabled }}
+          owner-deployment-name: {{ .Values.vader.operators.pythonSandbox.ownerDeploymentName }}
+          sandbox:
+            image: {{ .Values.vader.operators.pythonSandbox.sandbox.image }}
+            resources:
+              requests:
+                cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.cpu }}
+                memory: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.memory }}
+              limits:
+                cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.limits.cpu }}
+                memory: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.limits.memory }}
