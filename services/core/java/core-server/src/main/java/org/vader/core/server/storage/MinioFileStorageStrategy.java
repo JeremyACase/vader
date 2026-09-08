@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -30,22 +31,11 @@ public class MinioFileStorageStrategy implements InterfaceFileStorageStrategy {
 
     private static final Logger logger = LoggerFactory.getLogger(MinioFileStorageStrategy.class);
 
-    private final MinioClient minioClient;
-    private final String bucket;
+    @Autowired
+    private MinioClient minioClient;
 
-    /**
-     * Constructs the strategy.
-     *
-     * @param minioClient the MinIO client bean wired by {@link MinioConfig}
-     * @param bucket the bucket name to upload files into
-     */
-    public MinioFileStorageStrategy(
-        final MinioClient minioClient,
-        @Value("${vader.storage.minio.bucket:vader-files}") final String bucket) {
-
-        this.minioClient = minioClient;
-        this.bucket = bucket;
-    }
+    @Value("${vader.storage.minio.bucket:vader-files}")
+    private String bucket;
 
     @Override
     public List<ObjectMetadataEntity> store(final List<MultipartFile> files) {

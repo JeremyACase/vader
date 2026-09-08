@@ -5,9 +5,10 @@ metadata:
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    # Requires the release to be installed with configurations/test/test.yaml, which sets
-    # vader.orchestrator.type=static. The static strategy returns a canned decomposition
-    # immediately; no Ollama deployment or model download is required.
+    # CI installs with configurations/test/test.yaml (vader.orchestrator.type=static): the
+    # static strategy returns a canned decomposition instantly, no Ollama needed. The
+    # decomposition checks below only assert a valid plan came back, so this hook also passes
+    # against a "local" release once the Ollama model is loaded -- hence the generous timeouts.
 spec:
   restartPolicy: Never
   containers:
@@ -26,7 +27,7 @@ spec:
 
           echo "== End-to-end: prompt -> core-server -> decomposition =="
           BODY_FILE=$(mktemp)
-          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 10 \
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 120 \
             -X POST "$PROMPT_URL" \
             -F "text=Plan a simple birthday party for a friend." || true)
           BODY=$(cat "$BODY_FILE")
@@ -44,7 +45,7 @@ spec:
           echo "== Multipart: prompt with one attached file =="
           echo "hello world" > /tmp/test-attachment.txt
           BODY_FILE=$(mktemp)
-          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 10 \
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 120 \
             -X POST "$PROMPT_URL" \
             -F "text=Plan a simple birthday party for a friend." \
             -F "files=@/tmp/test-attachment.txt;type=text/plain" || true)

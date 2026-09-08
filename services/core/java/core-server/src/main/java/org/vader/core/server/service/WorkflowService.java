@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,46 +40,29 @@ public class WorkflowService {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowService.class);
 
-    private final InterfaceLlmOrchestrationStrategy orchestrator;
-    private final InterfaceFileStorageStrategy fileStorageStrategy;
-    private final ObjectMapper objectMapper;
-    private final Validator validator;
-    private final ClientPromptDtoMapper clientPromptDtoMapper;
-    private final TaskPlanDtoToEntityMapper taskPlanDtoToEntityMapper;
-    private final ClientPromptRepository clientPromptRepository;
-    private final WorkflowRepository workflowRepository;
+    @Autowired
+    private InterfaceLlmOrchestrationStrategy orchestrator;
 
-    /**
-     * Constructs the service.
-     *
-     * @param orchestrator the orchestrator strategy to ask for a decomposition
-     * @param fileStorageStrategy the storage strategy for any attached files
-     * @param objectMapper the JSON mapper used to parse the orchestrator response
-     * @param validator the bean validator used to enforce the task-plan schema
-     * @param clientPromptDtoMapper maps the prompt entity to the DTO the orchestrator expects
-     * @param taskPlanDtoToEntityMapper maps the validated task plan to a persistable entity graph
-     * @param clientPromptRepository repository for the originating client prompt
-     * @param workflowRepository repository for the spawned workflow
-     */
-    public WorkflowService(
-        final InterfaceLlmOrchestrationStrategy orchestrator,
-        final InterfaceFileStorageStrategy fileStorageStrategy,
-        final ObjectMapper objectMapper,
-        final Validator validator,
-        final ClientPromptDtoMapper clientPromptDtoMapper,
-        final TaskPlanDtoToEntityMapper taskPlanDtoToEntityMapper,
-        final ClientPromptRepository clientPromptRepository,
-        final WorkflowRepository workflowRepository) {
+    @Autowired
+    private InterfaceFileStorageStrategy fileStorageStrategy;
 
-        this.orchestrator = orchestrator;
-        this.fileStorageStrategy = fileStorageStrategy;
-        this.objectMapper = objectMapper;
-        this.validator = validator;
-        this.clientPromptDtoMapper = clientPromptDtoMapper;
-        this.taskPlanDtoToEntityMapper = taskPlanDtoToEntityMapper;
-        this.clientPromptRepository = clientPromptRepository;
-        this.workflowRepository = workflowRepository;
-    }
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private Validator validator;
+
+    @Autowired
+    private ClientPromptDtoMapper clientPromptDtoMapper;
+
+    @Autowired
+    private TaskPlanDtoToEntityMapper taskPlanDtoToEntityMapper;
+
+    @Autowired
+    private ClientPromptRepository clientPromptRepository;
+
+    @Autowired
+    private WorkflowRepository workflowRepository;
 
     /**
      * Decomposes a client prompt into a persisted task plan under a new workflow.

@@ -1,0 +1,35 @@
+{{- if and .Values.k8s.serviceAccount.create .Values.vader.operators.enabled }}
+# Grants core-server's service account the permissions its operators need: managing the
+# Deployments and Services that back each Python sandbox, and watching its own Deployment so it
+# can cascade-clean sandboxes if core-server is removed.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vader.serviceAccountName" . }}-operators
+  labels:
+    {{- include "vader.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "vader.serviceAccountName" . }}-operators
+  labels:
+    {{- include "vader.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "vader.serviceAccountName" . }}-operators
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vader.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

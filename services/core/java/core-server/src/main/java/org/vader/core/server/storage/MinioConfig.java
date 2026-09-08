@@ -16,6 +16,14 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnProperty(prefix = "vader.storage", name = "type", havingValue = "minio")
 public class MinioConfig {
 
+    /**
+     * Builds the MinIO client from the configured endpoint and credentials.
+     *
+     * @param endpoint the MinIO server endpoint
+     * @param accessKey the access key
+     * @param secretKey the secret key
+     * @return the configured client
+     */
     @Bean
     public MinioClient minioClient(
         @Value("${vader.storage.minio.endpoint}") final String endpoint,

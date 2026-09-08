@@ -12,11 +12,11 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
-import java.util.List;
 import org.vader.common.library.implementation.service.mapper.TaskGraphDtoToEntityMapper;
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
 import org.vader.common.model.vader.dto.ClientPrompt;
@@ -47,15 +47,21 @@ class WorkflowServiceTest {
         this.clientPromptRepository = mock(ClientPromptRepository.class);
         this.workflowRepository = mock(WorkflowRepository.class);
         this.taskPlanDtoToEntityMapper = mock(TaskPlanDtoToEntityMapper.class);
-        this.service = new WorkflowService(
-            this.orchestrator,
-            this.fileStorageStrategy,
-            new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
-            newValidator(),
-            new ClientPromptDtoMapper(),
-            this.taskPlanDtoToEntityMapper,
-            this.clientPromptRepository,
-            this.workflowRepository);
+        this.service = buildService(this.taskPlanDtoToEntityMapper);
+    }
+
+    private WorkflowService buildService(final TaskPlanDtoToEntityMapper taskPlanMapper) {
+        var built = new WorkflowService();
+        ReflectionTestUtils.setField(built, "orchestrator", this.orchestrator);
+        ReflectionTestUtils.setField(built, "fileStorageStrategy", this.fileStorageStrategy);
+        ReflectionTestUtils.setField(built, "objectMapper",
+            new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false));
+        ReflectionTestUtils.setField(built, "validator", newValidator());
+        ReflectionTestUtils.setField(built, "clientPromptDtoMapper", new ClientPromptDtoMapper());
+        ReflectionTestUtils.setField(built, "taskPlanDtoToEntityMapper", taskPlanMapper);
+        ReflectionTestUtils.setField(built, "clientPromptRepository", this.clientPromptRepository);
+        ReflectionTestUtils.setField(built, "workflowRepository", this.workflowRepository);
+        return built;
     }
 
     private static Validator newValidator() {
@@ -129,15 +135,7 @@ class WorkflowServiceTest {
         var realMapper = new TaskPlanDtoToEntityMapper();
         ReflectionTestUtils.setField(
             realMapper, "taskGraphDtoToEntityMapper", new TaskGraphDtoToEntityMapper());
-        var wired = new WorkflowService(
-            this.orchestrator,
-            this.fileStorageStrategy,
-            new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
-            newValidator(),
-            new ClientPromptDtoMapper(),
-            realMapper,
-            this.clientPromptRepository,
-            this.workflowRepository);
+        var wired = buildService(realMapper);
 
         when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(VALID_RESPONSE);
         when(this.clientPromptRepository.save(any())).thenAnswer(call -> call.getArgument(0));

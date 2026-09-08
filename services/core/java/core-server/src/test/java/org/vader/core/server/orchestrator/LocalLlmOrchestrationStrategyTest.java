@@ -3,136 +3,173 @@ package org.vader.core.server.orchestrator;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Map;
+import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
 import org.vader.common.model.vader.dto.ClientPrompt;
+import org.vader.common.model.vader.dto.TaskPlan;
 
 class LocalLlmOrchestrationStrategyTest {
 
-    private static final String BASE_URL = "http://vader-ollama:11434";
-    private static final String MODEL = "deepseek-r1:1.5b";
+    // The lean LlmTaskPlan shape the model is asked to produce (objective + tasks only).
+    private static final String VALID_PLAN_JSON =
+        "{\"objective\":\"ship it\",\"tasks\":"
+            + "[{\"title\":\"design\",\"description\":\"draw it\"},"
+            + "{\"title\":\"build\",\"description\":\"code it\"}]}";
 
-    private RestTemplate restTemplate;
-    private RestTemplateBuilder restTemplateBuilder;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper =
+        new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    private ChatModel chatModel;
 
     @BeforeEach
     void setUp() {
-        this.restTemplate = mock(RestTemplate.class);
-        this.restTemplateBuilder = mock(RestTemplateBuilder.class);
-        when(this.restTemplateBuilder.connectTimeout(any())).thenReturn(this.restTemplateBuilder);
-        when(this.restTemplateBuilder.readTimeout(any())).thenReturn(this.restTemplateBuilder);
-        when(this.restTemplateBuilder.build()).thenReturn(this.restTemplate);
+        this.chatModel = mock(ChatModel.class);
+        when(this.chatModel.getDefaultOptions())
+            .thenReturn(ToolCallingChatOptions.builder().build());
     }
 
-    private LocalLlmOrchestrationStrategy strategy(final String model) {
-        return new LocalLlmOrchestrationStrategy(
-            this.restTemplateBuilder, this.objectMapper, BASE_URL, model);
+    private LocalLlmOrchestrationStrategy strategy(
+        final boolean fallbackToStatic, final ToolCallbackProvider... providers) {
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ToolCallbackProvider> objectProvider = mock(ObjectProvider.class);
+        when(objectProvider.stream()).thenReturn(Stream.of(providers));
+
+        var strategy = new LocalLlmOrchestrationStrategy();
+        ReflectionTestUtils.setField(
+            strategy, "chatClientBuilder", ChatClient.builder(this.chatModel));
+        ReflectionTestUtils.setField(strategy, "toolCallbackProviders", objectProvider);
+        ReflectionTestUtils.setField(strategy, "objectMapper", this.objectMapper);
+        ReflectionTestUtils.setField(strategy, "fallbackToStatic", fallbackToStatic);
+        strategy.wire();
+        return strategy;
     }
 
-    @Test
-    void orchestrate_withNoModelConfigured_throwsIllegalStateException() {
-        var strategy = strategy("");
-        var clientPrompt = new ClientPrompt();
-        clientPrompt.setText("What's the weather like?");
-
-        assertThatThrownBy(() -> strategy.orchestrate(clientPrompt))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("No Ollama model is configured");
+    private static ChatResponse responseWith(final String assistantText) {
+        return new ChatResponse(List.of(new Generation(new AssistantMessage(assistantText))));
     }
 
-    @Test
-    void orchestrate_withNullModelConfigured_throwsIllegalStateException() {
-        var strategy = strategy(null);
-        var clientPrompt = new ClientPrompt();
-        clientPrompt.setText("What's the weather like?");
-
-        assertThatThrownBy(() -> strategy.orchestrate(clientPrompt))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("No Ollama model is configured");
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void orchestrate_withModelConfigured_postsDecompositionRequestAndReturnsResponseText() {
-        var clientPrompt = new ClientPrompt();
-        clientPrompt.setText("Plan a birthday party");
-
-        Map<String, Object> responseBody = Map.of("response", "{\"objective\":\"x\"}");
-        when(this.restTemplate.exchange(
-            eq(BASE_URL + "/api/generate"),
-            eq(HttpMethod.POST),
-            any(HttpEntity.class),
-            any(ParameterizedTypeReference.class)))
-            .thenReturn(ResponseEntity.ok(responseBody));
-
-        String result = strategy(MODEL).orchestrate(clientPrompt);
-
-        assertThat(result).isEqualTo("{\"objective\":\"x\"}");
-
-        ArgumentCaptor<HttpEntity<Map<String, Object>>> requestCaptor =
-            ArgumentCaptor.forClass(HttpEntity.class);
-        verify(this.restTemplate).exchange(
-            eq(BASE_URL + "/api/generate"),
-            eq(HttpMethod.POST),
-            requestCaptor.capture(),
-            any(ParameterizedTypeReference.class));
-
-        Map<String, Object> sentBody = requestCaptor.getValue().getBody();
-        assertThat(sentBody).containsEntry("model", MODEL);
-        assertThat(sentBody).containsEntry("stream", false);
-        assertThat(sentBody).containsKey("format");
-        assertThat(sentBody.get("prompt")).asString()
-            .contains("Plan a birthday party")
-            .contains("single JSON object");
+    private static ClientPrompt promptOf(final String text) {
+        var prompt = new ClientPrompt();
+        prompt.setText(text);
+        return prompt;
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void orchestrate_whenOllamaIsUnreachable_throwsOrchestratorUnavailable() {
-        var clientPrompt = new ClientPrompt();
-        clientPrompt.setText("Plan a birthday party");
+    void orchestrate_sendsPromptAndReturnsSchemaValidTaskPlanJson() throws Exception {
+        when(this.chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
-        when(this.restTemplate.exchange(
-            eq(BASE_URL + "/api/generate"),
-            eq(HttpMethod.POST),
-            any(HttpEntity.class),
-            any(ParameterizedTypeReference.class)))
+        var result = this.strategy(true).orchestrate(promptOf("Ship onboarding"));
+
+        var plan = this.objectMapper.readValue(result, TaskPlan.class);
+        assertThat(plan.getObjective()).isEqualTo("ship it");
+        assertThat(plan.getTaskGraph().getTasks()).hasSize(2);
+        assertThat(plan.getTaskGraph().getTasks().get(0).getTitle()).isEqualTo("design");
+        // The lean LlmTaskPlan shape means the model is never asked to invent an id/timestamps,
+        // so the built TaskPlan leaves them null and passes bean validation downstream.
+        assertThat(plan.getId()).isNull();
+
+        var promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(this.chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getContents())
+            .contains("Ship onboarding")
+            .contains("planning assistant");
+    }
+
+    @Test
+    void orchestrate_whenModelReturnsNoTasks_throwsOrchestratorResponse() {
+        when(this.chatModel.call(any(Prompt.class)))
+            .thenReturn(responseWith("{\"objective\":\"ship it\",\"tasks\":[]}"));
+
+        assertThatThrownBy(() -> this.strategy(true).orchestrate(promptOf("plan a thing")))
+            .isInstanceOf(OrchestratorResponseException.class)
+            .hasMessageContaining("usable task plan");
+    }
+
+    @Test
+    void orchestrate_attachesEveryRegisteredToolCallback() {
+        when(this.chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+        var provider = MethodToolCallbackProvider.builder()
+            .toolObjects(new DummyTools())
+            .build();
+
+        this.strategy(true, provider).orchestrate(promptOf("anything"));
+
+        var promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(this.chatModel).call(promptCaptor.capture());
+        var options = (ToolCallingChatOptions) promptCaptor.getValue().getOptions();
+        assertThat(options.getToolCallbacks())
+            .anyMatch(callback -> callback.getToolDefinition().name().equals("dummy_tool"));
+    }
+
+    @Test
+    void orchestrate_withNoToolProviders_stillWorks() {
+        when(this.chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+
+        var result = this.strategy(true).orchestrate(promptOf("plan a thing"));
+
+        assertThat(result).contains("\"objective\":\"ship it\"");
+    }
+
+    @Test
+    void orchestrate_whenModelUnreachableAndFallbackEnabled_returnsStaticPlan() throws Exception {
+        when(this.chatModel.call(any(Prompt.class)))
             .thenThrow(new ResourceAccessException("connection refused"));
 
-        assertThatThrownBy(() -> strategy(MODEL).orchestrate(clientPrompt))
-            .isInstanceOf(OrchestratorUnavailableException.class)
-            .hasMessageContaining(BASE_URL);
+        var result = this.strategy(true).orchestrate(promptOf("plan a thing"));
+
+        var plan = this.objectMapper.readValue(result, TaskPlan.class);
+        assertThat(plan.getObjective()).isNotBlank();
+        assertThat(plan.getTaskGraph().getTasks()).isNotEmpty();
+        assertThat(result).isEqualTo(StaticTaskPlan.JSON);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void orchestrate_withNullResponseBody_returnsNull() {
-        var clientPrompt = new ClientPrompt();
-        clientPrompt.setText("What's the weather like?");
+    void orchestrate_whenModelUnreachableAndFallbackDisabled_throwsOrchestratorUnavailable() {
+        when(this.chatModel.call(any(Prompt.class)))
+            .thenThrow(new ResourceAccessException("connection refused"));
 
-        when(this.restTemplate.exchange(
-            eq(BASE_URL + "/api/generate"),
-            eq(HttpMethod.POST),
-            any(HttpEntity.class),
-            any(ParameterizedTypeReference.class)))
-            .thenReturn(ResponseEntity.ok(null));
+        assertThatThrownBy(() -> this.strategy(false).orchestrate(promptOf("plan a thing")))
+            .isInstanceOf(OrchestratorUnavailableException.class)
+            .hasMessageContaining("local LLM");
+    }
 
-        assertThat(strategy(MODEL).orchestrate(clientPrompt)).isNull();
+    @Test
+    void orchestrate_whenResponseIsNotUsablePlan_throwsOrchestratorResponse() {
+        when(this.chatModel.call(any(Prompt.class)))
+            .thenReturn(responseWith("Sure! Here is your plan: do the thing."));
+
+        assertThatThrownBy(() -> this.strategy(true).orchestrate(promptOf("plan a thing")))
+            .isInstanceOf(OrchestratorResponseException.class);
+    }
+
+    static final class DummyTools {
+
+        @Tool(name = "dummy_tool", description = "A tool that does nothing, for tests.")
+        public String doNothing() {
+            return "ok";
+        }
     }
 }

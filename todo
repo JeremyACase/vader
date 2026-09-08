@@ -1,0 +1,2 @@
+- add logging/persistence of entire lifecycle
+- ensure LLMs can grab files from the object store/database using pointers

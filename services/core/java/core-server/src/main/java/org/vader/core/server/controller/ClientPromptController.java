@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,26 +31,14 @@ public class ClientPromptController {
 
     private static final Logger logger = LoggerFactory.getLogger(ClientPromptController.class);
 
-    private final WorkflowService workflowService;
-    private final ClientPromptDtoToEntityMapper clientPromptDtoToEntityMapper;
-    private final WorkflowDtoMapper workflowDtoMapper;
+    @Autowired
+    private WorkflowService workflowService;
 
-    /**
-     * Constructs the controller.
-     *
-     * @param workflowService decomposes a prompt into a persisted workflow
-     * @param clientPromptDtoToEntityMapper maps the submitted prompt to an entity
-     * @param workflowDtoMapper maps the persisted workflow back to a DTO for the response
-     */
-    public ClientPromptController(
-        final WorkflowService workflowService,
-        final ClientPromptDtoToEntityMapper clientPromptDtoToEntityMapper,
-        final WorkflowDtoMapper workflowDtoMapper) {
+    @Autowired
+    private ClientPromptDtoToEntityMapper clientPromptDtoToEntityMapper;
 
-        this.workflowService = workflowService;
-        this.clientPromptDtoToEntityMapper = clientPromptDtoToEntityMapper;
-        this.workflowDtoMapper = workflowDtoMapper;
-    }
+    @Autowired
+    private WorkflowDtoMapper workflowDtoMapper;
 
     /**
      * Decomposes an incoming client prompt and returns the resulting workflow.

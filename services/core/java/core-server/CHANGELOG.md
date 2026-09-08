@@ -4,6 +4,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0]
+### Added
+- OpenAPI / Swagger UI (`springdoc-openapi-starter-webmvc-ui`) — the spec is at
+  `/v3/api-docs` and the UI at `/swagger-ui.html`, documenting every REST controller. Gated on
+  `vader.swagger.enabled` (default true); the Helm `NOTES.txt` now points at Swagger instead of
+  `/actuator/health`.
+- `controller.dao` + `tools.query` — the vader database is now queryable via REST and MCP,
+  built on the new `common:java:library:dao` engine:
+  - Six `GenericVaderDaoController` subclasses at `/vader/core-server/data/{entity}` for
+    `Workflow`, `ClientPrompt`, `TaskPlan`, `TaskGraph`, `Task`, `ObjectMetadata` (each reuses
+    the existing `*DtoMapper`; `FileContentEntity` is deliberately not exposed).
+  - `tools.query.VaderDaoRegistry` indexes those controllers by DTO name;
+    `DatabaseQueryService` adds schema reflection (`describe()` → filterable fields, skipping
+    `@Transient` / `modelType`) and trims pages to a lean `QueryResult`.
+  - `tools.query.mcp.DatabaseQueryTools` — `@Tool` methods `list_queryable_entities`,
+    `query_database`, `count_matching`, registered with the Spring AI MCP server. Gated on
+    `vader.mcp.database-query.enabled` (default true); bad field names come back as
+    `{"error": ...}` for the model to correct.
+  - `commons-lang3` added for field reflection.
+- `tools.operators` — a Kubernetes operator framework ported and de-duplicated from ubiquia's
+  `BeliefStateOperator` / `ComponentOperator`:
+  - `tools.operators.interfaces.InterfaceOperator<S>` — the `Interface*` strategy contract:
+    `init` / `teardown` / `reconcile` / `delete` / `deleteAll` / `list`.
+  - `tools.operators.AbstractOperator<S>` — non-Spring base class. Caches the owning Deployment
+    on startup with a bounded retry loop, opens a fabric8 watch on that Deployment and
+    cascade-runs `deleteAll()` on its deletion, stamps `operators.vader.org/{managed-by,operator}`
+    labels + an owner reference on every manifest, and scopes list/delete to the operator label.
+  - `tools.operators.ManagedResource`, `OperatorLabels`, `OperatorProperties`.
+  - `tools.operators.KubernetesClientConfig` — fabric8 `KubernetesClient` bean, created only
+    when the operator subsystem is on (`@ConditionalOnProperty vader.operators.enabled`); each
+    operator additionally has its own `vader.operators.<name>.enabled` flag.
+- `tools.operators.pythonsandbox` — the first concrete operator (lifecycle only):
+  - `PythonSandboxOperator` (`@ConditionalOnProperty vader.operators.python-sandbox.enabled`)
+    extends `AbstractOperator`; `PythonSandboxManifestBuilder` builds a hardened idling
+    `python:3.12-slim` Deployment (`sleep infinity`, non-root, caps dropped, no SA token) +
+    ClusterIP Service; `SandboxNaming` resolves an optional friendly name to a unique DNS-1123
+    label; `PythonSandboxOperatorInitializer` drives `init()` on `ApplicationReadyEvent`
+    (failure logged, non-fatal).
+  - `PythonSandboxService` — shared domain layer over the operator.
+  - `mcp.PythonSandboxTools` + `mcp.PythonSandboxToolsConfig` — `@Tool` methods
+    (`create_sandbox`, `list_sandboxes`, `delete_sandbox`) registered with the Spring AI MCP
+    server via a `ToolCallbackProvider` bean.
+  - `controller.PythonSandboxController` — REST surface at
+    `/vader/core-server/python-sandbox/sandboxes`; `KubernetesClientException` → 502.
+- `spring-ai-starter-mcp-server-webmvc` (Spring AI BOM `1.0.9`) — SSE MCP server on the
+  existing web port; `io.fabric8:kubernetes-client:7.8.0`;
+  `io.fabric8:kubernetes-server-mock` (test).
+- Helm: MCP server + `vader.kubernetes` + `vader.operators` blocks in the configmap.
+### Changed
+- `orchestrator.LocalLlmOrchestrationStrategy` — rewritten on Spring AI `ChatClient`
+  (`spring-ai-starter-model-ollama`) instead of a hand-rolled `RestTemplate` call to Ollama
+  `/api/generate`. It now sends the prompt **with every registered `ToolCallbackProvider`'s
+  tools** and lets the model call them (agentic loop), then structured-output-converts the
+  final message to a lean `LlmTaskPlan` (new — `objective` + `tasks[{title, description}]`
+  only), which it maps to a full `TaskPlan` and re-serializes to JSON. The
+  `InterfaceLlmOrchestrationStrategy` `String` contract and `WorkflowService`'s validation gate
+  are unchanged. Converting straight to `TaskPlan` made the generated schema ask the model for
+  an `id` (UUID-patterned), timestamps and a recursive sub-task tree, which small local models
+  filled with nulls → schema-violation 502s. Dropped the embedded task-plan JSON schema,
+  `DECOMPOSITION_INSTRUCTIONS` JSON wording, and the `RestTemplate` fields.
+  - New `vader.orchestrator.local.fallback-to-static` (default `true`): an unreachable LLM
+    (`ResourceAccessException` / `TransientAiException`) yields the canned plan + a `warn` log
+    instead of a 503. A reachable LLM returning junk still throws `OrchestratorResponseException`
+    (502).
+- `orchestrator.StaticTaskPlan` (new) — the canned 4-task plan, extracted from
+  `StaticLlmOrchestrationStrategy` so `LocalLlm` can share it as the fallback.
+- Dependency injection style: beans now use `@Autowired` / `@Value` field injection rather than
+  constructor injection, matching the `common:java:library:implementation` mappers. Converted
+  `ClientPromptController`, `WorkflowService`, `MinioFileStorageStrategy`, the orchestrator and
+  every operator class; `AbstractOperator` holds the shared `@Autowired KubernetesClient` /
+  `@Value` namespace and exposes `ownerDeploymentName()` (was `OperatorProperties`, now
+  deleted). `LocalLlmOrchestrationStrategy` builds its `ChatClient` in a `@PostConstruct`.
+  Unit tests use Mockito `@InjectMocks` + `ReflectionTestUtils.setField`.
+- Config: `spring.ai.model.chat` = `ollama` for `type: local`, else `none` (no chat model in
+  static / test contexts); `spring.ai.ollama.*`, bounded `spring.ai.retry`, and
+  `spring.http.client` timeouts emitted by the configmap; `vader.orchestrator.local.base-url`
+  removed (superseded by `spring.ai.ollama.base-url`).
+
 ## [0.6.0]
 ### Added
 - `storage.interfaces.InterfaceFileStorageStrategy` — mirrors the orchestrator strategy

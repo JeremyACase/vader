@@ -31,10 +31,11 @@ class ClientPromptControllerTest {
     @BeforeEach
     void setUp() {
         this.workflowService = mock(WorkflowService.class);
-        this.controller = new ClientPromptController(
-            this.workflowService,
-            new ClientPromptDtoToEntityMapper(),
-            workflowDtoMapper());
+        this.controller = new ClientPromptController();
+        ReflectionTestUtils.setField(this.controller, "workflowService", this.workflowService);
+        ReflectionTestUtils.setField(
+            this.controller, "clientPromptDtoToEntityMapper", new ClientPromptDtoToEntityMapper());
+        ReflectionTestUtils.setField(this.controller, "workflowDtoMapper", workflowDtoMapper());
     }
 
     private static WorkflowDtoMapper workflowDtoMapper() {

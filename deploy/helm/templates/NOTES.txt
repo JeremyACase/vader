@@ -10,7 +10,15 @@ Vader Core Server:
 The best way to interact with Core Server directly is via port-forwarding:
 
 1. $ kubectl port-forward svc/vader-core-server -n {{ .Release.Namespace }} {{ .Values.convenience.variables.spring.port }}:{{ .Values.convenience.variables.spring.port }}
+{{- if .Values.vader.swagger.enabled }}
+2. Navigate to "http://localhost:{{ .Values.convenience.variables.spring.port }}/swagger-ui.html"
+   to browse and exercise every REST endpoint (client prompts, the /data/* query API, and
+   the Python sandbox operator). The raw OpenAPI spec is at "/v3/api-docs".
+
+The health check is at "http://localhost:{{ .Values.convenience.variables.spring.port }}/actuator/health".
+{{- else }}
 2. Navigate to "http://localhost:{{ .Values.convenience.variables.spring.port }}/actuator/health"
+{{- end }}
 
 **************************************************
 Vader Database (H2):
