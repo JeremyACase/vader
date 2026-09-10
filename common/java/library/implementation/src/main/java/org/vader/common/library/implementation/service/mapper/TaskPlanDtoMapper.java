@@ -21,6 +21,7 @@ public class TaskPlanDtoMapper extends GenericDtoMapper<TaskPlanEntity, TaskPlan
         if (Objects.nonNull(from)) {
             to = new TaskPlan();
             super.setAbstractModelFields(from, to);
+            to.setReasoning(from.getReasoning());
             to.setObjective(from.getObjective());
             to.setTaskGraph(this.taskGraphDtoMapper.map(from.getTaskGraph()));
         }

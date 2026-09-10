@@ -31,6 +31,7 @@ export interface TaskGraph {
 /** Equivalent of org.vader.common.model.vader.dto.TaskPlan. */
 export interface TaskPlan {
   id?: string;
+  reasoning?: string;
   objective: string;
   taskGraph: TaskGraph;
 }

@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
-import org.vader.core.server.orchestrator.OrchestratorResponseException;
+import org.vader.core.exceptions.OrchestratorResponseException;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.TaskPlanRepository;
