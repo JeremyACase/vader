@@ -1,158 +1,73 @@
 # Changelog
-All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-This is a project-level summary. Individual modules under `common/` and `services/` keep
-their own, more detailed changelogs.
+## [0.9.0]
+### Added
+- **Chain-of-thought planning.** The local orchestrator now prompts the model to reason
+  through the problem before committing to a plan — restating the goal, naming constraints and
+  unknowns, and deciding whether its tools would help. That reasoning is captured on the task
+  plan, persisted with the workflow, and returned to the client for display.
+- **Per-entity database query tools over MCP.** Alongside the generic query surface, every
+  queryable entity now exposes its own query, count, and get-by-id MCP tools so agents can work
+  at the entity level without discovering entity names first.
+### Changed
+- Orchestrator failure types now live in a shared exceptions package so code outside the
+  orchestrator can depend on them without reaching into it.
 
 ## [0.8.0]
 ### Added
-- **Kubernetes operator framework + Python Sandbox operator.** `core-server/tools/operators`
-  ports and de-duplicates ubiquia's `BeliefStateOperator` / `ComponentOperator` into an
-  `InterfaceOperator` contract and a fabric8-based `AbstractOperator` (owner-Deployment caching
-  with retry, a self-deletion watch that cascade-cleans managed resources, ownership labels +
-  owner references, label-scoped list/delete). The first operator — **Python Sandbox**
-  (`vader.operators.enabled` + `vader.operators.python-sandbox.enabled`) — manages the lifecycle
-  of hardened, idling `python:3.12-slim` sandbox pods and is exposed to LLMs as MCP tools
-  `create_sandbox` / `list_sandboxes` / `delete_sandbox`, plus a REST surface backing the Helm
-  smoke test. Helm gains the RBAC `Role`/`RoleBinding`, a `vader.operators` values block, and a
-  gated end-to-end test hook.
-- **The vader database is queryable by LLMs.** New `common:java:library:dao` module — ubiquia's
-  dynamic JPA Criteria query engine (structured `QueryFilter` and URL-param queries, dotted
-  keychains through associations, `LIKE` / range / `null` operators, sort, pagination), trimmed
-  of `getPageMultiSelect` and the micrometer / ingress / logger plumbing. `core-server` wires
-  it over its six mapped entities (`Workflow`, `ClientPrompt`, `TaskPlan`, `TaskGraph`, `Task`,
-  `ObjectMetadata`) as read-only REST controllers under `/vader/core-server/data/{entity}` and
-  as MCP tools `list_queryable_entities` / `query_database` / `count_matching`
-  (`vader.mcp.database-query.enabled`, default true). `FileContentEntity` is never registered,
-  so file bytes stay unreachable; `vader.dao.max-page-size` (default 100) caps every query.
-- **OpenAPI / Swagger UI** for `core-server` (`springdoc-openapi-starter-webmvc-ui`): spec at
-  `/v3/api-docs`, UI at `/swagger-ui.html`, gated on `vader.swagger.enabled` (default true).
-  The Helm `NOTES.txt` now points at Swagger rather than `/actuator/health`.
+- **Kubernetes operator framework + Python Sandbox operator.** A reusable operator base handles
+  Deployment ownership, resource labelling, cascade cleanup, and self-deletion watching. The first
+  operator manages isolated Python sandbox pods in-cluster and exposes them to LLMs as MCP tools,
+  with a matching REST surface for debugging and smoke testing.
+- **Database query over REST and MCP.** All registered entities are queryable by LLMs via MCP
+  tools and by developers via a REST API, using a dynamic query engine that supports filtering,
+  sorting, pagination, and association joins. File content is excluded.
+- **OpenAPI / Swagger UI** for `core-server`.
 ### Changed
-- **The orchestrator LLM is handed the registered tools and calls them while it plans.**
-  `LocalLlmOrchestrationStrategy` moved off the hand-rolled Ollama `/api/generate` call onto
-  Spring AI's `ChatClient` (`spring-ai-starter-model-ollama`): native tool-calling loop +
-  structured output into a lean `LlmTaskPlan` (objective + tasks only), mapped to a full
-  `TaskPlan`. Every `ToolCallbackProvider` bean is offered to the model; the dev default model
-  moved to `qwen2.5:3b`. New `vader.orchestrator.local.fallback-to-static` (default true)
-  returns the canned static plan when the LLM is unreachable — so `helm test` / CI pass with no
-  Ollama — while a reachable-but-broken response still fails (502). `spring.ai.model.chat` is
-  `none` outside the `local` orchestrator.
-- **Dependency injection** across `core-server` moved from constructor injection to `@Autowired`
-  / `@Value` field injection, matching the existing mapper layer.
-- The `core-server` Helm test's decomposition-check timeout was raised 10s → 120s so the hook
-  also passes against a `local` release (first request loads the Ollama model).
-### Dependencies
-- `spring-ai-bom:1.0.9` (MCP server + Ollama chat client), `io.fabric8:kubernetes-client:7.8.0`,
-  `org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9`,
-  `org.reflections:reflections:0.10.2`, `commons-lang3`.
+- **Local orchestrator rewritten on Spring AI.** The LLM client moved from a hand-rolled REST
+  call to Spring AI's ChatClient, enabling native tool-calling during decomposition and structured
+  output. An unreachable LLM falls back to the static plan rather than returning a 503.
+- Field injection (`@Autowired` / `@Value`) adopted uniformly across `core-server`.
 
 ## [0.6.0]
 ### Added
-- File storage strategy pattern (`vader.storage.type`), selected at startup via
-  `@ConditionalOnProperty` — the same approach as the orchestrator strategy:
-  - `database` (default, no extra infrastructure) — stores uploaded file bytes as BLOBs in
-    the relational database via a new `FileContentEntity`, linked to `ObjectMetadataEntity`
-    by a nullable FK.
-  - `minio` — uploads to a MinIO object store and persists only the storage metadata;
-    `FileContentEntity` is not populated in this path.
-- `FileContentEntity` in `common:java:model:vader` — holds raw file bytes, kept separate from
-  `ObjectMetadataEntity` so metadata queries never load binary content.
-- `ObjectMetadataEntity` gains an optional `@OneToOne fileContent` FK (`file_content_id`),
-  cascade all, orphan removal; null in the MinIO path.
-- Server-side file count guard: `ClientPrompt.files` is annotated `@Size(max=5)`; the
-  controller maps the resulting `BindException` to HTTP 400 (`validation_failed`).
-- `core-ui`: file selection capped at 5 — selecting more clears the batch and shows an inline
-  error. Selected filenames are listed below the input, and the native file input is reset
-  after a successful submit.
-- `spring.servlet.multipart` limits injected via Helm: 10 MB per file, 51 MB per request,
-  1 MB memory threshold before buffering to disk. Configurable via `vader.multipart.*` values.
-- Helm test: multipart upload case (prompt + one file → 200 + decomposition) and a 6-file
-  rejection case (→ 400 `validation_failed`). Prompt test timeouts tightened from 60 s to
-  10 s now that tests run against the static orchestrator.
-### Changed
-- `WorkflowService.decompose()` accepts `List<MultipartFile>` as a second parameter; files are
-  stored via the active strategy before the prompt is persisted so the JPA cascade handles both
-  in one transaction.
+- **Pluggable file storage** (database default, MinIO alternative). Files submitted with a prompt
+  are stored and linked to the prompt in the same transaction. Server-side validation rejects more
+  than 5 files per prompt. Helm configures multipart size limits.
 
 ## [0.5.0]
 ### Added
-- End-to-end problem decomposition. A client prompt now flows UI -> `core-server` -> orchestrator
-  LLM: `core-server` asks the orchestrator to decompose the prompt, validates the response
-  against the `TaskPlan` schema (jakarta bean validation) before persisting anything, saves the
-  task plan / task graph / tasks under a new `Workflow`, and returns that `Workflow` as JSON.
-  `core-ui` renders the returned objective and task list.
-- `common:java:library:implementation`: a new module of entity<->DTO mappers (egress and
-  ingress), used by `core-server` to build the persisted graph and shape the HTTP response.
-- `vader.orchestrator.type=static`: a `StaticLlmOrchestrationStrategy` that returns a fixed,
-  schema-valid decomposition with no LLM call. The `test` Helm configuration uses it, so the
-  end-to-end Helm test runs deterministically with no Ollama deployment or model download.
-- `core-server` maps orchestrator failures to HTTP status: `502` when the LLM response is
-  unusable, `503` when the LLM is unreachable.
-### Changed
-- `LocalLlmOrchestrationStrategy` now instructs the model to decompose the problem and pins
-  Ollama's structured-output `format` to the task-plan JSON schema; added request timeouts.
-- The `core-server` Helm test hook drives a full prompt -> decomposition round trip instead of
-  only checking that the endpoint returns `200`.
+- **End-to-end problem decomposition.** A submitted prompt flows UI → `core-server` → LLM,
+  producing a structured task plan that is validated, persisted as a workflow, and returned to the
+  client. A static orchestrator provides deterministic results with no LLM required, used by
+  Helm/CI tests.
 
 ## [0.4.0]
 ### Added
-- A `local` LLM orchestrator option (`vader.orchestrator.type`, defaulted to `local`). When set,
-  the Helm chart installs an Ollama deployment/service, and `core-server` gets a
-  `LocalLlmOrchestrationStrategy` bean (registered only via `@ConditionalOnProperty`) that
-  coordinates REST calls to it.
-- `vader.orchestrator.local.model`, the Ollama model to download and run. The Helm chart injects
-  it into the Ollama container and pulls/loads it via a `postStart` lifecycle hook once the
-  server is ready. Model *selection* logic in `core-server` is left for a follow-up feature.
-- `core-server`: unit tests for `LocalLlmOrchestrationStrategy`.
+- Local LLM orchestration via Ollama, selected at startup by configuration.
 ### Changed
-- `core-server`'s orchestration strategy interfaces now live under an `orchestrator/interfaces`
-  package, prefixed `Interface*` (e.g. `InterfaceLlmOrchestrationStrategy`) -- the convention to
-  follow for future interfaces.
-### Fixed
-- The `dev` Helm config overlay pinned `imagePullPolicy` to `Never` chart-wide, assuming every
-  image was built and loaded locally. That broke the new Ollama deployment, which is always
-  pulled from Docker Hub -- Ollama's pull policy is now tracked separately from `core-server`/
-  `core-ui`'s, and the `dev` overlay itself switched to `IfNotPresent`.
+- Established the `Interface*` naming convention for all interfaces.
 
 ## [0.3.0]
 ### Added
-- `core-ui`: a new Angular application, built and packaged with the Gradle `node-gradle` plugin
-  and a multi-stage Docker build, deployed as a first-class core component with its own Helm
-  templates. It submits a client prompt (text plus optional file attachments) to `core-server`,
-  proxied through NGINX.
-- A dynamic Helm `NOTES.txt` that explains how to reach `core-server`'s health endpoint, browse
-  the embedded H2 database, and access `core-ui` directly via NodePort (with a `kind`-specific
-  port-mapping snippet and a `kubectl port-forward` fallback).
+- `core-ui`: Angular frontend that submits prompts and displays results.
 ### Changed
-- `core-server`'s database backend switched from HSQL to H2. HSQL's embedded in-memory database
-  has no browser-based console; H2 provides one (`/h2-console`) with no other infrastructure
-  changes needed.
-### Fixed
-- `core-ui`'s NGINX container crash-looped under its non-root user because nginx defaulted to
-  writing `/run/nginx.pid`, which that user can't write to. Pinned the pid file to the
-  already-writable `/tmp/nginx` directory instead.
+- `core-server` database backend switched from HSQL to H2.
 
 ## [0.2.1]
 ### Changed
-- Docker images now publish under the `jeremyacase` Docker Hub namespace, with `core-server`
-  named `vader-core-server`.
+- Docker images published under the `jeremyacase` Docker Hub namespace.
 
 ## [0.2.0]
 ### Added
-- `core-server`: HSQL-backed persistence, a `ClientPrompt` model/controller, and supporting
-  Helm templates and tests.
-- `common:java:model:vader`: base model/entity pattern plus `ClientPrompt`/`ClientPromptEntity`.
+- Database persistence and a `ClientPrompt` endpoint in `core-server`.
 ### Changed
-- CI now builds and Docker-packages `core-server`, gated on systems tests before publishing.
-- Cleaned up dead configuration (unused Gradle properties, stray references, broken script
-  paths) across the build and deployment tooling.
+- CI builds and Docker-packages `core-server`, gated on system tests before publishing.
 
 ## [0.1.0]
 ### Added
-- Initial project scaffolding: repo/folder structure, Gradle build files, GitHub Actions
-  pipeline, local KIND install scripts, and Helm chart skeleton.
-- `core-server`: minimal Spring Boot service with a UTC-initialized default timezone.
+- Initial project scaffolding: repo structure, Gradle builds, GitHub Actions pipeline, local
+  Kind scripts, and Helm chart skeleton. Minimal Spring Boot `core-server`.

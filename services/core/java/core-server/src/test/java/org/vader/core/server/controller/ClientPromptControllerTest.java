@@ -20,7 +20,7 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.Workflow;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.WorkflowEntity;
-import org.vader.core.server.orchestrator.OrchestratorResponseException;
+import org.vader.core.exceptions.OrchestratorResponseException;
 import org.vader.core.server.service.WorkflowService;
 
 class ClientPromptControllerTest {

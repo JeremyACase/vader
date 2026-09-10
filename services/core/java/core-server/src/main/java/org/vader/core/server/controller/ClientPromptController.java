@@ -17,8 +17,8 @@ import org.vader.common.library.implementation.service.mapper.ClientPromptDtoToE
 import org.vader.common.library.implementation.service.mapper.WorkflowDtoMapper;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.Workflow;
-import org.vader.core.server.orchestrator.OrchestratorResponseException;
-import org.vader.core.server.orchestrator.OrchestratorUnavailableException;
+import org.vader.core.exceptions.OrchestratorResponseException;
+import org.vader.core.exceptions.OrchestratorUnavailableException;
 import org.vader.core.server.service.WorkflowService;
 import org.vader.core.server.storage.FileStorageException;
 

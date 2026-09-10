@@ -20,7 +20,7 @@ import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntit
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.WorkflowEntity;
-import org.vader.core.server.orchestrator.OrchestratorResponseException;
+import org.vader.core.exceptions.OrchestratorResponseException;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.WorkflowRepository;
