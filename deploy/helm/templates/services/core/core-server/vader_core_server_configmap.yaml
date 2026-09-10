@@ -124,9 +124,19 @@ data:
         {{- end }}
       dao:
         max-page-size: {{ .Values.vader.dao.maxPageSize }}
+      scheduling:
+        enabled: {{ .Values.vader.scheduling.enabled }}
+      inbox:
+        client-prompt:
+          poll-interval-ms: {{ .Values.vader.inbox.clientPrompt.pollIntervalMs }}
+          max-concurrency: {{ .Values.vader.inbox.clientPrompt.maxConcurrency }}
+      backpressure:
+        sample-interval-ms: {{ .Values.vader.backpressure.sampleIntervalMs }}
       mcp:
         database-query:
           enabled: {{ .Values.vader.mcp.databaseQuery.enabled }}
+        backpressure:
+          enabled: {{ .Values.vader.mcp.backpressure.enabled }}
       kubernetes:
         namespace: {{ .Release.Namespace }}
       operators:

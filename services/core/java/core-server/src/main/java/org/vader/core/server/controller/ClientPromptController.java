@@ -7,24 +7,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.vader.common.library.implementation.service.mapper.ClientPromptDtoToEntityMapper;
-import org.vader.common.library.implementation.service.mapper.WorkflowDtoMapper;
+import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.dto.ClientPrompt;
-import org.vader.common.model.vader.dto.Workflow;
-import org.vader.core.exceptions.OrchestratorResponseException;
-import org.vader.core.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.service.WorkflowService;
+import org.vader.core.server.service.ClientPromptIntakeService;
 import org.vader.core.server.storage.FileStorageException;
 
 /**
- * Accepts client-submitted prompts and returns the problem decomposition the orchestrator LLM
- * produced for each one.
+ * Accepts client-submitted prompts. The prompt is persisted and queued for decomposition; the
+ * response is a {@link IngressResponse} receipt, not the finished workflow. Callers poll the
+ * workflow query API by {@code clientPromptId} for the eventual decomposition, and the
+ * backpressure endpoint for how backed up the queue is.
  */
 @RestController
 public class ClientPromptController {
@@ -32,23 +29,16 @@ public class ClientPromptController {
     private static final Logger logger = LoggerFactory.getLogger(ClientPromptController.class);
 
     @Autowired
-    private WorkflowService workflowService;
-
-    @Autowired
-    private ClientPromptDtoToEntityMapper clientPromptDtoToEntityMapper;
-
-    @Autowired
-    private WorkflowDtoMapper workflowDtoMapper;
+    private ClientPromptIntakeService clientPromptIntakeService;
 
     /**
-     * Decomposes an incoming client prompt and returns the resulting workflow.
+     * Accepts a client prompt for asynchronous decomposition.
      *
      * @param clientPrompt the submitted prompt text and any attached files
-     * @return the workflow, including its task plan, spawned for the prompt
+     * @return 202 with a receipt identifying the persisted prompt
      */
     @PostMapping("/vader/core-server/client-prompt")
-    @Transactional
-    public ResponseEntity<Workflow> receivePrompt(
+    public ResponseEntity<IngressResponse> receivePrompt(
         @Valid @ModelAttribute final ClientPrompt clientPrompt) {
 
         logger.info(
@@ -56,9 +46,8 @@ public class ClientPromptController {
             clientPrompt.getText(),
             clientPrompt.getFiles().size());
 
-        var promptEntity = this.clientPromptDtoToEntityMapper.map(clientPrompt);
-        var workflow = this.workflowService.decompose(promptEntity, clientPrompt.getFiles());
-        return ResponseEntity.ok(this.workflowDtoMapper.map(workflow));
+        var ingressResponse = this.clientPromptIntakeService.accept(clientPrompt);
+        return ResponseEntity.accepted().body(ingressResponse);
     }
 
     /**
@@ -79,38 +68,6 @@ public class ClientPromptController {
     }
 
     /**
-     * Translates an unusable orchestrator response into a 502, since the failure originates
-     * upstream of this service rather than in the client's request.
-     *
-     * @param exception the orchestrator failure
-     * @return a 502 response describing the failure
-     */
-    @ExceptionHandler(OrchestratorResponseException.class)
-    public ResponseEntity<ErrorResponse> handleOrchestratorResponse(
-        final OrchestratorResponseException exception) {
-
-        logger.warn("Orchestrator response was unusable: {}", exception.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(new ErrorResponse("orchestrator_response_invalid", exception.getMessage()));
-    }
-
-    /**
-     * Translates an unreachable orchestrator into a 503, since the backend is likely still warming
-     * up and the caller can retry.
-     *
-     * @param exception the transport failure
-     * @return a 503 response describing the failure
-     */
-    @ExceptionHandler(OrchestratorUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleOrchestratorUnavailable(
-        final OrchestratorUnavailableException exception) {
-
-        logger.warn("Orchestrator is unavailable: {}", exception.getMessage());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-            .body(new ErrorResponse("orchestrator_unavailable", exception.getMessage()));
-    }
-
-    /**
      * Translates a file storage failure into a 500; the upload reached the server but could not
      * be written to the backing store.
      *
@@ -127,7 +84,7 @@ public class ClientPromptController {
     }
 
     /**
-     * Error body returned when a prompt cannot be decomposed.
+     * Error body returned when a prompt cannot be accepted.
      *
      * @param error a stable machine-readable code
      * @param message a human-readable description

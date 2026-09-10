@@ -14,10 +14,30 @@ startup.
 
 - `GET /actuator/health` — Spring Boot Actuator health check.
 - `POST /vader/core-server/client-prompt` — accepts a `ClientPrompt` (multipart form: `text`
-  plus optional `files`), asks the orchestrator LLM to decompose the problem, validates and
-  persists the resulting task plan under a new workflow, and returns that `Workflow` as JSON.
-  Returns `502` if the LLM's response fails the task-plan schema, `503` if the LLM is
-  unreachable. Attached file contents are not yet persisted.
+  plus optional `files`), stores the prompt and attachments, enqueues it on the client-prompt
+  outbox, and returns `202` with an `IngressResponse` receipt (`{id, modelType,
+  payloadModelType}`). A downstream inbox decomposes the prompt into a `Workflow`
+  asynchronously (`WorkflowService`); poll `GET /data/workflow/query/params?clientPrompt.id=<id>`
+  for the result. `400` if more than 5 files are attached. Orchestrator failures (bad response,
+  LLM unreachable) surface as `FAILED` queue messages, not HTTP errors.
+- `GET /vader/core-server/backpressure` — lists the model types that have an inbox/outbox queue.
+- `GET /vader/core-server/backpressure/{modelType}` — `BackPressure` snapshot for one queue:
+  `ingress` (pending count + per-minute rate of change) and `egress` (max vs. in-flight
+  decompositions). `400` for an unknown model type. The queue messages themselves are not
+  queryable.
+
+### Inbox/outbox
+
+Prompt intake is decoupled from decomposition via an inbox/outbox: `ClientPromptOutbox` writes a
+`PENDING` message; `ClientPromptInbox` claims it (`CLAIMED`), decomposes, and settles it
+(`PROCESSED`/`FAILED`), each step in its own transaction. The inbox drains on a fixed schedule
+(`vader.inbox.client-prompt.poll-interval-ms`) and immediately after each enqueue commits.
+`vader.scheduling.enabled=false` disables the pollers (used in tests).
+
+Backpressure on any inbox/outbox queue is exposed over REST (`GET /backpressure`,
+`GET /backpressure/{modelType}`) and, when `vader.mcp.backpressure.enabled` (default true), over
+MCP as `list_backpressure_queues` / `get_backpressure`. The queue messages themselves are never
+exposed.
 
 ## Orchestration
 

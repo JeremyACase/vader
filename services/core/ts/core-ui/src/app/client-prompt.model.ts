@@ -46,7 +46,38 @@ export interface Workflow {
   taskPlan?: TaskPlan;
 }
 
-/** Error body returned by the server (ClientPromptController.ErrorResponse) on a 502. */
+/**
+ * Equivalent of org.vader.common.model.vader.IngressResponse: the receipt the server returns
+ * when a prompt has been accepted and queued for decomposition.
+ */
+export interface IngressResponse {
+  id: string;
+  modelType: 'IngressResponse';
+  payloadModelType: string;
+}
+
+/** Equivalent of org.vader.common.model.vader.queue.Ingress. */
+export interface Ingress {
+  queuedRecords: number;
+  queueRatePerMinute: number;
+}
+
+/** Equivalent of org.vader.common.model.vader.queue.Egress. */
+export interface Egress {
+  maxOpenMessages: number;
+  currentOpenMessages: number;
+}
+
+/**
+ * Equivalent of org.vader.common.model.vader.queue.BackPressure: how backed up the
+ * client-prompt decomposition queue is.
+ */
+export interface BackPressure {
+  ingress: Ingress;
+  egress: Egress;
+}
+
+/** Error body returned by the server (ClientPromptController.ErrorResponse). */
 export interface OrchestratorError {
   error: string;
   message: string;
