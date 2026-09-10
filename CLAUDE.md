@@ -218,5 +218,10 @@ A bad entry reads like an annotated file listing.
 | `vader.operators.enabled` | `false` | Master switch for Kubernetes operators |
 | `vader.operators.python-sandbox.enabled` | `false` | Python sandbox operator |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
+| `vader.mcp.backpressure.enabled` | `true` | Expose inbox/outbox backpressure tools over MCP |
 | `vader.dao.max-page-size` | `100` | Cap on query page size |
 | `vader.kubernetes.namespace` | `default` | Namespace operators manage resources in |
+| `vader.scheduling.enabled` | `true` | Master switch for the background pollers (inbox drain, backpressure sampler) |
+| `vader.inbox.client-prompt.poll-interval-ms` | `1000` | Scheduled client-prompt inbox drain cadence |
+| `vader.inbox.client-prompt.max-concurrency` | `1` | Max concurrent prompt decompositions; also `egress.maxOpenMessages` |
+| `vader.backpressure.sample-interval-ms` | `15000` | Queue-depth sampling cadence feeding `queueRatePerMinute` |

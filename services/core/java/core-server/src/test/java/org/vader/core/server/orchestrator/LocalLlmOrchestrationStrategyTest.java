@@ -28,9 +28,9 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.dto.ClientPrompt;
+import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.exceptions.OrchestratorResponseException;
 import org.vader.core.exceptions.OrchestratorUnavailableException;
-import org.vader.common.model.vader.dto.TaskPlan;
 
 class LocalLlmOrchestrationStrategyTest {
 

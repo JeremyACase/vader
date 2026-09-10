@@ -109,6 +109,18 @@ button:disabled {
   color: #9aa3b2;
 }
 
+.queued {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  background: #0f1115;
+  border: 1px solid #2a2e38;
+  border-radius: 8px;
+}
+
+.queued .hint {
+  margin: 0.35rem 0 0;
+}
+
 .foot {
   margin-top: 1.5rem;
   color: #9aa3b2;

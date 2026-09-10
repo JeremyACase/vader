@@ -3,6 +3,20 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0]
+### Changed
+- Client-prompt intake is now asynchronous. `POST /client-prompt` stores the prompt and returns
+  a `202` receipt instead of blocking on the LLM and returning the workflow. A downstream inbox
+  decomposes queued prompts into workflows — draining on a fixed interval and immediately after
+  each new submission — and each message settles independently, so an unusable or unreachable
+  LLM records a failed message rather than returning an HTTP error to the caller.
+### Added
+- A backpressure endpoint (REST and MCP) reporting queue depth, its rate of change, and
+  in-flight capacity for any inbox/outbox queue, without exposing the individual messages.
+- Config for the inbox poll interval and concurrency, the backpressure sample interval, a master
+  switch for the background pollers, and a toggle for the backpressure MCP tools. The Helm notes
+  document the backpressure and MCP endpoints on DEV installs.
+
 ## [0.9.0]
 ### Added
 - Chain-of-thought decomposition: the planning prompt directs the model to reason about the

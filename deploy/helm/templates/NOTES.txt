@@ -19,6 +19,27 @@ The health check is at "http://localhost:{{ .Values.convenience.variables.spring
 {{- else }}
 2. Navigate to "http://localhost:{{ .Values.convenience.variables.spring.port }}/actuator/health"
 {{- end }}
+{{- if eq (.Values.vader.mode | default "PROD") "DEV" }}
+
+--- DEV ---
+
+Prompt intake is asynchronous: POST /vader/core-server/client-prompt returns 202 with a
+receipt, and a downstream inbox builds the workflow. Watch the queue backlog directly:
+
+  $ curl http://localhost:{{ .Values.convenience.variables.spring.port }}/vader/core-server/backpressure/ClientPrompt
+
+The same data (and the read-only database query tools) is exposed over MCP. Core Server runs
+a Spring AI MCP server with an SSE transport:
+
+  - SSE stream:      http://localhost:{{ .Values.convenience.variables.spring.port }}/sse
+  - message endpoint: http://localhost:{{ .Values.convenience.variables.spring.port }}/mcp/message
+
+Point an MCP client at the SSE URL, or explore it with the MCP Inspector:
+
+  $ npx @modelcontextprotocol/inspector
+  # then connect to http://localhost:{{ .Values.convenience.variables.spring.port }}/sse (transport: SSE)
+  # tools: list_backpressure_queues, get_backpressure, list_queryable_entities, query_database, ...
+{{- end }}
 
 **************************************************
 Vader Database (H2):

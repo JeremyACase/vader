@@ -3,6 +3,21 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0]
+### Changed
+- **Asynchronous prompt intake (inbox/outbox).** Submitting a prompt no longer blocks on the
+  LLM. `core-server` persists the prompt, returns a lightweight receipt, and a background inbox
+  decomposes it into a workflow — draining on a schedule and reacting immediately to each new
+  submission. A decomposition that fails (an unusable or unreachable LLM) is recorded as a
+  failed queue message rather than surfacing as an HTTP error. The UI shows a "queued" state
+  and polls for the result, indicating how far back in the queue the request sits while it
+  waits.
+### Added
+- **Queue backpressure.** A new endpoint reports how backed up an inbox/outbox queue is — how
+  many records are waiting, how fast that backlog is moving, and how much consumer capacity is
+  free — over both REST and MCP. Individual queue messages stay private. DEV Helm installs point
+  the notes at this endpoint and at the MCP endpoint.
+
 ## [0.9.0]
 ### Added
 - **Chain-of-thought planning.** The local orchestrator now prompts the model to reason
