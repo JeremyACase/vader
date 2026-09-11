@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0]
+### Added
+- `TaskAttempt` and `TaskAttemptTranscript` models, recording each dispatch of a task to a
+  harness — its status, timing, and the turn-by-turn record of what happened — so a task's
+  execution history survives retries and is queryable independent of the workflow.
+- A queue-message entity backing the new task-assignment outbox, mirroring the existing
+  inbox/outbox message shape.
+### Changed
+- `Workflow` gains lifecycle status tracking so a workflow's overall progress (and not just its
+  task plan) can be queried directly.
+
 ## [0.10.0]
 ### Added
 - An ingress-response receipt model: an endpoint that accepts work for asynchronous processing

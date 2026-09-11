@@ -3,6 +3,7 @@ package org.vader.core.server.service.io;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -32,7 +33,14 @@ public class TaskAssignmentInbox extends AbstractInbox<TaskAssignmentOutboxMessa
     @Autowired
     private TaskAssignmentOutboxMessageRepository messageRepository;
 
+    // Lazy: this inbox is itself one of BackpressureRegistry's queues, and TaskAttemptService
+    // depends on InterfaceInferenceGatewayStrategy -- in "local" mode,
+    // LocalInferenceGatewayStrategy drags in Ollama's ChatClient.Builder and the whole Spring AI
+    // tool-calling graph, which wires BackpressureTools back to BackpressureRegistry, closing a
+    // cycle back through this bean. Same reasoning as ClientPromptInbox's own (pre-existing)
+    // lazy WorkflowService.
     @Autowired
+    @Lazy
     private TaskAttemptService taskAttemptService;
 
     @Autowired(required = false)

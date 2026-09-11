@@ -5,6 +5,18 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0]
+### Changed
+- **The `CoreServerAdapter` is now real, not stubbed.** Every `ControlPlane` and
+  `InferenceGateway` method makes an actual HTTP call to `core-server`'s `/agent/*` endpoints —
+  fetching the work order, sending heartbeats, completing inference turns, and reporting a
+  terminal outcome — using the assignment id as the call's credential.
+- **The turn loop runs a real (v1) turn.** `AgentHarnessRunner::run` fetches the assignment and,
+  budget and stall checks permitting, performs a single inference turn against the task's
+  objective and reports the resulting outcome. This is intentionally single-turn for now; the
+  same budget/stall-detector checks stay in place as the bound a future multi-turn action loop
+  will plug into.
+
 ## [0.1.0]
 ### Added
 - **Initial scaffold.** Cargo project for the agent harness: an ephemeral k8s Job that executes

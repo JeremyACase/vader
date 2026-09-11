@@ -3,6 +3,24 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0]
+### Added
+- **Agent harness operator.** A new operator creates one Kubernetes Job per dispatched task
+  attempt, owned by and cascade-deleted with the `core-server` Deployment. A task-graph
+  scheduler advances each workflow as dependencies complete, dispatching ready tasks through a
+  new task-assignment inbox/outbox pipeline.
+- **Agent control plane and inference gateway endpoints.** A harness Job fetches its work order,
+  reports heartbeats and its terminal outcome, and completes inference turns exclusively through
+  new endpoints scoped to its own single-use assignment id; stale or duplicate reports against an
+  already-settled assignment are rejected rather than allowed to overwrite a newer outcome.
+- **Stuck-attempt reaping and retries.** A background reaper reclaims attempts that go silent
+  past their deadline (crash, OOM, network partition, or a Job that never scheduled), and a
+  failed/timed-out/stalled task is retried with a fresh attempt and Job up to a configurable cap
+  before being permanently failed.
+- Config knobs for harness turn/token/deadline budgets, retry limits, finished-Job TTL, and the
+  reaper's poll interval and grace period, plus the task-assignment inbox's poll interval and
+  dispatch concurrency.
+
 ## [0.10.0]
 ### Changed
 - Client-prompt intake is now asynchronous. `POST /client-prompt` stores the prompt and returns
