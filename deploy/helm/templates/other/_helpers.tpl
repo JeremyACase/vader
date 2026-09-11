@@ -81,3 +81,7 @@ Create the name of the service account to use
 {{- define "vader.core.ollama.image" -}}
 {{ .Values.vader.components.core.ollama.image.registry }}/{{ .Values.vader.components.core.ollama.image.repository }}:{{ .Values.vader.components.core.ollama.image.tag }}
 {{- end }}
+
+{{- define "vader.core.agentHarness.image" -}}
+{{ .Values.vader.components.core.agentHarness.image.registry }}/{{ .Values.vader.components.core.agentHarness.image.repository }}:{{ .Values.vader.components.core.agentHarness.image.tag }}
+{{- end }}

@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.core.server.service.ClientPromptIntakeService;
-import org.vader.core.server.storage.FileStorageException;
+import org.vader.core.server.service.strategies.storage.FileStorageException;
 
 /**
  * Accepts client-submitted prompts. The prompt is persisted and queued for decomposition; the

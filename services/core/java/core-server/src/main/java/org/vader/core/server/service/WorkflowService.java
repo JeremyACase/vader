@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
@@ -17,9 +18,10 @@ import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntit
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.exceptions.OrchestratorResponseException;
-import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.models.WorkflowDecomposedEvent;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.WorkflowRepository;
+import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 
 /**
  * Turns an already-persisted client prompt into a persisted problem decomposition.
@@ -60,6 +62,9 @@ public class WorkflowService {
     @Autowired
     private WorkflowRepository workflowRepository;
 
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
     /**
      * Decomposes a persisted client prompt into a persisted task plan under a new workflow.
      *
@@ -89,6 +94,7 @@ public class WorkflowService {
             saved.getId(),
             saved.getTaskPlan().getId(),
             saved.getTaskPlan().getTaskGraph().getTasks().size());
+        this.eventPublisher.publishEvent(new WorkflowDecomposedEvent(saved.getId()));
         return saved;
     }
 

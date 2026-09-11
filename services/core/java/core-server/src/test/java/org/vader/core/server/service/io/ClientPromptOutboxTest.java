@@ -15,6 +15,7 @@ import org.vader.common.library.implementation.service.builder.VaderIngressRespo
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ClientPromptOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.repository.ClientPromptOutboxMessageRepository;
 
 class ClientPromptOutboxTest {

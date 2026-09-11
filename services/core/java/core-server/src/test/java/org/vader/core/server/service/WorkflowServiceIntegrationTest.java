@@ -15,10 +15,11 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.exceptions.OrchestratorResponseException;
-import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.TaskPlanRepository;
 import org.vader.core.server.repository.WorkflowRepository;
+import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
+import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 
 @SpringBootTest
 @Transactional
@@ -51,6 +52,9 @@ class WorkflowServiceIntegrationTest {
 
     @MockitoBean
     private InterfaceLlmOrchestrationStrategy orchestrator;
+
+    @MockitoBean
+    private InterfaceInferenceGatewayStrategy inferenceGateway;
 
     @Autowired
     private WorkflowService workflowService;

@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.vader.core.server.tools.operators.pythonsandbox.PythonSandboxService;
-import org.vader.core.server.tools.operators.pythonsandbox.SandboxInfo;
+import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 /**
  * REST surface for the Python sandbox operator, used by the Helm smoke test and for manual

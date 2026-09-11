@@ -16,8 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.vader.core.server.tools.operators.pythonsandbox.PythonSandboxService;
-import org.vader.core.server.tools.operators.pythonsandbox.SandboxInfo;
+import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 @WebMvcTest(
     controllers = PythonSandboxController.class,

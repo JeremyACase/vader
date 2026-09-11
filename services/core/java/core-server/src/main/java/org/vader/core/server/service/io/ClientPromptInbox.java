@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.vader.common.model.vader.entity.ClientPromptOutboxMessageEntity;
+import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.repository.ClientPromptOutboxMessageRepository;
 import org.vader.core.server.repository.OutboxMessageRepository;
 import org.vader.core.server.service.WorkflowService;

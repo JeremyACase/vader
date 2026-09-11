@@ -15,6 +15,7 @@ import jakarta.validation.Validator;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
 import org.vader.common.library.implementation.service.mapper.TaskGraphDtoToEntityMapper;
@@ -22,9 +23,10 @@ import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntit
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.core.exceptions.OrchestratorResponseException;
-import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.models.WorkflowDecomposedEvent;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.WorkflowRepository;
+import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 
 class WorkflowServiceTest {
 
@@ -38,6 +40,7 @@ class WorkflowServiceTest {
     private ClientPromptRepository clientPromptRepository;
     private WorkflowRepository workflowRepository;
     private TaskPlanDtoToEntityMapper taskPlanDtoToEntityMapper;
+    private ApplicationEventPublisher eventPublisher;
     private WorkflowService service;
 
     @BeforeEach
@@ -46,6 +49,7 @@ class WorkflowServiceTest {
         this.clientPromptRepository = mock(ClientPromptRepository.class);
         this.workflowRepository = mock(WorkflowRepository.class);
         this.taskPlanDtoToEntityMapper = mock(TaskPlanDtoToEntityMapper.class);
+        this.eventPublisher = mock(ApplicationEventPublisher.class);
         this.service = buildService(this.taskPlanDtoToEntityMapper);
 
         var prompt = new ClientPromptEntity();
@@ -64,6 +68,7 @@ class WorkflowServiceTest {
         ReflectionTestUtils.setField(
             built, "clientPromptRepository", this.clientPromptRepository);
         ReflectionTestUtils.setField(built, "workflowRepository", this.workflowRepository);
+        ReflectionTestUtils.setField(built, "eventPublisher", this.eventPublisher);
         return built;
     }
 
@@ -145,5 +150,6 @@ class WorkflowServiceTest {
         assertThat(workflow.getTaskPlan().getTaskGraph().getTaskPlan())
             .isSameAs(workflow.getTaskPlan());
         verify(this.workflowRepository).save(any());
+        verify(this.eventPublisher).publishEvent(new WorkflowDecomposedEvent(workflow.getId()));
     }
 }

@@ -18,10 +18,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
-import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.repository.ClientPromptOutboxMessageRepository;
 import org.vader.core.server.repository.WorkflowRepository;
 import org.vader.core.server.service.io.ClientPromptInbox;
+import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
+import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -43,6 +44,9 @@ class ClientPromptControllerIntegrationTest {
 
     @MockitoBean
     private InterfaceLlmOrchestrationStrategy orchestrator;
+
+    @MockitoBean
+    private InterfaceInferenceGatewayStrategy inferenceGateway;
 
     @Autowired
     private MockMvc mockMvc;

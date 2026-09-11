@@ -11,6 +11,7 @@ import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.entity.AbstractModelEntity;
 import org.vader.common.model.vader.entity.AbstractOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 
 /**
  * Shared behaviour for an outbox: build a {@code PENDING} message for a payload, persist it in a

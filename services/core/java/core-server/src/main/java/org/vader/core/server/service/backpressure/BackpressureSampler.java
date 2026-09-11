@@ -9,7 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+import org.vader.core.server.service.registries.BackpressureRegistry;
 
 /**
  * Periodically samples the pending depth of every registered queue and keeps the last two
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Component;
  * small. Mirrors ubiquia's {@code pollToSampleBackPressure()} plus
  * {@code BackPressureCalculator.getRate()}.</p>
  */
-@Component
+@Service
 public class BackpressureSampler {
 
     private static final int WINDOW = 2;

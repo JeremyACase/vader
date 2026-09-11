@@ -2,6 +2,8 @@ package org.vader.common.model.vader.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.time.OffsetDateTime;
+import org.vader.common.model.vader.entity.WorkflowStatus;
 
 /**
  * DTO representing a workflow spawned to service a client-submitted prompt.
@@ -17,6 +19,11 @@ public class Workflow extends AbstractModel {
 
     @Valid
     private TaskPlan taskPlan;
+
+    @NotNull
+    private WorkflowStatus status;
+
+    private OffsetDateTime completedAt;
 
     @Override
     public String getModelType() {
@@ -37,5 +44,21 @@ public class Workflow extends AbstractModel {
 
     public void setTaskPlan(TaskPlan taskPlan) {
         this.taskPlan = taskPlan;
+    }
+
+    public WorkflowStatus getStatus() {
+        return this.status;
+    }
+
+    public void setStatus(WorkflowStatus status) {
+        this.status = status;
+    }
+
+    public OffsetDateTime getCompletedAt() {
+        return this.completedAt;
+    }
+
+    public void setCompletedAt(OffsetDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 }

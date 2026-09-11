@@ -30,6 +30,8 @@ public class WorkflowDtoMapper extends GenericDtoMapper<WorkflowEntity, Workflow
                 to.setClientPromptId(from.getClientPrompt().getId());
             }
             to.setTaskPlan(this.taskPlanDtoMapper.map(from.getTaskPlan()));
+            to.setStatus(from.getStatus());
+            to.setCompletedAt(from.getCompletedAt());
         }
         return to;
     }

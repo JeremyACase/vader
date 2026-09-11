@@ -1,9 +1,3 @@
-// Fill-in-progress: `runner::AgentHarnessRunner::run` is a `todo!()` stub, so most of the
-// assignment/outcome/budget/stall-detector surface below isn't wired up or called yet. Remove
-// this once `run` is implemented and starts exercising it -- `cargo clippy -- -D warnings` will
-// then tell you exactly what's still genuinely unused.
-#![allow(dead_code)]
-
 mod assignment;
 mod budget;
 mod control_plane;
@@ -12,6 +6,7 @@ mod error;
 mod inference_gateway;
 mod runner;
 mod stall_detector;
+mod wire;
 
 use std::time::{Duration, Instant};
 
@@ -22,9 +17,9 @@ use error::HarnessError;
 use runner::AgentHarnessRunner;
 use stall_detector::StallDetector;
 
-// Placeholder bounds. Once `CoreServerAdapter::fetch_assignment` is implemented, the assignment
-// itself (`max_turns` / `max_tokens` / `deadline_seconds`) becomes the source of truth and these
-// constants go away.
+// Local bounds for HarnessBudget/StallDetector, checked before the one inference turn v1 takes.
+// core-server enforces its own copy of maxTurns/maxTokens/deadlineSeconds server-side regardless
+// (see AssignmentResponse) -- this is a local backstop, not the source of truth.
 const DEFAULT_MAX_TURNS: u32 = 20;
 const DEFAULT_MAX_TOKENS: u64 = 200_000;
 const DEFAULT_DEADLINE_SECONDS: u64 = 600;

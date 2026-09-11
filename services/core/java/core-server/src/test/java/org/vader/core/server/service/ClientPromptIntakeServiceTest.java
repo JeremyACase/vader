@@ -20,7 +20,7 @@ import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.service.io.ClientPromptOutbox;
-import org.vader.core.server.storage.interfaces.InterfaceFileStorageStrategy;
+import org.vader.core.server.service.strategies.storage.interfaces.InterfaceFileStorageStrategy;
 
 class ClientPromptIntakeServiceTest {
 

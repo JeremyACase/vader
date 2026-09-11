@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.vader.common.model.vader.queue.BackPressure;
 import org.vader.core.server.service.backpressure.BackpressureCalculator;
-import org.vader.core.server.service.backpressure.BackpressureRegistry;
+import org.vader.core.server.service.registries.BackpressureRegistry;
 
 /**
  * Read-only view of the back pressure on the service's inbox/outbox queues. The individual queue

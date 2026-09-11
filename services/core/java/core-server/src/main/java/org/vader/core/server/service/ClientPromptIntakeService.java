@@ -14,7 +14,7 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.service.io.ClientPromptOutbox;
-import org.vader.core.server.storage.interfaces.InterfaceFileStorageStrategy;
+import org.vader.core.server.service.strategies.storage.interfaces.InterfaceFileStorageStrategy;
 
 /**
  * Accepts a client prompt for asynchronous decomposition: stores any attachments, persists the

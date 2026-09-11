@@ -14,7 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.core.server.service.ClientPromptIntakeService;
-import org.vader.core.server.storage.FileStorageException;
+import org.vader.core.server.service.strategies.storage.FileStorageException;
 
 class ClientPromptControllerTest {
 
