@@ -39,10 +39,11 @@ impl AssignmentId {
 /// The work order `core-server` hands back for a given [`AssignmentId`]: what to do and the
 /// bounds to do it within. Fetched once, at harness startup, from the control plane.
 ///
-/// TODO(core-server): this shape is provisional until the `/agent/assignments/{id}` endpoint
-/// exists. Expect it to grow dependency-task outputs and file pointers once tasks can consume
-/// sibling results.
+/// Field names are camelCase on the wire (matching every other JSON API `core-server` exposes,
+/// all plain Jackson-default records) even though this struct's own fields are idiomatic
+/// snake_case Rust.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Assignment {
     pub task_id: TaskId,
     pub assignment_id: AssignmentId,

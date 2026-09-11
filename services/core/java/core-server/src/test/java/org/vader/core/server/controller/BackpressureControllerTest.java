@@ -14,7 +14,7 @@ import org.vader.common.model.vader.queue.BackPressure;
 import org.vader.common.model.vader.queue.Egress;
 import org.vader.common.model.vader.queue.Ingress;
 import org.vader.core.server.service.backpressure.BackpressureCalculator;
-import org.vader.core.server.service.backpressure.BackpressureRegistry;
+import org.vader.core.server.service.registries.BackpressureRegistry;
 
 class BackpressureControllerTest {
 

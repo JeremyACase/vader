@@ -1,4 +1,7 @@
-/// Every way a harness run can fail to produce a normal [`crate::runner::HarnessOutcome`].
+/// Every way a harness run can fail outright -- i.e. never reach a normal
+/// [`crate::runner::HarnessOutcome`] to report at all (budget exhaustion and stalling are not
+/// here: those are legitimate terminal outcomes, reported via `submit_result` like success or
+/// failure, not error conditions).
 ///
 /// Deliberately flat (no nested causes beyond `#[source]`) so a failure can be reported back to
 /// `core-server` as a short, stable string.
@@ -19,10 +22,4 @@ pub enum HarnessError {
 
     #[error("core-server inference gateway is unreachable: {0}")]
     InferenceUnavailable(String),
-
-    #[error("harness exceeded its turn/token/deadline budget")]
-    BudgetExhausted,
-
-    #[error("harness appears stalled: the same action repeated too many times")]
-    Stalled,
 }

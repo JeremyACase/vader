@@ -2,8 +2,14 @@
 vader:
   orchestrator:
     # Static, canned decomposition: no Ollama deployment, no model download, deterministic
-    # Helm test. Swap to "local" to exercise the real LLM path.
+    # Helm test. Swap to "local" to exercise the real LLM path. Also drives the inference
+    # gateway (StaticInferenceGatewayStrategy) a dispatched agent-harness Job calls into --
+    # same switch, so the harness system test is deterministic too, with no Ollama needed.
     type: static
+  operators:
+    enabled: true
+    agentHarness:
+      enabled: true
   components:
     core:
       coreServer:
@@ -15,6 +21,11 @@ vader:
         image:
           registry: jeremyacase
           repository: vader-core-ui
+          tag: latest
+      agentHarness:
+        image:
+          registry: jeremyacase
+          repository: vader-core-agent-harness
           tag: latest
 
 infrastructure:

@@ -3,6 +3,25 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0]
+### Added
+- **Agent harness operator — end-to-end task execution.** `core-server` now dispatches
+  task-graph subtasks to real, ephemeral `core-agent-harness` Jobs and runs them to completion.
+  A scheduler advances each workflow's task graph as dependencies complete and hands ready tasks
+  to a new inbox/outbox pipeline; a Kubernetes operator turns each dispatch into a harness Job
+  (owned by, and cascade-deleted with, the `core-server` Deployment); the harness fetches its
+  work order, performs one inference turn against `core-server`'s new `/agent/*` control-plane
+  and inference endpoints, and reports heartbeats and a terminal outcome (succeeded, failed,
+  timed out, or stalled) back over the network — `core-server` remains the harness's only path
+  to any LLM. A reaper periodically reclaims attempts that go silent (crash, OOM, network
+  partition, or a Job that never scheduled), and failed/timed-out/stalled attempts are retried
+  up to a configurable cap before the task is permanently failed. Helm now deploys and RBACs the
+  operator, builds/publishes the harness image, and runs a new system test that exercises a real
+  dispatch through to completion; CI's system-test timeout was extended to accommodate it.
+### Changed
+- `Workflow` and its task attempts now carry richer lifecycle state (status, transcript) so the
+  scheduler and reaper have enough information to drive and recover a run.
+
 ## [0.11.0]
 ### Added
 - **`core-agent-harness` scaffold.** A new Rust subproject (`services/core/rust/core-agent-harness`)

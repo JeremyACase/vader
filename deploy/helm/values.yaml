@@ -76,6 +76,14 @@ vader:
       # Max prompts decomposed concurrently; also reported as egress.maxOpenMessages on the
       # backpressure endpoint.
       maxConcurrency: 1
+    taskAssignment:
+      # How often the inbox polls for task assignments ready to dispatch. A newly-enqueued
+      # assignment is also drained immediately, so this is mostly a safety net.
+      pollIntervalMs: 1000
+      # Max assignments dispatched (Jobs created) concurrently. This throttles the *dispatch*
+      # rate, not how many harness Jobs may run at once -- see agentHarness.maxAttemptsPerTask
+      # and the scheduler for the actual concurrency the task graph produces.
+      maxConcurrency: 5
   backpressure:
     # How often queue depth is sampled to derive ingress.queueRatePerMinute.
     sampleIntervalMs: 15000
@@ -111,12 +119,59 @@ vader:
           limits:
             cpu: 500m
             memory: 256Mi
+    agentHarness:
+      # When true (and operators.enabled is true), core-server runs the agent-harness operator:
+      # it creates one Job per dispatched TaskAttempt, and does nothing else on its own -- the
+      # scheduler decides *when* to dispatch, this only turns a dispatch into a real Job.
+      enabled: false
+      # The Deployment running core-server; the operator watches it and cascade-deletes every
+      # in-flight harness Job if core-server itself is removed from the cluster.
+      ownerDeploymentName: vader-core-server
+  # Runtime bounds for every agent-harness Job, and the scheduler's retry policy. A harness
+  # always proxies every LLM call through core-server's /agent/inference -- these numbers, not
+  # anything the harness process enforces on its own, are the authoritative budget.
+  agentHarness:
+    # Turn cap enforced server-side; the harness also tracks its own copy locally.
+    maxTurns: 20
+    # Token cap enforced server-side; the harness also tracks its own copy locally.
+    maxTokens: 200000
+    # Wall-clock deadline (from first contact), used both as the value handed to the harness and
+    # as the Job's own activeDeadlineSeconds -- a hard Kubernetes-level backstop independent of
+    # whether the harness process's own timeout logic runs correctly.
+    deadlineSeconds: 600
+    # A task whose attempt ends FAILED / TIMED_OUT / STALLED is retried (a fresh TaskAttempt, a
+    # fresh Job) until this many attempts are spent, then treated as permanently failed.
+    maxAttemptsPerTask: 3
+    # How long a finished Job (and its logs) stick around before Kubernetes garbage-collects it.
+    ttlSecondsAfterFinished: 3600
+    reaper:
+      # How often to scan for stuck attempts (dispatched-but-never-started, or gone silent) --
+      # crash, OOM kill, network partition, or a Job that never scheduled at all. A harness has
+      # no way to report its own death, so this is the only thing that notices.
+      pollIntervalMs: 30000
+      # An open attempt is reaped once this many seconds pass with no sign of life (last
+      # heartbeat, or dispatch time, or creation time) beyond deadlineSeconds -- i.e. the total
+      # allowed silence is deadlineSeconds + gracePeriodSeconds, covering scheduling/image-pull
+      # delay and the final network round trip on top of the harness's own deadline.
+      gracePeriodSeconds: 300
+    resources:
+      requests:
+        cpu: 50m
+        memory: 32Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
   components:
     core:
       coreServer:
         image:
           registry: jeremyacase
           repository: vader-core-server
+          tag: latest
+      agentHarness:
+        image:
+          registry: jeremyacase
+          repository: vader-core-agent-harness
           tag: latest
       coreUi:
         replicas: 1

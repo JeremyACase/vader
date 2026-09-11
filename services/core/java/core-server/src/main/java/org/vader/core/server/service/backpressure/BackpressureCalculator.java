@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.vader.common.model.vader.queue.BackPressure;
 import org.vader.common.model.vader.queue.Egress;
 import org.vader.common.model.vader.queue.Ingress;
+import org.vader.core.server.service.registries.BackpressureRegistry;
 
 /**
  * Assembles a {@link BackPressure} snapshot for a queued model type from its live counters

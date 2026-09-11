@@ -272,3 +272,13 @@ A bad entry reads like an annotated file listing.
 | `vader.inbox.client-prompt.poll-interval-ms` | `1000` | Scheduled client-prompt inbox drain cadence |
 | `vader.inbox.client-prompt.max-concurrency` | `1` | Max concurrent prompt decompositions; also `egress.maxOpenMessages` |
 | `vader.backpressure.sample-interval-ms` | `15000` | Queue-depth sampling cadence feeding `queueRatePerMinute` |
+| `vader.operators.agent-harness.enabled` | `false` | Agent-harness operator (creates one Job per dispatched `TaskAttempt`) |
+| `vader.inbox.task-assignment.poll-interval-ms` | `1000` | Scheduled task-assignment inbox drain cadence |
+| `vader.inbox.task-assignment.max-concurrency` | `5` | Max assignments *dispatched* concurrently — throttles Job creation, not how many harness Jobs may run at once |
+| `vader.agent-harness.max-turns` | `20` | Turn cap handed to each harness, enforced server-side |
+| `vader.agent-harness.max-tokens` | `200000` | Token cap handed to each harness, enforced server-side |
+| `vader.agent-harness.deadline-seconds` | `600` | Wall-clock deadline handed to each harness; also the Job's `activeDeadlineSeconds` |
+| `vader.agent-harness.max-attempts-per-task` | `3` | Retries (fresh `TaskAttempt` + Job) before a task is permanently failed |
+| `vader.agent-harness.ttl-seconds-after-finished` | `3600` | How long a finished harness Job sticks around before Kubernetes garbage-collects it |
+| `vader.agent-harness.reaper.poll-interval-ms` | `30000` | How often to scan for attempts a harness will never report back on |
+| `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |

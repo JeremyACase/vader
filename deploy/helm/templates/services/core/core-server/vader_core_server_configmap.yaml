@@ -130,6 +130,9 @@ data:
         client-prompt:
           poll-interval-ms: {{ .Values.vader.inbox.clientPrompt.pollIntervalMs }}
           max-concurrency: {{ .Values.vader.inbox.clientPrompt.maxConcurrency }}
+        task-assignment:
+          poll-interval-ms: {{ .Values.vader.inbox.taskAssignment.pollIntervalMs }}
+          max-concurrency: {{ .Values.vader.inbox.taskAssignment.maxConcurrency }}
       backpressure:
         sample-interval-ms: {{ .Values.vader.backpressure.sampleIntervalMs }}
       mcp:
@@ -153,3 +156,25 @@ data:
               limits:
                 cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.limits.cpu }}
                 memory: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.limits.memory }}
+        agent-harness:
+          enabled: {{ .Values.vader.operators.agentHarness.enabled }}
+          owner-deployment-name: {{ .Values.vader.operators.agentHarness.ownerDeploymentName }}
+      agent-harness:
+        image: {{ include "vader.core.agentHarness.image" . | quote }}
+        image-pull-policy: {{ .Values.infrastructure.image.pullPolicy }}
+        core-server-url: http://vader-core-server:{{ .Values.convenience.variables.spring.port }}
+        max-turns: {{ .Values.vader.agentHarness.maxTurns }}
+        max-tokens: {{ .Values.vader.agentHarness.maxTokens }}
+        deadline-seconds: {{ .Values.vader.agentHarness.deadlineSeconds }}
+        max-attempts-per-task: {{ .Values.vader.agentHarness.maxAttemptsPerTask }}
+        ttl-seconds-after-finished: {{ .Values.vader.agentHarness.ttlSecondsAfterFinished }}
+        reaper:
+          poll-interval-ms: {{ .Values.vader.agentHarness.reaper.pollIntervalMs }}
+          grace-period-seconds: {{ .Values.vader.agentHarness.reaper.gracePeriodSeconds }}
+        resources:
+          requests:
+            cpu: {{ .Values.vader.agentHarness.resources.requests.cpu }}
+            memory: {{ .Values.vader.agentHarness.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.vader.agentHarness.resources.limits.cpu }}
+            memory: {{ .Values.vader.agentHarness.resources.limits.memory }}

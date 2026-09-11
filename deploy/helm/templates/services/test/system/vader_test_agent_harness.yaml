@@ -1,0 +1,89 @@
+{{- if .Values.vader.operators.agentHarness.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vader-test-agent-harness
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Only rendered when vader.operators.agentHarness.enabled is true. Exercises the full
+    # vertical slice for real: submits a prompt, waits for the scheduler to dispatch a real
+    # agent-harness Job per task, waits for those real Jobs to call back into core-server's
+    # agent control plane / inference gateway, and asserts the workflow's own status --
+    # which the scheduler only ever sets once every task has genuinely settled -- reaches
+    # SUCCEEDED. Runs against the static orchestrator/inference gateway (test.yaml), so no
+    # Ollama is needed and the canned response is deterministic.
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.6.0
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          SERVER="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
+          PROMPT_URL="$SERVER/vader/core-server/client-prompt"
+          WORKFLOW_QUERY="$SERVER/vader/core-server/data/workflow/query/params"
+          TRANSCRIPT_QUERY="$SERVER/vader/core-server/data/task-attempt-transcript/query/params"
+
+          echo "== Health check =="
+          STATUS=000
+          i=1
+          while [ $i -le 60 ]; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$SERVER/actuator/health" || true)
+            [ "$STATUS" = "200" ] && break
+            echo "waiting for core-server ($i/60): got $STATUS"
+            sleep 5
+            i=$((i+1))
+          done
+          [ "$STATUS" = "200" ] || { echo "❌ health check got $STATUS"; exit 1; }
+          echo "✅ core-server healthy"
+
+          echo "== Control plane rejects an unknown assignment =="
+          UNKNOWN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "$SERVER/vader/core-server/agent/assignments/00000000-0000-0000-0000-000000000000" || true)
+          [ "$UNKNOWN_STATUS" = "404" ] || { echo "❌ expected 404 for an unknown assignment, got $UNKNOWN_STATUS"; exit 1; }
+          echo "✅ unknown assignment correctly rejected with 404"
+
+          echo "== Submit a prompt =="
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 30 \
+            -X POST "$PROMPT_URL" -F "text=Plan a simple birthday party for a friend." || true)
+          BODY=$(cat "$BODY_FILE")
+          echo "HTTP $STATUS -- $BODY"
+          [ "$STATUS" = "202" ] || { echo "❌ expected HTTP 202, got $STATUS"; exit 1; }
+
+          ID=$(echo "$BODY" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+          [ -n "$ID" ] || { echo "❌ receipt has no id"; exit 1; }
+          echo "✅ prompt accepted as $ID"
+
+          echo "== Waiting for the scheduler to dispatch real agent-harness Jobs and the workflow to complete =="
+          echo "   (each of the static plan's 4 independent tasks gets its own Job; this waits on all of them)"
+          WORKFLOW=""
+          i=1
+          while [ $i -le 80 ]; do
+            WORKFLOW=$(curl -s --max-time 10 \
+              "$WORKFLOW_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&clientPrompt.id=$ID" || true)
+            if echo "$WORKFLOW" | grep -q '"status":"SUCCEEDED"'; then
+              break
+            fi
+            if echo "$WORKFLOW" | grep -q '"status":"FAILED"'; then
+              echo "❌ workflow settled as FAILED: $WORKFLOW"
+              exit 1
+            fi
+            i=$((i+1))
+            sleep 3
+          done
+          echo "$WORKFLOW" | grep -q '"status":"SUCCEEDED"' \
+            || { echo "❌ timed out waiting for the workflow to succeed: $WORKFLOW"; exit 1; }
+          echo "✅ workflow reached SUCCEEDED -- every task's agent-harness Job ran for real and reported back"
+
+          echo "== Spot-check: at least one inference turn was logged to the transcript =="
+          TRANSCRIPT=$(curl -s --max-time 10 \
+            "$TRANSCRIPT_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt" || true)
+          echo "$TRANSCRIPT" | grep -qF "Static inference response" \
+            || { echo "❌ no logged transcript contains the expected static response: $TRANSCRIPT"; exit 1; }
+          echo "✅ the inference gateway call was logged to the transcript, end to end"
+
+          echo "🎉 agent-harness system test passed"
+{{- end }}
