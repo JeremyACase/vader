@@ -1,0 +1,51 @@
+.detail {
+  margin: 0.5rem 0 0.75rem 1rem;
+  padding: 0.75rem 1rem;
+  background: #12141b;
+  border: 1px solid #2a2e38;
+  border-radius: 8px;
+}
+
+.prompt-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reasoning,
+.objective {
+  color: #d5d8e0;
+}
+
+.task-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.task-item {
+  padding: 0.4rem 0;
+  border-top: 1px solid #2a2e38;
+}
+
+.task-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-title {
+  font-weight: 600;
+}
+
+.task-desc {
+  margin: 0.2rem 0 0 1.25rem;
+  color: #9aa3b2;
+  font-size: 0.9rem;
+}

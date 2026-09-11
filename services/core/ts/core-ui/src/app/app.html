@@ -8,7 +8,8 @@
 
   <section class="card">
     <h1>Submit a client prompt</h1>
-    <p class="muted">Send a prompt, with optional file attachments, to core-server.</p>
+    <p class="muted">Send a prompt, with optional file attachments, to core-server. You can submit
+      another prompt at any time — it doesn't wait for earlier ones to finish.</p>
 
     <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
       <textarea
@@ -59,57 +60,25 @@
       </div>
     </form>
 
-    @if (sent() && !pending() && !plan() && !error()) {
-      <p class="ok">✅ Prompt accepted.</p>
+    @if (sent() && !error()) {
+      <p class="ok">✅ Prompt accepted — see it in Active workflows below.</p>
     }
     @if (error()) {
       <p class="err">⚠️ {{error()}}</p>
     }
 
-    @if (pending()) {
-      <div class="queued">
-        <p class="muted">⏳ Queued — building your workflow…</p>
-        @if (backPressure(); as bp) {
-          <p class="hint">
-            {{bp.ingress.queuedRecords}} prompt(s) waiting
-            @if (bp.ingress.queueRatePerMinute) {
-              <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
-            }
-            <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
-          </p>
+    @if (backPressure(); as bp) {
+      <p class="hint">
+        {{bp.ingress.queuedRecords}} prompt(s) waiting
+        @if (bp.ingress.queueRatePerMinute) {
+          <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
         }
-      </div>
-    }
-
-    @if (plan(); as workflow) {
-      @if (workflow.taskPlan; as taskPlan) {
-        <div class="plan">
-          <h2>Decomposition</h2>
-          <p class="objective">{{taskPlan.objective}}</p>
-          <ol class="tasks">
-            @for (task of taskPlan.taskGraph.tasks; track $index) {
-              <li>
-                <span class="task-title">{{task.title}}</span>
-                <p class="task-desc">{{task.description}}</p>
-                @if (task.subTasks.length) {
-                  <ul class="subtasks">
-                    @for (sub of task.subTasks; track $index) {
-                      <li>
-                        <span class="task-title">{{sub.title}}</span>
-                        <p class="task-desc">{{sub.description}}</p>
-                      </li>
-                    }
-                  </ul>
-                }
-              </li>
-            }
-          </ol>
-        </div>
-      } @else {
-        <p class="muted">The orchestrator did not return a task plan for this prompt.</p>
-      }
+        <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
+      </p>
     }
   </section>
+
+  <app-workflow-panel [justSubmittedPromptId]="lastSubmittedPromptId()" />
 
   <footer class="foot">
     <span>Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send.</span>

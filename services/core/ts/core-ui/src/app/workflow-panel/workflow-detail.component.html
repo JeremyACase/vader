@@ -1,0 +1,27 @@
+<div class="detail">
+  <p class="prompt-text"><strong>Prompt:</strong> {{promptText()}}</p>
+
+  @if (workflow().taskPlan; as taskPlan) {
+    @if (taskPlan.reasoning) {
+      <p class="reasoning"><strong>Reasoning:</strong> {{taskPlan.reasoning}}</p>
+    }
+    <p class="objective"><strong>Objective:</strong> {{taskPlan.objective}}</p>
+
+    <ul class="task-list">
+      @for (task of tasks(); track task.id) {
+        <li class="task-item">
+          <button type="button" class="task-summary" (click)="toggleTask(task.id!)">
+            <span class="chevron">{{isExpanded(task.id!) ? '▾' : '▸'}}</span>
+            <span class="task-title">{{task.title}}</span>
+          </button>
+          <p class="task-desc">{{task.description}}</p>
+          @if (isExpanded(task.id!)) {
+            <app-task-row [taskId]="task.id!" />
+          }
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="muted">The orchestrator did not return a task plan for this prompt.</p>
+  }
+</div>

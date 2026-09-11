@@ -1,0 +1,34 @@
+.transcript {
+  margin: 0.4rem 0 0.2rem 1.5rem;
+}
+
+.turns {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.turn {
+  margin-bottom: 0.6rem;
+}
+
+.turn-index {
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  color: #9aa3b2;
+}
+
+.turn-prompt,
+.turn-response {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0f1115;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.35rem;
+}
+
+.turn-response {
+  border-color: #34405c;
+}

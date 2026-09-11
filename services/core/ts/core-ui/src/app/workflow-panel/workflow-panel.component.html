@@ -1,0 +1,20 @@
+<section class="card panel">
+  <h2>Active workflows</h2>
+  @if (!sortedWorkflows().length) {
+    <p class="muted">No workflows are currently running.</p>
+  }
+  <ul class="workflow-list">
+    @for (workflow of sortedWorkflows(); track workflow.id) {
+      <li class="workflow-row">
+        <button type="button" class="workflow-summary" (click)="toggle(workflow.id!)">
+          <span class="chevron">{{isExpanded(workflow.id!) ? '▾' : '▸'}}</span>
+          <span class="status-badge" [attr.data-status]="workflow.status">{{workflow.status}}</span>
+          <span class="workflow-objective">{{workflow.taskPlan?.objective ?? 'Decomposing…'}}</span>
+        </button>
+        @if (isExpanded(workflow.id!)) {
+          <app-workflow-detail [workflow]="workflow" />
+        }
+      </li>
+    }
+  </ul>
+</section>

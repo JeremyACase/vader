@@ -1,0 +1,25 @@
+<div class="attempts">
+  @if (!attempts().length) {
+    <p class="muted">No attempts dispatched yet.</p>
+  }
+  <ul class="attempt-list">
+    @for (attempt of attempts(); track attempt.id) {
+      <li class="attempt-item">
+        <button type="button" class="attempt-summary" (click)="toggleAttempt(attempt.id!)">
+          <span class="chevron">{{isExpanded(attempt.id!) ? '▾' : '▸'}}</span>
+          <span class="status-badge" [attr.data-status]="attempt.status">{{attempt.status}}</span>
+          <span class="attempt-label">Attempt {{attempt.attemptNumber}}</span>
+          @if (attempt.dispatchedAt) {
+            <span class="hint">dispatched {{attempt.dispatchedAt | date:'short'}}</span>
+          }
+        </button>
+        @if (attempt.failureReason) {
+          <p class="err">{{attempt.failureReason}}</p>
+        }
+        @if (isExpanded(attempt.id!)) {
+          <app-attempt-row [attempt]="attempt" />
+        }
+      </li>
+    }
+  </ul>
+</div>

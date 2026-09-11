@@ -9,3 +9,79 @@ html, body {
   background: #0f1115;
   color: #e7e9ee;
 }
+
+/* Shared utility classes used across component templates (each component has its own
+   ViewEncapsulation-scoped stylesheet, so cross-cutting text/status styles live here instead). */
+
+.card {
+  background: #171a21;
+  border: 1px solid #2a2e38;
+  border-radius: 12px;
+  padding: 1.75rem;
+}
+
+.muted {
+  color: #9aa3b2;
+}
+
+.hint {
+  color: #9aa3b2;
+  font-size: 0.85rem;
+}
+
+.hint.error {
+  color: #f08080;
+}
+
+.ok {
+  color: #6fcf97;
+}
+
+.err {
+  color: #f08080;
+}
+
+button {
+  background: #4f7cff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  background: #2a2e38;
+  color: #9aa3b2;
+}
+
+.status-badge[data-status="RUNNING"],
+.status-badge[data-status="DISPATCHED"] {
+  background: #1f2f4f;
+  color: #7fa8ff;
+}
+
+.status-badge[data-status="SUCCEEDED"] {
+  background: #163b2c;
+  color: #6fcf97;
+}
+
+.status-badge[data-status="FAILED"],
+.status-badge[data-status="TIMED_OUT"],
+.status-badge[data-status="STALLED"] {
+  background: #4a1f22;
+  color: #f08080;
+}
