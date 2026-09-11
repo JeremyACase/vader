@@ -1,0 +1,58 @@
+plugins {
+    id 'base'                                     // gives you `assemble`, `clean`, etc.
+}
+
+// Every cargo invocation below runs inside Docker, never against a host toolchain -- some
+// machines running this build don't have (or can't run) a local Rust install. See
+// tools/scripts/devs/agent-core-harness-dockerized-build.sh for the equivalent standalone script.
+// The named volumes are created automatically by `docker run -v <name>:...` on first use.
+//
+// NOTE: dockerRunCargo is a Closure (not a `def method(...)`), assigned to a local variable --
+// only that form closes over the script-level locals below (rustImage, etc.) when called from
+// the task-registration closures further down. A plain method here would not see them.
+def rustImage = 'rust:1-bookworm'
+def cargoRegistryVolume = 'vader-agent-harness-cargo-registry'
+def rustupHomeVolume = 'vader-agent-harness-rustup-home'
+
+def dockerRunCargo = { String shellCommand ->
+    [
+        'docker', 'run', '--rm',
+        '-v', "${projectDir}:/app",
+        '-v', "${cargoRegistryVolume}:/usr/local/cargo/registry",
+        '-v', "${rustupHomeVolume}:/usr/local/rustup",
+        '-w', '/app',
+        rustImage,
+        'sh', '-c', shellCommand
+    ]
+}
+
+tasks.register('cargoFmtCheck', Exec) {
+    commandLine dockerRunCargo('rustup component add rustfmt && cargo fmt -- --check')
+}
+
+tasks.register('cargoClippy', Exec) {
+    dependsOn 'cargoFmtCheck'
+    commandLine dockerRunCargo('rustup component add clippy && cargo clippy --all-targets -- -D warnings')
+}
+
+tasks.register('cargoTest', Exec) {
+    dependsOn 'cargoClippy'
+    commandLine dockerRunCargo('cargo test')
+}
+
+tasks.register('cargoBuildRelease', Exec) {
+    commandLine dockerRunCargo('cargo build --release')
+}
+
+tasks.named('check').configure { dependsOn 'cargoFmtCheck', 'cargoClippy', 'cargoTest' }
+tasks.named('assemble').configure { dependsOn 'cargoBuildRelease' }
+tasks.named('build').configure { dependsOn 'assemble', 'check' }
+
+// Ensure a clean deletes cargo's build output
+def targetDir = file("$projectDir/target")
+clean.doLast {
+    if (targetDir.exists()) {
+        println "Deleting $targetDir"
+        targetDir.deleteDir()
+    }
+}

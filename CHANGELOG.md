@@ -3,6 +3,23 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0]
+### Added
+- **`core-agent-harness` scaffold.** A new Rust subproject (`services/core/rust/core-agent-harness`)
+  for the agent harness: an ephemeral k8s Job that will execute exactly one task-graph subtask,
+  identified by a `TaskId`/`AssignmentId` pair, with `core-server` as its only dependency —
+  both the sole control plane and the sole path to any LLM. `HarnessBudget` (turn/token/deadline
+  caps) and `StallDetector` (repeated-action detection) are implemented and unit-tested; the
+  `core-server` HTTP calls and the turn loop itself are stubbed pending the corresponding
+  `core-server` endpoints (tracked for a follow-up branch). Wired into `./gradlew build` and the
+  devops Docker build/push pipeline. Every `cargo` invocation, in both Gradle and the new
+  `tools/scripts/devs/agent-core-harness-dockerized-build.sh` helper script, runs inside Docker
+  rather than against a host toolchain, so the module builds without a local Rust install.
+- **Rust added to `CLAUDE.md`'s language conventions**, alongside Java/TypeScript/Python: the
+  same complexity and pattern-naming philosophy, adapted to idiomatic Rust (traits stand in for
+  `Interface*` without the prefix, `Result`/`?` is the guard-clause mechanism, `clippy -D
+  warnings` is the checkstyle equivalent).
+
 ## [0.10.1]
 ### Fixed
 - **`helm test` no longer races the `core-server` rollout.** CI ran `helm install` without

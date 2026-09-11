@@ -1,0 +1,28 @@
+[package]
+name = "vader-core-agent-harness"
+version = "0.1.0"
+edition = "2021"
+# Native `async fn` in traits (no `async-trait` crate) has been stable since 1.75.
+rust-version = "1.75"
+publish = false
+
+[[bin]]
+name = "core-agent-harness"
+path = "src/main.rs"
+
+[dependencies]
+# current-thread runtime only: this harness makes a few sequential HTTP calls, never fans out,
+# so a work-stealing multi-thread scheduler would only cost extra OS threads/RSS for nothing.
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# No "v4" feature: the harness only ever parses ids core-server hands it, never generates one.
+uuid = { version = "1", features = ["serde"] }
+thiserror = "2"
+
+# Small, fast-starting binary: this runs as a short-lived k8s Job, potentially many at once.
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

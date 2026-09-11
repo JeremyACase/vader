@@ -12,6 +12,7 @@ env:
   SUBPROJECTS: |
     services/core/java/core-server
     services/core/ts/core-ui
+    services/core/rust/core-agent-harness
 
 jobs:
 
@@ -32,6 +33,22 @@ jobs:
 
       - name: Set Gradle permissions
         run: chmod +x ./gradlew
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            services/core/rust/core-agent-harness/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('services/core/rust/core-agent-harness/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Load OPENJDK_VERSION and CHART_VERSION
         id: chart
@@ -80,10 +97,12 @@ jobs:
               docker build \
                 --build-arg APP_BASE_PATH="/" \
                 -t "${IMAGE_NAME}:latest" "$dir"
-            else
+            elif [[ "$dir" == *"/java/"* ]]; then
               docker build \
                 --build-arg OPENJDK_VERSION="${OPENJDK_VERSION}" \
                 -t "${IMAGE_NAME}:latest" "$dir"
+            else
+              docker build -t "${IMAGE_NAME}:latest" "$dir"
             fi
 
             docker save -o "docker-images/${project_name}.tar" "${IMAGE_NAME}:latest"
