@@ -21,7 +21,15 @@ spec:
           PROMPT_URL="$SERVER/vader/core-server/client-prompt"
 
           echo "== Health check =="
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER/actuator/health" || true)
+          STATUS=000
+          i=1
+          while [ $i -le 60 ]; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$SERVER/actuator/health" || true)
+            [ "$STATUS" = "200" ] && break
+            echo "waiting for core-server ($i/60): got $STATUS"
+            sleep 5
+            i=$((i+1))
+          done
           [ "$STATUS" = "200" ] || { echo "❌ health check got $STATUS"; exit 1; }
           echo "✅ core-server healthy"
 

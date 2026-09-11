@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This is a project-level summary. Individual modules under `common/` and `services/` keep
 their own, more detailed changelogs.
 
+## [0.10.1]
+### Fixed
+- **`helm test` no longer races the `core-server` rollout.** CI ran `helm install` without
+  `--wait`, so `helm test` fired while `vader-core-server` was still starting (its `startupProbe`
+  alone delays readiness ~40s+) and the single-shot health-check curl reported `000`. The
+  install step now uses `--wait --timeout 5m`, and the `core-server` test hook retries the
+  `/actuator/health` check (up to 60 attempts, 5s apart) instead of failing on the first miss.
+
 ## [0.8.0]
 ### Added
 - **Kubernetes operator framework + Python Sandbox operator.** `core-server/tools/operators`

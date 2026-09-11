@@ -146,7 +146,7 @@ jobs:
 
       - name: Deploy Helm chart (images tagged as latest)
         run: |
-          helm install vader deploy/helm/ --values deploy/helm/configurations/test/test.yaml -n vader
+          helm install vader deploy/helm/ --values deploy/helm/configurations/test/test.yaml -n vader --wait --timeout 5m
 
       - name: Inspect resources before Helm test
         run: |
