@@ -64,10 +64,29 @@ vader:
   dao:
     # Upper bound on the page size any dynamic query (REST or MCP) may request.
     maxPageSize: 100
+  scheduling:
+    # Master switch for the background pollers (client-prompt inbox drain, backpressure
+    # sampler). Turned off in unit/integration tests so they drive the inbox deterministically.
+    enabled: true
+  inbox:
+    clientPrompt:
+      # How often the inbox polls for pending prompt messages. A newly accepted prompt is also
+      # drained immediately on enqueue, so this is mostly a safety net (e.g. after a restart).
+      pollIntervalMs: 1000
+      # Max prompts decomposed concurrently; also reported as egress.maxOpenMessages on the
+      # backpressure endpoint.
+      maxConcurrency: 1
+  backpressure:
+    # How often queue depth is sampled to derive ingress.queueRatePerMinute.
+    sampleIntervalMs: 15000
   mcp:
     databaseQuery:
       # When true, core-server exposes read-only vader-database query tools
       # (list_queryable_entities / query_database / count_matching) over the MCP endpoint.
+      enabled: true
+    backpressure:
+      # When true, core-server exposes the inbox/outbox back pressure over the MCP endpoint
+      # (list_backpressure_queues / get_backpressure), mirroring the REST /backpressure API.
       enabled: true
   operators:
     # Kubernetes operators core-server runs, each also exposed to LLMs as MCP tools.

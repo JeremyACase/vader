@@ -11,41 +11,22 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.common.library.implementation.service.mapper.ClientPromptDtoToEntityMapper;
-import org.vader.common.library.implementation.service.mapper.TaskDtoMapper;
-import org.vader.common.library.implementation.service.mapper.TaskGraphDtoMapper;
-import org.vader.common.library.implementation.service.mapper.TaskPlanDtoMapper;
-import org.vader.common.library.implementation.service.mapper.WorkflowDtoMapper;
+import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.dto.ClientPrompt;
-import org.vader.common.model.vader.dto.Workflow;
-import org.vader.common.model.vader.entity.ClientPromptEntity;
-import org.vader.common.model.vader.entity.WorkflowEntity;
-import org.vader.core.server.orchestrator.OrchestratorResponseException;
-import org.vader.core.server.service.WorkflowService;
+import org.vader.core.server.service.ClientPromptIntakeService;
+import org.vader.core.server.storage.FileStorageException;
 
 class ClientPromptControllerTest {
 
-    private WorkflowService workflowService;
+    private ClientPromptIntakeService intakeService;
     private ClientPromptController controller;
 
     @BeforeEach
     void setUp() {
-        this.workflowService = mock(WorkflowService.class);
+        this.intakeService = mock(ClientPromptIntakeService.class);
         this.controller = new ClientPromptController();
-        ReflectionTestUtils.setField(this.controller, "workflowService", this.workflowService);
         ReflectionTestUtils.setField(
-            this.controller, "clientPromptDtoToEntityMapper", new ClientPromptDtoToEntityMapper());
-        ReflectionTestUtils.setField(this.controller, "workflowDtoMapper", workflowDtoMapper());
-    }
-
-    private static WorkflowDtoMapper workflowDtoMapper() {
-        var taskGraphDtoMapper = new TaskGraphDtoMapper();
-        ReflectionTestUtils.setField(taskGraphDtoMapper, "taskDtoMapper", new TaskDtoMapper());
-        var taskPlanDtoMapper = new TaskPlanDtoMapper();
-        ReflectionTestUtils.setField(taskPlanDtoMapper, "taskGraphDtoMapper", taskGraphDtoMapper);
-        var workflowDtoMapper = new WorkflowDtoMapper();
-        ReflectionTestUtils.setField(workflowDtoMapper, "taskPlanDtoMapper", taskPlanDtoMapper);
-        return workflowDtoMapper;
+            this.controller, "clientPromptIntakeService", this.intakeService);
     }
 
     private static ClientPrompt prompt(final String text) {
@@ -54,38 +35,44 @@ class ClientPromptControllerTest {
         return clientPrompt;
     }
 
+    private static IngressResponse receipt() {
+        var response = new IngressResponse();
+        response.setId("11111111-1111-1111-1111-111111111111");
+        response.setPayloadModelType("ClientPrompt");
+        return response;
+    }
+
     @Test
-    void receivePrompt_decomposesThePromptAndReturnsTheWorkflow() {
-        var workflow = new WorkflowEntity();
-        var clientPromptEntity = new ClientPromptEntity();
-        workflow.setClientPrompt(clientPromptEntity);
-        when(this.workflowService.decompose(any(), any())).thenReturn(workflow);
+    void receivePrompt_acceptsThePromptAndReturnsReceipt() {
+        var receipt = receipt();
+        when(this.intakeService.accept(any())).thenReturn(receipt);
 
         var response = this.controller.receivePrompt(prompt("What's the weather like?"));
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isInstanceOf(Workflow.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(response.getBody()).isSameAs(receipt);
+        assertThat(response.getBody().getPayloadModelType()).isEqualTo("ClientPrompt");
     }
 
     @Test
-    void receivePrompt_withAttachments_decomposesThePrompt() {
+    void receivePrompt_withAttachments_acceptsThePrompt() {
         var clientPrompt = prompt("Summarize the attached file.");
         clientPrompt.setFiles(List.of(new MockMultipartFile(
             "files", "notes.txt", "text/plain", "some content".getBytes())));
-        when(this.workflowService.decompose(any(), any())).thenReturn(new WorkflowEntity());
+        when(this.intakeService.accept(any())).thenReturn(receipt());
 
         var response = this.controller.receivePrompt(clientPrompt);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
     }
 
     @Test
-    void handleOrchestratorResponse_returnsBadGatewayWithErrorBody() {
-        var response = this.controller.handleOrchestratorResponse(
-            new OrchestratorResponseException("Orchestrator returned an empty response."));
+    void handleFileStorage_returnsInternalServerErrorWithErrorBody() {
+        var response = this.controller.handleFileStorage(
+            new FileStorageException("disk full", new java.io.IOException("no space")));
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
-        assertThat(response.getBody().error()).isEqualTo("orchestrator_response_invalid");
-        assertThat(response.getBody().message()).contains("empty response");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody().error()).isEqualTo("file_storage_failed");
+        assertThat(response.getBody().message()).contains("disk full");
     }
 }

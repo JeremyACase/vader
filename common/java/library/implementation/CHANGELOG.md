@@ -1,25 +1,24 @@
 # Changelog
-All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.10.0]
+### Added
+- A builder that turns a persisted entity into an ingress-response receipt carrying its id and
+  model type.
+
+## [0.9.0]
+### Changed
+- Task-plan mapping carries the new reasoning field in both directions (entity ↔ DTO).
 
 ## [0.6.0]
 ### Changed
-- `ClientPromptDtoToEntityMapper` javadoc updated: file attachments are no longer described as
-  dropped here; they are handled by `WorkflowService` via the active
-  `InterfaceFileStorageStrategy` before the entity is persisted.
+- Clarified that file handling is the responsibility of the file storage strategy, not the
+  client prompt mapper.
 
 ## [0.5.0]
 ### Added
-- Initial module: mappers between the `common:java:model:vader` DTOs and JPA entities, as
-  Spring `@Service` beans.
-- Entity -> DTO (egress): `InterfaceEntityToDtoMapper` and the `GenericDtoMapper` base (identity
-  and audit fields, list/set overloads), plus `ObjectMetadataDtoMapper`, `ClientPromptDtoMapper`,
-  `TaskDtoMapper`, `TaskGraphDtoMapper`, `TaskPlanDtoMapper`, `WorkflowDtoMapper`. Parent and
-  dependency references are emitted as shallow ids; `ClientPrompt.files` are not reconstructed.
-- DTO -> entity (ingress): `InterfaceDtoToEntityMapper`, plus `ClientPromptDtoToEntityMapper`,
-  `TaskGraphDtoToEntityMapper` (roots attach to the graph, subtasks nest under their parent,
-  `dependsOnTaskIds` resolved against DTO-supplied ids), and `TaskPlanDtoToEntityMapper` (wires
-  the plan/graph owning side so one `save` cascades the whole decomposition).
-- Unit tests for every mapper.
+- Initial module: Spring service beans that map between the shared model's JPA entities and DTOs
+  in both directions — entity → DTO for API responses, DTO → entity for persistence. Shallow id
+  references are used for association sides that would be expensive or circular to fully hydrate.

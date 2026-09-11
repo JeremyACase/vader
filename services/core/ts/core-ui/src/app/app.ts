@@ -3,7 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ClientPromptService } from './client-prompt.service';
-import { Workflow } from './client-prompt.model';
+import { BackPressure, Workflow } from './client-prompt.model';
+
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 60_000;
 
 @Component({
   selector: 'app-root',
@@ -37,8 +40,10 @@ export class App {
 
   sending = signal(false);
   sent = signal(false);
+  pending = signal(false);
   error = signal<string | null>(null);
   plan = signal<Workflow | null>(null);
+  backPressure = signal<BackPressure | null>(null);
 
   constructor() {
     document.addEventListener('keydown', (e) => {
@@ -63,6 +68,8 @@ export class App {
     this.error.set(null);
     this.sent.set(false);
     this.plan.set(null);
+    this.pending.set(false);
+    this.backPressure.set(null);
     if (this.text.invalid || this.sending() || this.fileError()) return;
 
     this.sending.set(true);
@@ -72,20 +79,50 @@ export class App {
         text: this.text.value,
         files: this.files()
       }));
-      if (res.status < 200 || res.status >= 300) {
-        throw new Error(`Non-2xx status: ${res.status}`);
+      if (res.status !== 202 || !res.body) {
+        throw new Error(`Unexpected status: ${res.status}`);
       }
       this.sent.set(true);
-      this.plan.set(res.body);
       this.text.reset('');
       this.files.set([]);
       const inputEl = this.fileInput();
       if (inputEl) inputEl.nativeElement.value = '';
+      await this.awaitWorkflow(res.body.id);
     } catch (e: any) {
       const msg = e?.error?.message || e?.message || 'Failed to send prompt';
       this.error.set(String(msg));
     } finally {
       this.sending.set(false);
+      this.pending.set(false);
     }
+  }
+
+  private async awaitWorkflow(promptId: string): Promise<void> {
+    this.pending.set(true);
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const workflow = await firstValueFrom(this.svc.getWorkflowByPromptId(promptId));
+      if (workflow?.taskPlan) {
+        this.plan.set(workflow);
+        return;
+      }
+      this.backPressure.set(await this.readBackpressure());
+      await this.delay(POLL_INTERVAL_MS);
+    }
+    throw new Error(
+      'Timed out waiting for the decomposition. It may still complete — query the workflow later.'
+    );
+  }
+
+  private async readBackpressure(): Promise<BackPressure | null> {
+    try {
+      return await firstValueFrom(this.svc.getBackpressure());
+    } catch {
+      return null;
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

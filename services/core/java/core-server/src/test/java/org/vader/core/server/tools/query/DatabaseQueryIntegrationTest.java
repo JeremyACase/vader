@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,10 +22,12 @@ import org.vader.common.library.dao.model.QueryFilterParameter;
 import org.vader.common.library.dao.model.QueryOperatorType;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.io.ClientPromptInbox;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@TestPropertySource(properties = "vader.scheduling.enabled=false")
 class DatabaseQueryIntegrationTest {
 
     private static final String PLAN = """
@@ -43,11 +46,15 @@ class DatabaseQueryIntegrationTest {
     @Autowired
     private DatabaseQueryService databaseQueryService;
 
+    @Autowired
+    private ClientPromptInbox clientPromptInbox;
+
     private void submitPrompt() throws Exception {
         when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(PLAN);
         this.mockMvc.perform(multipart("/vader/core-server/client-prompt")
                 .param("text", "Plan a birthday party"))
-            .andExpect(status().isOk());
+            .andExpect(status().isAccepted());
+        this.clientPromptInbox.drain();
     }
 
     @Test

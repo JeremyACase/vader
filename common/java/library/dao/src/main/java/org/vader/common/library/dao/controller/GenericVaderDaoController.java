@@ -180,7 +180,7 @@ public abstract class GenericVaderDaoController<
      * @param records the entity page
      * @return the DTO page
      */
-    protected GenericPageImplementation<D> toDtoPage(final Page<T> records) {
+    public GenericPageImplementation<D> toDtoPage(final Page<T> records) {
         var mapper = this.getDataTransferObjectMapper();
         var content = mapper.map(records.getContent());
         return new GenericPageImplementation<>(

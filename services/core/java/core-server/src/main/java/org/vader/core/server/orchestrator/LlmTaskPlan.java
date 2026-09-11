@@ -12,9 +12,18 @@ import java.util.List;
  * <p>Keeping the generated JSON schema this small is what lets smaller local models return valid
  * output — asking them to fill an {@code id} that must match a UUID pattern, plus timestamps and
  * a recursive sub-task tree, reliably produced nulls.</p>
+ *
+ * <p>{@code reasoning} is the first field so the model writes its chain-of-thought before
+ * committing to the structured plan fields.</p>
  */
 @JsonClassDescription("A problem decomposed into a short list of actionable tasks")
 record LlmTaskPlan(
+    @JsonPropertyDescription(
+        "Step-by-step reasoning before the plan: restate the goal in your own words, identify "
+            + "constraints or unknowns, decide whether any available tools would help, then "
+            + "sketch your approach. Write this before filling in objective and tasks.")
+    String reasoning,
+
     @JsonPropertyDescription("One sentence restating the user's goal")
     String objective,
 

@@ -1,2 +1,10 @@
 - add logging/persistence of entire lifecycle
 - ensure LLMs can grab files from the object store/database using pointers
+- Global Controller Advice
+- models: log all responses in the database
+- agentic harness
+- allow updates to existing tasks
+- allow ollama operator to be able to create new, specialized LLM's
+- compaction-as-a-service
+- evaluation testing as a part of the devops pipeline
+

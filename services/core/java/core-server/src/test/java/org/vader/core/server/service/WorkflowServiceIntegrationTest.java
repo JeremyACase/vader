@@ -5,16 +5,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
-import org.vader.core.server.orchestrator.OrchestratorResponseException;
+import org.vader.core.exceptions.OrchestratorResponseException;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.TaskPlanRepository;
@@ -22,6 +22,7 @@ import org.vader.core.server.repository.WorkflowRepository;
 
 @SpringBootTest
 @Transactional
+@TestPropertySource(properties = "vader.scheduling.enabled=false")
 class WorkflowServiceIntegrationTest {
 
     private static final String VALID_PLAN = """
@@ -63,17 +64,18 @@ class WorkflowServiceIntegrationTest {
     @Autowired
     private ClientPromptRepository clientPromptRepository;
 
-    private static ClientPromptEntity prompt(final String text) {
+    private ClientPromptEntity persistedPrompt(final String text) {
         var prompt = new ClientPromptEntity();
         prompt.setText(text);
-        return prompt;
+        return this.clientPromptRepository.save(prompt);
     }
 
     @Test
     void decompose_persistsTheDecompositionUnderWorkflowAndLinksThePlanBackToIt() {
         when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(VALID_PLAN);
 
-        var saved = this.workflowService.decompose(prompt("Help me ship onboarding"), List.of());
+        var saved = this.workflowService.decompose(
+            persistedPrompt("Help me ship onboarding").getId());
 
         var workflow = this.workflowRepository.findById(saved.getId()).orElseThrow();
         assertThat(workflow.getClientPrompt()).isNotNull();
@@ -103,15 +105,15 @@ class WorkflowServiceIntegrationTest {
     }
 
     @Test
-    void decompose_whenResponseFailsSchema_throwsAndPersistsNothing() {
+    void decompose_whenResponseFailsSchema_throwsAndPersistsNoWorkflow() {
         when(this.orchestrator.orchestrate(any(ClientPrompt.class)))
             .thenReturn("{\"objective\":\"no task graph here\"}");
 
-        assertThatThrownBy(() -> this.workflowService.decompose(prompt("whatever"), List.of()))
+        var promptId = persistedPrompt("whatever").getId();
+        assertThatThrownBy(() -> this.workflowService.decompose(promptId))
             .isInstanceOf(OrchestratorResponseException.class);
 
         assertThat(this.workflowRepository.count()).isZero();
         assertThat(this.taskPlanRepository.count()).isZero();
-        assertThat(this.clientPromptRepository.count()).isZero();
     }
 }

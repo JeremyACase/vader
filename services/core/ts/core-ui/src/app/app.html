@@ -59,11 +59,26 @@
       </div>
     </form>
 
-    @if (sent()) {
-      <p class="ok">✅ Prompt sent.</p>
+    @if (sent() && !pending() && !plan() && !error()) {
+      <p class="ok">✅ Prompt accepted.</p>
     }
     @if (error()) {
       <p class="err">⚠️ {{error()}}</p>
+    }
+
+    @if (pending()) {
+      <div class="queued">
+        <p class="muted">⏳ Queued — building your workflow…</p>
+        @if (backPressure(); as bp) {
+          <p class="hint">
+            {{bp.ingress.queuedRecords}} prompt(s) waiting
+            @if (bp.ingress.queueRatePerMinute) {
+              <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
+            }
+            <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
+          </p>
+        }
+      </div>
     }
 
     @if (plan(); as workflow) {

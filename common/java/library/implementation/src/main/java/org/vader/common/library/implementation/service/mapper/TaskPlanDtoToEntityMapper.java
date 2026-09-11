@@ -25,6 +25,7 @@ public class TaskPlanDtoToEntityMapper
         }
 
         var to = new TaskPlanEntity();
+        to.setReasoning(from.getReasoning());
         to.setObjective(from.getObjective());
 
         var taskGraph = this.taskGraphDtoToEntityMapper.map(from.getTaskGraph());

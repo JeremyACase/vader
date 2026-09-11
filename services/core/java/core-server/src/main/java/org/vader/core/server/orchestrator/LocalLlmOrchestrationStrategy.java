@@ -22,6 +22,8 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
+import org.vader.core.exceptions.OrchestratorResponseException;
+import org.vader.core.exceptions.OrchestratorUnavailableException;
 import org.vader.core.server.orchestrator.interfaces.InterfaceLlmOrchestrationStrategy;
 
 /**
@@ -52,8 +54,13 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
         LoggerFactory.getLogger(LocalLlmOrchestrationStrategy.class);
 
     private static final String DECOMPOSITION_INSTRUCTIONS = """
-        You are Vader, a planning assistant. Decompose the user's problem into a concrete plan
-        of 2 to 6 top-level tasks, each with a short title and a description of what to do.
+        You are Vader, a planning assistant. Your job is to decompose the user's problem into a
+        concrete plan of 2 to 6 top-level tasks.
+
+        Before writing the plan, reason step by step in the `reasoning` field: restate the goal
+        in your own words, identify any constraints or unknowns, decide whether any of your
+        available tools would materially help, and sketch your overall approach. Write this
+        reasoning before filling in `objective` and `tasks` — it will be shown to the user.
 
         You have been given a set of tools. Call a tool only when doing so materially helps you
         plan or gather information the plan needs; otherwise just plan. Do not call tools
@@ -133,6 +140,7 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
         }).toList());
 
         var taskPlan = new TaskPlan();
+        taskPlan.setReasoning(llmPlan.reasoning());
         taskPlan.setObjective(llmPlan.objective());
         taskPlan.setTaskGraph(taskGraph);
         return taskPlan;

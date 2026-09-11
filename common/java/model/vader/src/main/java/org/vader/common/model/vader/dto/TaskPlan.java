@@ -11,6 +11,8 @@ import jakarta.validation.constraints.NotNull;
  */
 public class TaskPlan extends AbstractModel {
 
+    private String reasoning;
+
     @NotNull
     private String objective;
 
@@ -21,6 +23,14 @@ public class TaskPlan extends AbstractModel {
     @Override
     public String getModelType() {
         return "TaskPlan";
+    }
+
+    public String getReasoning() {
+        return this.reasoning;
+    }
+
+    public void setReasoning(String reasoning) {
+        this.reasoning = reasoning;
     }
 
     public String getObjective() {
