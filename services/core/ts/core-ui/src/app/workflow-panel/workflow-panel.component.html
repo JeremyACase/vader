@@ -1,7 +1,7 @@
 <section class="card panel">
-  <h2>Active workflows</h2>
+  <h2>Workflows</h2>
   @if (!sortedWorkflows().length) {
-    <p class="muted">No workflows are currently running.</p>
+    <p class="muted">No workflows yet.</p>
   }
   <ul class="workflow-list">
     @for (workflow of sortedWorkflows(); track workflow.id) {

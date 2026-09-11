@@ -1,7 +1,38 @@
-.wrap {
-  max-width: 640px;
+.layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 3rem 1.5rem;
+}
+
+.main-column {
+  flex: 1 1 480px;
+  max-width: 640px;
+  min-width: 0;
+}
+
+.sidebar {
+  position: sticky;
+  top: 1.5rem;
+  width: 400px;
+  flex-shrink: 0;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: static;
+    width: 100%;
+    max-height: none;
+  }
 }
 
 .brand {
@@ -64,18 +95,6 @@ textarea, input[type="file"] {
   padding-left: 1.1rem;
   font-size: 0.8rem;
   color: #9aa3b2;
-}
-
-.queued {
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  background: #0f1115;
-  border: 1px solid #2a2e38;
-  border-radius: 8px;
-}
-
-.queued .hint {
-  margin: 0.35rem 0 0;
 }
 
 .foot {

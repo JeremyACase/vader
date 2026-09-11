@@ -262,7 +262,7 @@ A bad entry reads like an annotated file listing.
 | `vader.orchestrator.type` | `static` | `static` or `local` (Ollama) |
 | `vader.orchestrator.local.model` | — | Ollama model name |
 | `vader.orchestrator.local.fallback-to-static` | `true` | Return static plan when LLM unreachable |
-| `vader.operators.enabled` | `false` | Master switch for Kubernetes operators |
+| `vader.operators.enabled` | `true` | Master switch for Kubernetes operators. Set to `false` where no cluster is reachable (unit/integration test runs, CI) |
 | `vader.operators.python-sandbox.enabled` | `false` | Python sandbox operator |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
 | `vader.mcp.backpressure.enabled` | `true` | Expose inbox/outbox backpressure tools over MCP |
@@ -272,7 +272,7 @@ A bad entry reads like an annotated file listing.
 | `vader.inbox.client-prompt.poll-interval-ms` | `1000` | Scheduled client-prompt inbox drain cadence |
 | `vader.inbox.client-prompt.max-concurrency` | `1` | Max concurrent prompt decompositions; also `egress.maxOpenMessages` |
 | `vader.backpressure.sample-interval-ms` | `15000` | Queue-depth sampling cadence feeding `queueRatePerMinute` |
-| `vader.operators.agent-harness.enabled` | `false` | Agent-harness operator (creates one Job per dispatched `TaskAttempt`) |
+| `vader.operators.agent-harness.enabled` | `true` | Agent-harness operator (creates one Job per dispatched `TaskAttempt`) |
 | `vader.inbox.task-assignment.poll-interval-ms` | `1000` | Scheduled task-assignment inbox drain cadence |
 | `vader.inbox.task-assignment.max-concurrency` | `5` | Max assignments *dispatched* concurrently — throttles Job creation, not how many harness Jobs may run at once |
 | `vader.agent-harness.max-turns` | `20` | Turn cap handed to each harness, enforced server-side |

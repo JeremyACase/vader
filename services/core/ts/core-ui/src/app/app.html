@@ -1,86 +1,90 @@
-<main class="wrap">
-  <header class="brand">
-    <img class="mascot" src="darth-vader.png" alt="Darth Vader">
-    <div class="logo">VADER</div>
-    <div class="divider"></div>
-    <div class="product">CORE UI</div>
-  </header>
+<div class="layout">
+  <main class="main-column">
+    <header class="brand">
+      <img class="mascot" src="darth-vader.png" alt="Darth Vader">
+      <div class="logo">VADER</div>
+      <div class="divider"></div>
+      <div class="product">CORE UI</div>
+    </header>
 
-  <section class="card">
-    <h1>Submit a client prompt</h1>
-    <p class="muted">Send a prompt, with optional file attachments, to core-server. You can submit
-      another prompt at any time — it doesn't wait for earlier ones to finish.</p>
+    <section class="card">
+      <h1>Submit a client prompt</h1>
+      <p class="muted">Send a prompt, with optional file attachments, to core-server. You can submit
+        another prompt at any time — it doesn't wait for earlier ones to finish.</p>
 
-    <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
-      <textarea
-        [formControl]="text"
-        rows="6"
-        placeholder="Describe what you'd like Vader to do…">
-      </textarea>
+      <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
+        <textarea
+          [formControl]="text"
+          rows="6"
+          placeholder="Describe what you'd like Vader to do…">
+        </textarea>
 
-      <input
-        #fileInput
-        type="file"
-        multiple
-        (change)="onFilesSelected($event)">
+        <input
+          #fileInput
+          type="file"
+          multiple
+          (change)="onFilesSelected($event)">
 
-      @if (fileError()) {
-        <p class="err">{{fileError()}}</p>
-      }
-      @if (files().length) {
-        <div class="hint">
-          {{files().length}} / {{maxFiles}} files selected
-          <ul class="file-list">
-            @for (f of files(); track $index) {
-              <li>{{f.name}}</li>
-            }
-          </ul>
-        </div>
-      }
-
-      <div class="row">
-        <div class="hint" [class.error]="text.invalid">
-          @if (text.hasError('required')) {
-            <span>Prompt is required.</span>
-          } @else {
-            <span>{{chars()}} / {{max}} characters</span>
-          }
-        </div>
-
-        <button type="submit"
-                (click)="submit()"
-                [disabled]="text.invalid || sending() || !!fileError()"
-                [attr.aria-busy]="sending()">
-          @if (!sending()) {
-            <span>Send prompt</span>
-          } @else {
-            <span>Sending…</span>
-          }
-        </button>
-      </div>
-    </form>
-
-    @if (sent() && !error()) {
-      <p class="ok">✅ Prompt accepted — see it in Active workflows below.</p>
-    }
-    @if (error()) {
-      <p class="err">⚠️ {{error()}}</p>
-    }
-
-    @if (backPressure(); as bp) {
-      <p class="hint">
-        {{bp.ingress.queuedRecords}} prompt(s) waiting
-        @if (bp.ingress.queueRatePerMinute) {
-          <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
+        @if (fileError()) {
+          <p class="err">{{fileError()}}</p>
         }
-        <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
-      </p>
-    }
-  </section>
+        @if (files().length) {
+          <div class="hint">
+            {{files().length}} / {{maxFiles}} files selected
+            <ul class="file-list">
+              @for (f of files(); track $index) {
+                <li>{{f.name}}</li>
+              }
+            </ul>
+          </div>
+        }
 
-  <app-workflow-panel [justSubmittedPromptId]="lastSubmittedPromptId()" />
+        <div class="row">
+          <div class="hint" [class.error]="text.invalid">
+            @if (text.hasError('required')) {
+              <span>Prompt is required.</span>
+            } @else {
+              <span>{{chars()}} / {{max}} characters</span>
+            }
+          </div>
 
-  <footer class="foot">
-    <span>Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send.</span>
-  </footer>
-</main>
+          <button type="submit"
+                  (click)="submit()"
+                  [disabled]="text.invalid || sending() || !!fileError()"
+                  [attr.aria-busy]="sending()">
+            @if (!sending()) {
+              <span>Send prompt</span>
+            } @else {
+              <span>Sending…</span>
+            }
+          </button>
+        </div>
+      </form>
+
+      @if (sent() && !error()) {
+        <p class="ok">✅ Prompt accepted — see it in the Workflows panel.</p>
+      }
+      @if (error()) {
+        <p class="err">⚠️ {{error()}}</p>
+      }
+
+      @if (backPressure(); as bp) {
+        <p class="hint">
+          {{bp.ingress.queuedRecords}} prompt(s) waiting
+          @if (bp.ingress.queueRatePerMinute) {
+            <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
+          }
+          <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
+        </p>
+      }
+    </section>
+
+    <footer class="foot">
+      <span>Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send.</span>
+    </footer>
+  </main>
+
+  <aside class="sidebar">
+    <app-workflow-panel [justSubmittedPromptId]="lastSubmittedPromptId()" />
+  </aside>
+</div>

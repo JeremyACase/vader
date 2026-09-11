@@ -14,11 +14,13 @@ import org.vader.core.server.models.SandboxInfo;
  * Domain layer over {@link PythonSandboxOperator}, shared by the MCP tools and the REST
  * controller so both go through one code path — the same split as {@code WorkflowService} sitting
  * under both {@code ClientPromptController} and the orchestrator.
+ *
+ * <p>Mirrors {@link PythonSandboxOperator}'s condition (both the master switch and this
+ * operator's own flag) since this bean autowires that operator directly.</p>
  */
 @Service
 @ConditionalOnProperty(
-    prefix = "vader.operators.python-sandbox",
-    name = "enabled",
+    name = {"vader.operators.enabled", "vader.operators.python-sandbox.enabled"},
     havingValue = "true",
     matchIfMissing = false)
 public class PythonSandboxService {

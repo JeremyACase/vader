@@ -18,7 +18,7 @@ function workflow(overrides: Partial<Workflow>): Workflow {
 class FakeActiveWorkflowsService {
   workflows$ = new Subject<Workflow[]>();
 
-  activeWorkflows(): Observable<Workflow[]> {
+  recentWorkflows(): Observable<Workflow[]> {
     return this.workflows$.asObservable();
   }
 
@@ -50,7 +50,7 @@ describe('WorkflowPanelComponent', () => {
     component = fixture.componentInstance;
   });
 
-  it('sorts active workflows most-recently-created first', () => {
+  it('sorts recent workflows most-recently-created first', () => {
     fixture.detectChanges();
     fakeService.workflows$.next([
       workflow({ id: 'wf-old', createdAt: '2026-01-01T00:00:00Z' }),

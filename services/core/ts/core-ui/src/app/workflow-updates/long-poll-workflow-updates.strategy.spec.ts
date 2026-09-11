@@ -28,14 +28,14 @@ describe('LongPollWorkflowUpdatesStrategy', () => {
     httpMock.verify();
   });
 
-  it('queries running workflows sorted by creation time', fakeAsync(() => {
-    const sub = strategy.activeWorkflows().subscribe();
+  it('queries recent workflows sorted by creation time, regardless of status', fakeAsync(() => {
+    const sub = strategy.recentWorkflows().subscribe();
     tick(0);
 
     const req = httpMock.expectOne(
       (r) => r.url === '/vader/core-server/data/workflow/query/params'
     );
-    expect(req.request.params.get('status')).toBe('RUNNING');
+    expect(req.request.params.has('status')).toBeFalse();
     expect(req.request.params.get('sort-by-fields')).toBe('createdAt');
     expect(req.request.params.get('sort-descending')).toBe('true');
     req.flush(workflowPage([]));
@@ -47,7 +47,7 @@ describe('LongPollWorkflowUpdatesStrategy', () => {
     const matchWorkflowRequests = () =>
       httpMock.match((r) => r.url === '/vader/core-server/data/workflow/query/params');
 
-    const sub = strategy.activeWorkflows().subscribe();
+    const sub = strategy.recentWorkflows().subscribe();
     tick(0);
     matchWorkflowRequests()[0].flush(workflowPage([]));
 

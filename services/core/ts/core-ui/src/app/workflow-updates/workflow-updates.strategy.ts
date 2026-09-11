@@ -10,8 +10,12 @@ import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
  * strategies is a one-line change to the `WORKFLOW_UPDATES_STRATEGY` provider in app.config.ts.
  */
 export interface InterfaceWorkflowUpdatesStrategy {
-  /** All currently-active (non-terminal) workflows, most-recently-created first. */
-  activeWorkflows(): Observable<Workflow[]>;
+  /**
+   * The most recently created workflows, most-recent first — regardless of status, so a
+   * workflow that just failed or succeeded stays visible instead of disappearing from the panel
+   * the moment it leaves `RUNNING`.
+   */
+  recentWorkflows(): Observable<Workflow[]>;
 
   /** A task's attempt history, most recent attempt first. */
   taskAttempts(taskId: string): Observable<TaskAttempt[]>;

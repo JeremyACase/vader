@@ -9,8 +9,9 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Provides the shared fabric8 {@link KubernetesClient} every operator uses.
  *
- * <p>Registered only when the operator subsystem is switched on via {@code vader.operators.enabled}
- * — a plain {@code core-server} deployment never opens a connection to the API server. Individual
+ * <p>Registered whenever the operator subsystem is switched on via {@code vader.operators.enabled}
+ * — on by default, since a normal deployment expects to reach the Kubernetes API server; set it to
+ * {@code false} where no cluster is reachable (unit/integration test runs, CI). Individual
  * operators are then toggled with their own {@code vader.operators.<name>.enabled} flag; enabling
  * any of them requires the master flag as well.</p>
  */
@@ -19,7 +20,7 @@ import org.springframework.context.annotation.Configuration;
     prefix = "vader.operators",
     name = "enabled",
     havingValue = "true",
-    matchIfMissing = false)
+    matchIfMissing = true)
 public class KubernetesClientConfig {
 
     /**

@@ -25,7 +25,7 @@ interface WorkflowUpdateMessage<T> {
 export class WebSocketWorkflowUpdatesStrategy implements InterfaceWorkflowUpdatesStrategy {
   private socket: WebSocketSubject<WorkflowUpdateMessage<unknown>> | null = null;
 
-  activeWorkflows(): Observable<Workflow[]> {
+  recentWorkflows(): Observable<Workflow[]> {
     return this.channel<Workflow[]>('active-workflows', null);
   }
 

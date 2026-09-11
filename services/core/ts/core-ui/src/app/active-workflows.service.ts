@@ -13,8 +13,8 @@ import { WORKFLOW_UPDATES_STRATEGY } from './workflow-updates/workflow-updates.t
 export class ActiveWorkflowsService {
   private strategy = inject(WORKFLOW_UPDATES_STRATEGY);
 
-  activeWorkflows(): Observable<Workflow[]> {
-    return this.strategy.activeWorkflows();
+  recentWorkflows(): Observable<Workflow[]> {
+    return this.strategy.recentWorkflows();
   }
 
   taskAttempts(taskId: string): Observable<TaskAttempt[]> {

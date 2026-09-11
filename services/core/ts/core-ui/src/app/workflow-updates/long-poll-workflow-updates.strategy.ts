@@ -22,7 +22,7 @@ const POLL_INTERVAL_MS = 3000;
 export class LongPollWorkflowUpdatesStrategy implements InterfaceWorkflowUpdatesStrategy {
   private http = inject(HttpClient);
 
-  private readonly activeWorkflows$ = this.poll<Workflow[]>(() =>
+  private readonly recentWorkflows$ = this.poll<Workflow[]>(() =>
     this.http
       .get<DaoPage<Workflow>>('/vader/core-server/data/workflow/query/params', {
         params: new HttpParams()
@@ -30,7 +30,6 @@ export class LongPollWorkflowUpdatesStrategy implements InterfaceWorkflowUpdates
           .set('size', '50')
           .set('sort-descending', 'true')
           .set('sort-by-fields', 'createdAt')
-          .set('status', 'RUNNING')
       })
       .pipe(map((page) => page.content))
   );
@@ -39,8 +38,8 @@ export class LongPollWorkflowUpdatesStrategy implements InterfaceWorkflowUpdates
   private readonly transcriptsCache = new Map<string, Observable<TaskAttemptTranscript[]>>();
   private readonly promptTextCache = new Map<string, Observable<string>>();
 
-  activeWorkflows(): Observable<Workflow[]> {
-    return this.activeWorkflows$;
+  recentWorkflows(): Observable<Workflow[]> {
+    return this.recentWorkflows$;
   }
 
   taskAttempts(taskId: string): Observable<TaskAttempt[]> {

@@ -32,13 +32,18 @@ import org.vader.core.server.service.operators.OperatorLabels;
  * watch, and the overall {@link #init()}/{@link #teardown()} lifecycle -- is inherited unchanged:
  * those concern core-server's <em>own</em> Deployment (the owner, always a Deployment regardless
  * of what a given operator manages), not the kind being managed, so they need no override.</p>
+ *
+ * <p>Both {@code vader.operators.enabled} (the master switch, gating {@link
+ * org.vader.core.server.service.config.KubernetesClientConfig}) and this operator's own flag must
+ * hold for the bean to exist -- listing both in one condition, rather than relying on this
+ * operator's flag alone, is what actually enforces "the master switch too" instead of just
+ * documenting it.</p>
  */
 @Service
 @ConditionalOnProperty(
-    prefix = "vader.operators.agent-harness",
-    name = "enabled",
+    name = {"vader.operators.enabled", "vader.operators.agent-harness.enabled"},
     havingValue = "true",
-    matchIfMissing = false)
+    matchIfMissing = true)
 public class AgentHarnessOperator extends AbstractOperator<AgentHarnessSpec> {
 
     private static final String OPERATOR_NAME = "agent-harness";

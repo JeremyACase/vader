@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0]
+### Changed
+- The Kubernetes operator subsystem, and the agent-harness operator specifically, are now
+  enabled by default rather than opt-in — a normal deployment expects a reachable cluster, so
+  running without one (test suites, CI) is now the case that opts out instead. A missing cluster
+  no longer silently leaves every dispatched task failing with no obvious cause; it now shows up
+  immediately as a logged operator-initialization error.
+
 ## [0.12.0]
 ### Added
 - **Agent harness operator.** A new operator creates one Kubernetes Job per dispatched task

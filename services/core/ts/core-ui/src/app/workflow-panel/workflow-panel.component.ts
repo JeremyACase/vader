@@ -5,9 +5,11 @@ import { Workflow } from '../client-prompt.model';
 import { WorkflowDetailComponent } from './workflow-detail.component';
 
 /**
- * Persistent panel of every currently-active workflow, independent of prompt submission — a
- * new prompt can be submitted while others are still running. Auto-expands the workflow spawned
- * from `justSubmittedPromptId` the first time it appears in the active list.
+ * Persistent panel of the most recent workflows, independent of prompt submission — a new
+ * prompt can be submitted while others are still running. Shows every recent workflow regardless
+ * of status, not just `RUNNING` ones, so a workflow that just failed or succeeded stays visible
+ * instead of silently disappearing. Auto-expands the workflow spawned from
+ * `justSubmittedPromptId` the first time it appears in the list.
  */
 @Component({
   selector: 'app-workflow-panel',
@@ -21,7 +23,7 @@ export class WorkflowPanelComponent {
 
   justSubmittedPromptId = input<string | null>(null);
 
-  private workflows = toSignal(this.activeWorkflowsService.activeWorkflows(), {
+  private workflows = toSignal(this.activeWorkflowsService.recentWorkflows(), {
     initialValue: [] as Workflow[]
   });
 
