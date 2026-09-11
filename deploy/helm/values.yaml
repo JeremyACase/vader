@@ -101,11 +101,11 @@ vader:
     # Master switch: constructs the shared Kubernetes client and enables the RBAC the
     # operators need. Must be true for ANY individual operator below to start.
     # (Additional operators can be added here later, following the same pattern.)
-    enabled: false
+    enabled: true
     pythonSandbox:
       # When true (and operators.enabled is true), core-server runs the Python sandbox
       # operator and publishes its create/list/delete tools over the MCP SSE endpoint.
-      enabled: false
+      enabled: true
       # The Deployment running core-server; the operator watches it and cascade-deletes every
       # sandbox if core-server itself is removed from the cluster.
       ownerDeploymentName: vader-core-server
