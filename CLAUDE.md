@@ -14,6 +14,7 @@ prompts and displays results.
 | `common/java/library/dao` | Dynamic JPA Criteria query engine + generic REST/MCP controller |
 | `services/core/java/core-server` | Spring Boot service (orchestration, operators, storage, MCP) |
 | `services/core/ts/core-ui` | Angular frontend |
+| `services/core/rust/core-agent-harness` | Ephemeral k8s Job: executes exactly one task-graph subtask. All LLM calls are proxied through `core-server` — the harness never talks to an LLM directly. |
 
 ## Build and run
 
@@ -29,6 +30,9 @@ prompts and displays results.
 
 # Angular dev server (from services/core/ts/core-ui)
 npm start
+
+# Agent harness: build/test/lint directly with cargo (also wired into ./gradlew build)
+cd services/core/rust/core-agent-harness && cargo build
 ```
 
 Checkstyle runs on every build. Config is in `common/java/checkstyle/`. The project follows
@@ -141,6 +145,42 @@ Python services do not exist yet. When added, follow these conventions:
 - **Dataclasses or Pydantic models** for structured data; plain `dict` only at true IO
   boundaries before parsing.
 
+### Rust
+
+Used for `core-agent-harness` (and any future latency/footprint-sensitive, single-purpose
+service). The same complexity and pattern-naming philosophy as Java applies, adapted to
+idiomatic Rust rather than transplanted literally:
+
+- **Traits stand in for `Interface*`.** Rust's `trait` keyword already marks the role that
+  Java's `Interface` prefix exists to signal, so trait names are **not** prefixed
+  (`ControlPlane`, `InferenceGateway` — not `InterfaceControlPlane`). Concrete implementations
+  still encode their pattern in the type name exactly like Java/Python/TS:
+  `CoreServerAdapter`, `HarnessBudget`, `StallDetector`. There is no direct analog to
+  `Abstract*` base classes — shared behavior is composition (a struct holding the shared state)
+  or a trait default method, not inheritance.
+- **Newtypes for identifiers.** Wrap ids in single-field structs (`TaskId(Uuid)`,
+  `AssignmentId(Uuid)`) rather than passing bare `Uuid`/`String` — the compiler then rejects a
+  task id accidentally passed where an assignment id is expected.
+- **`Result<T, E>` and `?` are the guard-clause mechanism.** A function that can fail returns
+  `Result`; propagate with `?` at the top of a function exactly like a Java guard-clause early
+  return, then let the rest of the function run straight through to one value at the end.
+  Never `.unwrap()`/`.expect()` outside tests or a case that is genuinely statically impossible
+  (and comment why, at the call site, when it isn't obvious).
+- **No `continue`, and prefer iterator adapters to hand-written loops.** `.filter()`, `.map()`,
+  `.find()`, `.all()`, `.any()` usually eliminate the loop body branching entirely, which is a
+  more idiomatic way to hit the complexity target than Java's single-return discipline. Where a
+  loop is genuinely needed, keep the same rule: no `continue`, extract a helper instead of
+  nesting.
+- **Cyclomatic complexity** — same target as every other language here: 1–3 per function.
+- **`rustfmt` and `clippy -D warnings`** are this language's equivalent of checkstyle and must
+  be clean on every build.
+- **`async fn` in traits (stable, no `async-trait` crate needed)** over generics
+  (`fn run<C: ControlPlane, G: InferenceGateway>(...)`) rather than `dyn Trait` — this harness
+  has a small, closed set of implementations (one real, one test-double), so static dispatch is
+  simpler and keeps the binary small.
+- **Models mirror the wire contract**, not a Java entity/DTO split — plain `#[derive(Serialize,
+  Deserialize)]` structs matching whatever JSON `core-server` sends/accepts.
+
 ## Testing
 
 ### Philosophy
@@ -182,6 +222,13 @@ Services that depend on `HttpClient` should use `HttpClientTestingModule` and
 Use `pytest` with full type-checking via `mypy` or `pyright`. Mirror the Instancio philosophy:
 use factories or `faker`/`hypothesis` to generate valid dummy data rather than hardcoding
 literals.
+
+### Rust unit tests
+
+Use `cargo test` with `#[cfg(test)]` modules colocated in each source file. Mirror the
+Instancio/faker philosophy: prefer small hand-written builder functions (or the `fake` crate)
+that produce valid dummy data over hardcoding literals in every test, so tests keep working as
+fields are added.
 
 ### Helm system tests
 

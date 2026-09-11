@@ -6,3 +6,4 @@ include ':common:java:library:dao'
 
 include ':services:core:java:core-server'
 include ':services:core:ts:core-ui'
+include ':services:core:rust:core-agent-harness'
