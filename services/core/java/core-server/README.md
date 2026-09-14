@@ -61,15 +61,26 @@ LLMs as MCP tools.
 `vader.operators.enabled=true` is the master switch — it builds the shared Kubernetes client and
 the RBAC Role/RoleBinding. Each operator then has its own flag; the first is the **Python sandbox
 operator** (`vader.operators.python-sandbox.enabled=true`), which manages the lifecycle of
-isolated `python:3.12-slim` sandbox pods. Both are off by default.
+isolated sandbox pods running `core-python-sandbox-server`
+(`services/core/python/core-python-sandbox-server`) -- a small HTTP server that runs submitted
+code as a subprocess against a persistent per-pod workspace and returns its output, with
+`pandas`/`openpyxl` preinstalled for spreadsheet analysis. Both master and operator flags are off
+by default when unset (e.g. a bare `bootRun`); the Helm chart turns both on.
 
-- MCP: `create_sandbox`, `list_sandboxes`, `delete_sandbox`, served over the Spring AI MCP SSE
-  endpoint (`GET /sse`, `POST /mcp/message`) on this service's port.
+- MCP: `create_sandbox`, `list_sandboxes`, `delete_sandbox`, `run_python_code`, served over the
+  Spring AI MCP SSE endpoint (`GET /sse`, `POST /mcp/message`) on this service's port.
+  `run_python_code` accepts code and an optional map of filename to base64 content to stage into
+  the workspace first (e.g. the output of `get_object_content`) -- the workspace persists across
+  calls, so a file staged once is there for every later call against that sandbox.
 - REST (used by the Helm smoke test and for debugging):
   - `POST /vader/core-server/python-sandbox/sandboxes` — body `{"name": "<optional>"}`.
   - `GET /vader/core-server/python-sandbox/sandboxes`.
+  - `POST /vader/core-server/python-sandbox/sandboxes/{name}/execute` — body
+    `{"code": "...", "files": {"<filename>": "<base64>"}}`; returns
+    `{stdout, stderr, exitCode, timedOut}`.
   - `DELETE /vader/core-server/python-sandbox/sandboxes/{name}`.
-  - `502` when the Kubernetes API call fails.
+  - `502` when the Kubernetes API call fails, or when the sandbox's own HTTP server is
+    unreachable.
 
 ## Object storage
 

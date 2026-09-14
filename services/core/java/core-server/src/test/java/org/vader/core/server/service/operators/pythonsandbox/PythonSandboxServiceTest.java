@@ -17,6 +17,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.models.ManagedResource;
 import org.vader.core.server.models.PythonSandboxSpec;
+import org.vader.core.server.models.SandboxExecutionRequest;
+import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,6 +26,9 @@ class PythonSandboxServiceTest {
 
     @Mock
     private PythonSandboxOperator operator;
+
+    @Mock
+    private SandboxExecutionClient executionClient;
 
     @InjectMocks
     private PythonSandboxService service;
@@ -72,5 +77,16 @@ class PythonSandboxServiceTest {
         this.service.delete("vader-sandbox-a");
 
         verify(this.operator).delete("vader-sandbox-a");
+    }
+
+    @Test
+    void runCode_delegatesToTheExecutionClient() {
+        var request = new SandboxExecutionRequest("print('hi')", Map.of(), null);
+        var expected = new SandboxExecutionResult("hi\n", "", 0, false);
+        when(this.executionClient.execute("vader-sandbox-a", request)).thenReturn(expected);
+
+        var result = this.service.runCode("vader-sandbox-a", request);
+
+        assertThat(result).isEqualTo(expected);
     }
 }

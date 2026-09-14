@@ -10,7 +10,8 @@ import org.vader.common.model.vader.entity.WorkflowStatus;
  *
  * <p>{@code clientPromptId} is a shallow reference to the originating {@link ClientPrompt}
  * rather than an embedded copy, since that prompt's attached files aren't meaningful to
- * re-serialize here.
+ * re-serialize here. {@code result} is the single answer synthesized from every task's own
+ * result once the workflow reaches a terminal status -- not just a list of what each task did.
  */
 public class Workflow extends AbstractModel {
 
@@ -24,6 +25,8 @@ public class Workflow extends AbstractModel {
     private WorkflowStatus status;
 
     private OffsetDateTime completedAt;
+
+    private String result;
 
     @Override
     public String getModelType() {
@@ -60,5 +63,13 @@ public class Workflow extends AbstractModel {
 
     public void setCompletedAt(OffsetDateTime completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public String getResult() {
+        return this.result;
+    }
+
+    public void setResult(String result) {
+        this.result = result;
     }
 }

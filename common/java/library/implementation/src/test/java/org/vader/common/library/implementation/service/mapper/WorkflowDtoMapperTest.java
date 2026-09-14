@@ -40,6 +40,7 @@ class WorkflowDtoMapperTest {
         entity.setId("w1");
         entity.setClientPrompt(clientPrompt);
         entity.setTaskPlan(taskPlan);
+        entity.setResult("The spreadsheet contains quarterly sales figures by region.");
 
         var dto = this.mapper.map(entity);
 
@@ -47,6 +48,8 @@ class WorkflowDtoMapperTest {
         assertThat(dto.getClientPromptId()).isEqualTo("cp1");
         assertThat(dto.getTaskPlan().getId()).isEqualTo("p1");
         assertThat(dto.getTaskPlan().getObjective()).isEqualTo("do the thing");
+        assertThat(dto.getResult())
+            .isEqualTo("The spreadsheet contains quarterly sales figures by region.");
         assertThat(dto.getModelType()).isEqualTo("Workflow");
     }
 

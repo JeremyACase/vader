@@ -1,6 +1,13 @@
 <div class="detail">
   <p class="prompt-text"><strong>Prompt:</strong> {{promptText()}}</p>
 
+  @if (workflow().result; as result) {
+    <div class="final-result">
+      <p class="final-result-label"><strong>Result</strong></p>
+      <p class="final-result-text">{{result}}</p>
+    </div>
+  }
+
   @if (workflow().taskPlan; as taskPlan) {
     @if (taskPlan.reasoning) {
       <p class="reasoning"><strong>Reasoning:</strong> {{taskPlan.reasoning}}</p>

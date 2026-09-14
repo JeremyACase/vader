@@ -4,7 +4,10 @@ import { switchMap } from 'rxjs/operators';
 import { ActiveWorkflowsService } from '../active-workflows.service';
 import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
 
-/** Renders one task attempt's chain-of-thought: its inference turns, in order. */
+/**
+ * Renders one task attempt's outcome: its final result (when the harness reported one) and its
+ * chain-of-thought, the inference turns that led to it, in order.
+ */
 @Component({
   selector: 'app-attempt-row',
   standalone: true,

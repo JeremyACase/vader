@@ -8,6 +8,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.vader.core.server.models.ManagedResource;
 import org.vader.core.server.models.PythonSandboxSpec;
+import org.vader.core.server.models.SandboxExecutionRequest;
+import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
 
 /**
@@ -27,6 +29,9 @@ public class PythonSandboxService {
 
     @Autowired
     private PythonSandboxOperator operator;
+
+    @Autowired
+    private SandboxExecutionClient executionClient;
 
     @Value("${vader.kubernetes.namespace:default}")
     private String namespace;
@@ -60,6 +65,19 @@ public class PythonSandboxService {
      */
     public void delete(final String name) {
         this.operator.delete(name);
+    }
+
+    /**
+     * Runs code inside an existing sandbox, transparently to the request being made over the
+     * network rather than the Kubernetes API the rest of this class uses.
+     *
+     * @param name the exact sandbox name
+     * @param request the code (and any files) to run
+     * @return the run's stdout/stderr/exit code
+     */
+    public SandboxExecutionResult runCode(
+        final String name, final SandboxExecutionRequest request) {
+        return this.executionClient.execute(name, request);
     }
 
     private SandboxInfo toInfo(final ManagedResource resource) {

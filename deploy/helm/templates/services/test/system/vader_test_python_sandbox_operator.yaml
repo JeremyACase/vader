@@ -8,7 +8,9 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     # Only rendered when vader.operators.pythonSandbox.enabled is true. Drives the operator's
     # REST surface (which shares its service layer with the MCP tools) through a full
-    # create -> list -> delete -> list round trip against the real cluster.
+    # create -> list -> execute -> delete -> list round trip against the real cluster,
+    # including a real core-python-sandbox-server call and a check that a staged file
+    # survives across calls.
 spec:
   restartPolicy: Never
   containers:
@@ -42,6 +44,38 @@ spec:
           echo "$BODY"
           echo "$BODY" | grep -q "\"$NAME\"" || { echo "❌ list missing $NAME"; exit 1; }
           echo "✅ list contains $NAME"
+
+          echo "== Run code in the sandbox (retrying until the exec server is ready) =="
+          i=0
+          STATUS=000
+          while [ $i -lt 20 ]; do
+            BODY_FILE=$(mktemp)
+            STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+              -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+              -d '{"code":"print(1 + 1)"}' || true)
+            BODY=$(cat "$BODY_FILE")
+            [ "$STATUS" = "200" ] && echo "$BODY" | grep -q '"exitCode":0' && break
+            i=$((i+1))
+            sleep 3
+          done
+          echo "HTTP $STATUS -- $BODY"
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 running code, got $STATUS"; exit 1; }
+          echo "$BODY" | grep -q '"stdout":"2' || { echo "❌ unexpected stdout: $BODY"; exit 1; }
+          echo "✅ ran code in $NAME and got the expected output"
+
+          echo "== A file staged in one call is still there for a later call =="
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+            -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+            -d '{"code":"pass","files":{"greeting.txt":"aGVsbG8="}}' || true)
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 staging a file, got $STATUS"; exit 1; }
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+            -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+            -d '{"code":"print(open(\"greeting.txt\").read())"}' || true)
+          BODY=$(cat "$BODY_FILE")
+          echo "HTTP $STATUS -- $BODY"
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading staged file, got $STATUS"; exit 1; }
+          echo "$BODY" | grep -q '"stdout":"hello' || { echo "❌ staged file not readable: $BODY"; exit 1; }
+          echo "✅ a file staged in one call was readable in a later call"
 
           echo "== Delete the sandbox =="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \

@@ -154,6 +154,8 @@ data:
           owner-deployment-name: {{ .Values.vader.operators.pythonSandbox.ownerDeploymentName }}
           sandbox:
             image: {{ .Values.vader.operators.pythonSandbox.sandbox.image }}
+            image-pull-policy: {{ .Values.infrastructure.image.pullPolicy }}
+            exec-timeout-seconds: {{ .Values.vader.operators.pythonSandbox.sandbox.execTimeoutSeconds }}
             resources:
               requests:
                 cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.cpu }}

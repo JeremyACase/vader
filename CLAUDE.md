@@ -15,6 +15,7 @@ prompts and displays results.
 | `services/core/java/core-server` | Spring Boot service (orchestration, operators, storage, MCP) |
 | `services/core/ts/core-ui` | Angular frontend |
 | `services/core/rust/core-agent-harness` | Ephemeral k8s Job: executes exactly one task-graph subtask. All LLM calls are proxied through `core-server` — the harness never talks to an LLM directly. |
+| `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server executing agent-submitted code as a subprocess against a persistent per-pod workspace, reachable only from `core-server`. |
 
 ## Build and run
 
@@ -33,6 +34,10 @@ npm start
 
 # Agent harness: build/test/lint directly with cargo (also wired into ./gradlew build)
 cd services/core/rust/core-agent-harness && cargo build
+
+# Python sandbox exec server: lint/test run dockerized (also wired into ./gradlew build) --
+# no host Python install required
+./gradlew :services:core:python:core-python-sandbox-server:build
 ```
 
 Checkstyle runs on every build. Config is in `common/java/checkstyle/`. The project follows
@@ -127,7 +132,8 @@ The same complexity and pattern rules apply as Java. Additional specifics:
 
 ### Python
 
-Python services do not exist yet. When added, follow these conventions:
+`services/core/python/core-python-sandbox-server` is the first Python service and the reference
+implementation for these conventions:
 
 - **Full type hints** on every function signature and class attribute. Use `from __future__ import
   annotations` at the top of every module. Avoid `Any` from `typing` except at true system
@@ -263,7 +269,8 @@ A bad entry reads like an annotated file listing.
 | `vader.orchestrator.local.model` | — | Ollama model name |
 | `vader.orchestrator.local.fallback-to-static` | `true` | Return static plan when LLM unreachable |
 | `vader.operators.enabled` | `true` | Master switch for Kubernetes operators. Set to `false` where no cluster is reachable (unit/integration test runs, CI) |
-| `vader.operators.python-sandbox.enabled` | `false` | Python sandbox operator |
+| `vader.operators.python-sandbox.enabled` | `true` | Python sandbox operator |
+| `vader.operators.python-sandbox.sandbox.exec-timeout-seconds` | `30` | Ceiling on one `run_python_code` call, enforced by `core-python-sandbox-server` itself regardless of what a caller requests |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
 | `vader.mcp.backpressure.enabled` | `true` | Expose inbox/outbox backpressure tools over MCP |
 | `vader.storage.type` | `database` | `database` or `minio`; picks the `InterfaceFileStorageStrategy` backing both upload and the object-storage download endpoint/tool |
@@ -282,6 +289,6 @@ A bad entry reads like an annotated file listing.
 | `vader.agent-harness.max-tokens` | `200000` | Token cap handed to each harness, enforced server-side |
 | `vader.agent-harness.deadline-seconds` | `600` | Wall-clock deadline handed to each harness; also the Job's `activeDeadlineSeconds` |
 | `vader.agent-harness.max-attempts-per-task` | `3` | Retries (fresh `TaskAttempt` + Job) before a task is permanently failed |
-| `vader.agent-harness.ttl-seconds-after-finished` | `3600` | How long a finished harness Job sticks around before Kubernetes garbage-collects it |
+| `vader.agent-harness.ttl-seconds-after-finished` | `3600` | Backstop only: `AgentHarnessJobCleanupListener` deletes a finished Job as soon as its `TaskAttempt` settles, regardless of this value; Kubernetes only reaches this TTL if that explicit delete didn't run |
 | `vader.agent-harness.reaper.poll-interval-ms` | `30000` | How often to scan for attempts a harness will never report back on |
 | `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |

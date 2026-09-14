@@ -13,14 +13,17 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.vader.core.server.service.operators.AbstractOperator;
 
 /**
  * Builds the Kubernetes {@link Deployment} and {@link Service} manifests that make up one Python
  * sandbox. Mirrors ubiquia's {@code BeliefStateDeploymentBuilder}, using the fabric8 builder DSL.
  *
- * <p>The sandbox container simply idles ({@code sleep infinity}); this cut manages lifecycle only,
- * so nothing runs code inside it yet. The Service and its {@code exec} port are created now so the
- * shape is stable when code-execution proxying is added later.</p>
+ * <p>The sandbox container runs {@code core-python-sandbox-server}'s own image entrypoint --
+ * a small HTTP server exposing {@code /execute} -- so no command override is needed here. Its
+ * readiness and liveness probes hit that server's {@code /health} endpoint on the same
+ * {@code exec} port the Service exposes, so {@link AbstractOperator}'s "Running" phase means the
+ * server can actually accept requests, not just that the container process started.</p>
  */
 @Component
 public class PythonSandboxManifestBuilder {
@@ -28,10 +31,20 @@ public class PythonSandboxManifestBuilder {
     private static final String CONTAINER_NAME = "sandbox";
     private static final String PORT_NAME = "exec";
     private static final int EXEC_PORT = 8888;
+    private static final String HEALTH_PATH = "/health";
     private static final long RUN_AS_USER = 1000L;
+    private static final String DEFAULT_IMAGE =
+        "jeremyacase/vader-core-python-sandbox-server:latest";
 
-    @Value("${vader.operators.python-sandbox.sandbox.image:python:3.12-slim}")
+    @Value("${vader.operators.python-sandbox.sandbox.image:" + DEFAULT_IMAGE + "}")
     private String image;
+
+    // Same concern core-server/core-ui's own Deployments already solve via
+    // infrastructure.image.pullPolicy: without this, a "latest"-tagged image defaults to
+    // Always, so a dev/kind cluster would try to pull from Docker Hub instead of using the
+    // image `kind load docker-image` already staged locally.
+    @Value("${vader.operators.python-sandbox.sandbox.image-pull-policy:IfNotPresent}")
+    private String imagePullPolicy;
 
     @Value("${vader.operators.python-sandbox.sandbox.resources.requests.cpu:100m}")
     private String cpuRequest;
@@ -44,6 +57,9 @@ public class PythonSandboxManifestBuilder {
 
     @Value("${vader.operators.python-sandbox.sandbox.resources.limits.memory:256Mi}")
     private String memoryLimit;
+
+    @Value("${vader.operators.python-sandbox.sandbox.exec-timeout-seconds:30}")
+    private String execTimeoutSeconds;
 
     /**
      * Builds both manifests for the sandbox named {@code name}.
@@ -114,17 +130,37 @@ public class PythonSandboxManifestBuilder {
         return new ContainerBuilder()
             .withName(CONTAINER_NAME)
             .withImage(this.image)
-            .withCommand("sleep", "infinity")
+            .withImagePullPolicy(this.imagePullPolicy)
             .addNewPort()
                 .withName(PORT_NAME)
                 .withContainerPort(EXEC_PORT)
             .endPort()
+            .addNewEnv()
+                .withName("SANDBOX_EXEC_MAX_TIMEOUT_SECONDS")
+                .withValue(this.execTimeoutSeconds)
+            .endEnv()
             .withNewResources()
                 .addToRequests("cpu", new Quantity(this.cpuRequest))
                 .addToRequests("memory", new Quantity(this.memoryRequest))
                 .addToLimits("cpu", new Quantity(this.cpuLimit))
                 .addToLimits("memory", new Quantity(this.memoryLimit))
             .endResources()
+            .withNewReadinessProbe()
+                .withNewHttpGet()
+                    .withPath(HEALTH_PATH)
+                    .withPort(new IntOrString(EXEC_PORT))
+                .endHttpGet()
+                .withInitialDelaySeconds(2)
+                .withPeriodSeconds(5)
+            .endReadinessProbe()
+            .withNewLivenessProbe()
+                .withNewHttpGet()
+                    .withPath(HEALTH_PATH)
+                    .withPort(new IntOrString(EXEC_PORT))
+                .endHttpGet()
+                .withInitialDelaySeconds(10)
+                .withPeriodSeconds(15)
+            .endLivenessProbe()
             .withNewSecurityContext()
                 .withRunAsNonRoot(true)
                 .withRunAsUser(RUN_AS_USER)

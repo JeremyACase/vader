@@ -50,6 +50,8 @@ export interface Workflow {
   clientPromptId: string;
   taskPlan?: TaskPlan;
   status: WorkflowStatus;
+  /** The single answer synthesized from every task's own result, once the workflow is terminal. */
+  result?: string;
 }
 
 /**

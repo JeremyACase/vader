@@ -16,14 +16,16 @@ class PythonSandboxManifestBuilderTest {
     void setUp() {
         this.builder = new PythonSandboxManifestBuilder();
         ReflectionTestUtils.setField(this.builder, "image", "python:3.12-slim");
+        ReflectionTestUtils.setField(this.builder, "imagePullPolicy", "IfNotPresent");
         ReflectionTestUtils.setField(this.builder, "cpuRequest", "100m");
         ReflectionTestUtils.setField(this.builder, "memoryRequest", "128Mi");
         ReflectionTestUtils.setField(this.builder, "cpuLimit", "500m");
         ReflectionTestUtils.setField(this.builder, "memoryLimit", "256Mi");
+        ReflectionTestUtils.setField(this.builder, "execTimeoutSeconds", "30");
     }
 
     @Test
-    void buildDeployment_runsAnIdlingHardenedContainer() {
+    void buildDeployment_runsTheExecServerImageWithHealthProbes() {
         Deployment deployment = this.builder.buildDeployment("vader-sandbox-a");
 
         assertThat(deployment.getMetadata().getName()).isEqualTo("vader-sandbox-a");
@@ -31,8 +33,20 @@ class PythonSandboxManifestBuilderTest {
 
         var container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
         assertThat(container.getImage()).isEqualTo("python:3.12-slim");
-        assertThat(container.getCommand()).containsExactly("sleep", "infinity");
+        assertThat(container.getImagePullPolicy()).isEqualTo("IfNotPresent");
+        assertThat(container.getCommand()).isNullOrEmpty();
         assertThat(container.getPorts().get(0).getContainerPort()).isEqualTo(8888);
+        assertThat(container.getEnv())
+            .anyMatch(env -> "SANDBOX_EXEC_MAX_TIMEOUT_SECONDS".equals(env.getName())
+                && "30".equals(env.getValue()));
+
+        var readiness = container.getReadinessProbe();
+        assertThat(readiness.getHttpGet().getPath()).isEqualTo("/health");
+        assertThat(readiness.getHttpGet().getPort().getIntVal()).isEqualTo(8888);
+
+        var liveness = container.getLivenessProbe();
+        assertThat(liveness.getHttpGet().getPath()).isEqualTo("/health");
+        assertThat(liveness.getHttpGet().getPort().getIntVal()).isEqualTo(8888);
 
         var security = container.getSecurityContext();
         assertThat(security.getRunAsNonRoot()).isTrue();

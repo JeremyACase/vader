@@ -32,3 +32,19 @@
 .turn-response {
   border-color: #34405c;
 }
+
+.result-label {
+  margin: 0 0 0.2rem;
+  font-size: 0.85rem;
+}
+
+.result-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0f1115;
+  border: 1px solid #2f5c47;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.6rem;
+}

@@ -16,6 +16,26 @@
   color: #d5d8e0;
 }
 
+.final-result {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.75rem;
+  background: #0f1115;
+  border: 1px solid #2f5c47;
+  border-radius: 6px;
+}
+
+.final-result-label {
+  margin: 0 0 0.3rem;
+  color: #6fcf97;
+  font-size: 0.85rem;
+}
+
+.final-result-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .task-list {
   list-style: none;
   margin: 0.5rem 0 0;

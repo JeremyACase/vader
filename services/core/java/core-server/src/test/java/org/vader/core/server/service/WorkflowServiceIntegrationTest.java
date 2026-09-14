@@ -20,6 +20,7 @@ import org.vader.core.server.repository.TaskPlanRepository;
 import org.vader.core.server.repository.WorkflowRepository;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
 import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
 @SpringBootTest
 @Transactional
@@ -55,6 +56,9 @@ class WorkflowServiceIntegrationTest {
 
     @MockitoBean
     private InterfaceInferenceGatewayStrategy inferenceGateway;
+
+    @MockitoBean
+    private InterfaceWorkflowSynthesisStrategy synthesisStrategy;
 
     @Autowired
     private WorkflowService workflowService;

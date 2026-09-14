@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.vader.core.exceptions.SandboxExecutionException;
+import org.vader.core.server.models.SandboxExecutionRequest;
+import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
@@ -75,6 +78,19 @@ public class PythonSandboxController {
     }
 
     /**
+     * Runs code inside a sandbox and returns its output.
+     *
+     * @param name the exact sandbox name
+     * @param request the code (and any files) to run
+     * @return the run's stdout/stderr/exit code
+     */
+    @PostMapping("/{name}/execute")
+    public ResponseEntity<SandboxExecutionResult> execute(
+        @PathVariable final String name, @RequestBody final SandboxExecutionRequest request) {
+        return ResponseEntity.ok(this.service.runCode(name, request));
+    }
+
+    /**
      * Maps a Kubernetes API failure to a 502, since the failure originates upstream of this
      * service rather than in the caller's request.
      *
@@ -87,6 +103,21 @@ public class PythonSandboxController {
         logger.warn("Kubernetes call failed: {}", exception.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
             .body(Map.of("error", "kubernetes_error", "message", exception.getMessage()));
+    }
+
+    /**
+     * Maps a sandbox execution failure (unreachable, transport error) to a 502, mirroring how a
+     * Kubernetes API failure above is treated -- upstream of this service, not the caller's fault.
+     *
+     * @param exception the execution failure
+     * @return a 502 response describing the failure
+     */
+    @ExceptionHandler(SandboxExecutionException.class)
+    public ResponseEntity<Map<String, String>> handleExecutionFailure(
+        final SandboxExecutionException exception) {
+        logger.warn("Sandbox execution failed: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+            .body(Map.of("error", "sandbox_execution_failed", "message", exception.getMessage()));
     }
 
     /**

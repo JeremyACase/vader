@@ -49,6 +49,9 @@ public class TaskGraphScheduler {
     @Autowired
     private TaskAssignmentOutbox taskAssignmentOutbox;
 
+    @Autowired
+    private WorkflowSynthesisService workflowSynthesisService;
+
     @Value("${vader.agent-harness.max-attempts-per-task:3}")
     private int maxAttemptsPerTask;
 
@@ -162,6 +165,7 @@ public class TaskGraphScheduler {
             .allMatch(p -> p.state() == TaskState.DONE_SUCCEEDED);
         workflow.setStatus(allSucceeded ? WorkflowStatus.SUCCEEDED : WorkflowStatus.FAILED);
         workflow.setCompletedAt(OffsetDateTime.now());
+        workflow.setResult(this.workflowSynthesisService.synthesize(workflow));
         this.workflowRepository.save(workflow);
         logger.info("Workflow {} completed with status {}",
             workflow.getId(), workflow.getStatus());

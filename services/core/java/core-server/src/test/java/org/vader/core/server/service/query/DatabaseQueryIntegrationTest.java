@@ -25,6 +25,7 @@ import org.vader.core.server.models.EntityDescription;
 import org.vader.core.server.service.io.ClientPromptInbox;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
 import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -44,6 +45,9 @@ class DatabaseQueryIntegrationTest {
 
     @MockitoBean
     private InterfaceInferenceGatewayStrategy inferenceGateway;
+
+    @MockitoBean
+    private InterfaceWorkflowSynthesisStrategy synthesisStrategy;
 
     @Autowired
     private MockMvc mockMvc;

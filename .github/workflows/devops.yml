@@ -13,6 +13,7 @@ env:
     services/core/java/core-server
     services/core/ts/core-ui
     services/core/rust/core-agent-harness
+    services/core/python/core-python-sandbox-server
 
 jobs:
 

@@ -1,4 +1,8 @@
 <div class="transcript">
+  @if (attempt().result) {
+    <p class="result-label"><strong>Result:</strong></p>
+    <pre class="result-text">{{attempt().result}}</pre>
+  }
   @if (!transcripts().length) {
     <p class="muted">No transcript recorded yet.</p>
   }

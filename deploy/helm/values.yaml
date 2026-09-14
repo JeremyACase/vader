@@ -113,14 +113,21 @@ vader:
     enabled: true
     pythonSandbox:
       # When true (and operators.enabled is true), core-server runs the Python sandbox
-      # operator and publishes its create/list/delete tools over the MCP SSE endpoint.
+      # operator and publishes its create/list/delete/run tools over the MCP SSE endpoint.
       enabled: true
       # The Deployment running core-server; the operator watches it and cascade-deletes every
       # sandbox if core-server itself is removed from the cluster.
       ownerDeploymentName: vader-core-server
       sandbox:
-        # Container image every sandbox pod runs.
-        image: python:3.12-slim
+        # Container image every sandbox pod runs: core-python-sandbox-server, a small HTTP
+        # server (built from services/core/python/core-python-sandbox-server) that runs
+        # submitted code as a subprocess against a persistent per-pod workspace and returns its
+        # stdout/stderr/exit code. pandas/openpyxl are preinstalled so an agent can analyze an
+        # uploaded spreadsheet with no setup step.
+        image: jeremyacase/vader-core-python-sandbox-server:latest
+        # Ceiling on how long a single run_python_code call may run inside the sandbox, in
+        # seconds -- enforced by the sandbox server itself regardless of what a caller requests.
+        execTimeoutSeconds: 30
         resources:
           requests:
             cpu: 100m

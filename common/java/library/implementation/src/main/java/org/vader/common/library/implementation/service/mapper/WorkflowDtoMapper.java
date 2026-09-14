@@ -32,6 +32,7 @@ public class WorkflowDtoMapper extends GenericDtoMapper<WorkflowEntity, Workflow
             to.setTaskPlan(this.taskPlanDtoMapper.map(from.getTaskPlan()));
             to.setStatus(from.getStatus());
             to.setCompletedAt(from.getCompletedAt());
+            to.setResult(from.getResult());
         }
         return to;
     }

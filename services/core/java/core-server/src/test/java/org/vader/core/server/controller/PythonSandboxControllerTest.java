@@ -16,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.vader.core.exceptions.SandboxExecutionException;
+import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
@@ -67,5 +69,32 @@ class PythonSandboxControllerTest {
         this.mockMvc.perform(get("/vader/core-server/python-sandbox/sandboxes"))
             .andExpect(status().isBadGateway())
             .andExpect(jsonPath("$.error").value("kubernetes_error"));
+    }
+
+    @Test
+    void execute_returnsTheRunResult() throws Exception {
+        when(this.service.runCode(any(), any())).thenReturn(
+            new SandboxExecutionResult("hi\n", "", 0, false));
+
+        this.mockMvc.perform(
+                post("/vader/core-server/python-sandbox/sandboxes/vader-sandbox-a/execute")
+                    .contentType("application/json")
+                    .content("{\"code\":\"print('hi')\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.stdout").value("hi\n"))
+            .andExpect(jsonPath("$.exitCode").value(0));
+    }
+
+    @Test
+    void whenSandboxExecutionFails_returns502() throws Exception {
+        doThrow(new SandboxExecutionException("connection refused", null))
+            .when(this.service).runCode(any(), any());
+
+        this.mockMvc.perform(
+                post("/vader/core-server/python-sandbox/sandboxes/vader-sandbox-a/execute")
+                    .contentType("application/json")
+                    .content("{\"code\":\"print('hi')\"}"))
+            .andExpect(status().isBadGateway())
+            .andExpect(jsonPath("$.error").value("sandbox_execution_failed"));
     }
 }

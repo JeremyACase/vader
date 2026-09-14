@@ -75,4 +75,26 @@ public class InboxAsyncConfig {
         executor.setThreadNamePrefix("task-graph-scheduler-");
         return executor;
     }
+
+    /**
+     * The dedicated executor {@code AgentHarnessJobCleanupListener} hands Job deletion off to.
+     *
+     * <p>Deliberately separate from {@code taskGraphSchedulerExecutor}: a slow or stuck
+     * Kubernetes delete call must never delay task-graph progression, which is the more urgent
+     * of the two. Unlike that executor's unbounded queue, dropping a queued cleanup here under a
+     * genuine burst is an acceptable degradation -- the Job's own {@code ttlSecondsAfterFinished}
+     * still cleans it up eventually, just later than the common case.</p>
+     *
+     * @return the executor
+     */
+    @Bean("agentHarnessJobCleanupExecutor")
+    public TaskExecutor agentHarnessJobCleanupExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("agent-harness-job-cleanup-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        return executor;
+    }
 }

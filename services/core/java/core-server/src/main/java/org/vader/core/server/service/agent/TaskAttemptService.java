@@ -191,7 +191,7 @@ public class TaskAttemptService {
         this.taskAttemptRepository.save(attempt);
 
         var workflowId = attempt.getTask().getTaskGraph().getTaskPlan().getWorkflow().getId();
-        this.eventPublisher.publishEvent(new TaskAttemptSettledEvent(workflowId));
+        this.eventPublisher.publishEvent(new TaskAttemptSettledEvent(workflowId, attempt.getId()));
     }
 
     private void rejectIfTerminal(final TaskAttemptEntity attempt) {
