@@ -3,6 +3,24 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0]
+### Added
+- **Object storage retrieval.** A previously-uploaded file's content is now reachable regardless
+  of whether it lives in MinIO or the database. A REST endpoint streams it back honoring HTTP
+  Range requests — including genuine multi-range `multipart/byteranges` responses — via the same
+  resource-serving engine Spring uses for static assets, so a large file can be fetched in parts
+  across several requests instead of one large response. An MCP tool (`get_object_content`) lets
+  agents fetch an object's content directly as base64, transparently to whichever storage
+  strategy is active; objects above a configurable size are rejected with a pointer to the REST
+  endpoint instead, so one tool result can't blow the calling model's context budget.
+### Fixed
+- **The local LLM inference gateway used by dispatched agent-harness tasks was completely
+  broken.** Every task attempt failed immediately with "No CallAdvisors available to execute" —
+  reading both the response text and its token usage off one chat call re-ran an
+  already-consumed internal state in the AI client library — and was silently retried until it
+  exhausted its attempts, so no task ever actually completed against a local Ollama instance.
+  Task attempts now succeed normally.
+
 ## [0.13.0]
 ### Changed
 - The Kubernetes operator subsystem, and the agent-harness operator specifically, are now

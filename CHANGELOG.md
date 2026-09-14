@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0]
+### Added
+- **Object storage retrieval.** A file attached to a prompt can now be read back, not just
+  written: a REST endpoint downloads it (with HTTP Range support for fetching large files in
+  parts) and a new MCP tool (`get_object_content`, `vader.mcp.object-storage.enabled`, default
+  on) lets agents fetch its content directly, transparently to whether the deployment is backed
+  by MinIO or the database.
+### Fixed
+- **Real task execution against a local Ollama instance was silently broken.** Every
+  agent-harness task dispatched under the `local` orchestrator failed immediately and retried
+  until it exhausted its attempts, due to a Spring AI usage bug in the inference gateway. Task
+  attempts now complete successfully.
+
 ## [0.13.0]
 ### Added
 - **Immediate workflow feedback in the UI.** Submitting a prompt now shows a placeholder in the

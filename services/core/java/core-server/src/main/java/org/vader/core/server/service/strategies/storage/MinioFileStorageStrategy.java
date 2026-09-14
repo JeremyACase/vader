@@ -1,6 +1,7 @@
 package org.vader.core.server.service.strategies.storage;
 
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -11,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
@@ -80,9 +82,25 @@ public class MinioFileStorageStrategy implements InterfaceFileStorageStrategy {
 
         var entity = new ObjectMetadataEntity();
         entity.setBucketName(this.bucket);
+        entity.setObjectKey(objectName);
         entity.setOriginalFilename(file.getOriginalFilename());
         entity.setContentType(file.getContentType());
         entity.setSize(file.getSize());
         return entity;
+    }
+
+    @Override
+    public Resource retrieve(final ObjectMetadataEntity metadata) {
+        try {
+            var stream = this.minioClient.getObject(
+                GetObjectArgs.builder()
+                    .bucket(metadata.getBucketName())
+                    .object(metadata.getObjectKey())
+                    .build());
+            return new SizedInputStreamResource(stream, metadata.getSize());
+        } catch (Exception e) {
+            throw new FileStorageException(
+                "Could not download '" + metadata.getOriginalFilename() + "' from MinIO", e);
+        }
     }
 }
