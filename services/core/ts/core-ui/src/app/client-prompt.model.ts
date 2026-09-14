@@ -36,14 +36,20 @@ export interface TaskPlan {
   taskGraph: TaskGraph;
 }
 
+/** Equivalent of org.vader.common.model.vader.entity.WorkflowStatus. */
+export type WorkflowStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+
 /**
  * Equivalent of org.vader.common.model.vader.dto.Workflow: the decomposition the server
  * produced for a submitted prompt.
  */
 export interface Workflow {
   id?: string;
+  createdAt?: string;
+  completedAt?: string;
   clientPromptId: string;
   taskPlan?: TaskPlan;
+  status: WorkflowStatus;
 }
 
 /**

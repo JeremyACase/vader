@@ -15,13 +15,15 @@ import org.vader.core.server.service.operators.AbstractOperator;
 /**
  * The first concrete vader operator: manages the lifecycle of isolated Python sandbox pods.
  *
- * <p>Active only when {@code vader.operators.python-sandbox.enabled} is {@code true}. Startup and
- * shutdown are driven by {@link PythonSandboxOperatorInitializer} and {@link #onShutdown()}.</p>
+ * <p>Active only when both {@code vader.operators.enabled} (the master switch) and
+ * {@code vader.operators.python-sandbox.enabled} are {@code true} -- listing both in one
+ * condition, rather than this operator's flag alone, is what actually enforces the master switch
+ * instead of just documenting it. Startup and shutdown are driven by
+ * {@link PythonSandboxOperatorInitializer} and {@link #onShutdown()}.</p>
  */
 @Service
 @ConditionalOnProperty(
-    prefix = "vader.operators.python-sandbox",
-    name = "enabled",
+    name = {"vader.operators.enabled", "vader.operators.python-sandbox.enabled"},
     havingValue = "true",
     matchIfMissing = false)
 public class PythonSandboxOperator extends AbstractOperator<PythonSandboxSpec> {

@@ -1,22 +1,26 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, of, timer } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 import { ClientPromptService } from './client-prompt.service';
-import { BackPressure, Workflow } from './client-prompt.model';
+import { BackPressure, OrchestratorError } from './client-prompt.model';
+import { PendingWorkflowRegistry } from './workflow-updates/pending-workflow.registry';
+import { WorkflowPanelComponent } from './workflow-panel/workflow-panel.component';
 
-const POLL_INTERVAL_MS = 1500;
-const POLL_TIMEOUT_MS = 60_000;
+const BACKPRESSURE_POLL_INTERVAL_MS = 5000;
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, WorkflowPanelComponent],
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
 export class App {
   private svc = inject(ClientPromptService);
+  private pendingWorkflows = inject(PendingWorkflowRegistry);
   private fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   title = 'Vader Core UI';
@@ -40,10 +44,21 @@ export class App {
 
   sending = signal(false);
   sent = signal(false);
-  pending = signal(false);
   error = signal<string | null>(null);
-  plan = signal<Workflow | null>(null);
-  backPressure = signal<BackPressure | null>(null);
+
+  /** The most recently submitted prompt's id, so the panel can auto-expand its workflow. */
+  lastSubmittedPromptId = signal<string | null>(null);
+
+  /** True while a submitted prompt has no Workflow row back yet — blocks a second submission so
+   *  the panel only ever has to render one in-flight placeholder at a time. */
+  readonly hasPendingWorkflow = computed(() => this.pendingWorkflows.pending() !== null);
+
+  backPressure = toSignal(
+    timer(0, BACKPRESSURE_POLL_INTERVAL_MS).pipe(
+      switchMap(() => this.svc.getBackpressure().pipe(catchError(() => of(null))))
+    ),
+    { initialValue: null as BackPressure | null }
+  );
 
   constructor() {
     document.addEventListener('keydown', (e) => {
@@ -64,13 +79,16 @@ export class App {
     this.files.set(selected);
   }
 
+  /** Submits the prompt. Blocked while a previous prompt is still waiting on its Workflow row,
+   *  so at most one workflow is ever in flight from the form's perspective — that lets the panel
+   *  render an unambiguous placeholder for it until the server responds with the hydrated
+   *  workflow and its UUID. */
   async submit() {
     this.error.set(null);
     this.sent.set(false);
-    this.plan.set(null);
-    this.pending.set(false);
-    this.backPressure.set(null);
-    if (this.text.invalid || this.sending() || this.fileError()) return;
+    if (this.text.invalid || this.sending() || this.fileError() || this.hasPendingWorkflow()) {
+      return;
+    }
 
     this.sending.set(true);
     try {
@@ -83,46 +101,27 @@ export class App {
         throw new Error(`Unexpected status: ${res.status}`);
       }
       this.sent.set(true);
+      this.lastSubmittedPromptId.set(res.body.id);
+      this.pendingWorkflows.register(res.body.id);
       this.text.reset('');
       this.files.set([]);
       const inputEl = this.fileInput();
       if (inputEl) inputEl.nativeElement.value = '';
-      await this.awaitWorkflow(res.body.id);
-    } catch (e: any) {
-      const msg = e?.error?.message || e?.message || 'Failed to send prompt';
-      this.error.set(String(msg));
+    } catch (e: unknown) {
+      this.error.set(this.extractErrorMessage(e));
     } finally {
       this.sending.set(false);
-      this.pending.set(false);
     }
   }
 
-  private async awaitWorkflow(promptId: string): Promise<void> {
-    this.pending.set(true);
-    const deadline = Date.now() + POLL_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const workflow = await firstValueFrom(this.svc.getWorkflowByPromptId(promptId));
-      if (workflow?.taskPlan) {
-        this.plan.set(workflow);
-        return;
-      }
-      this.backPressure.set(await this.readBackpressure());
-      await this.delay(POLL_INTERVAL_MS);
+  private extractErrorMessage(e: unknown): string {
+    if (e instanceof HttpErrorResponse) {
+      const body = e.error as OrchestratorError | null;
+      return body?.message ?? e.message;
     }
-    throw new Error(
-      'Timed out waiting for the decomposition. It may still complete — query the workflow later.'
-    );
-  }
-
-  private async readBackpressure(): Promise<BackPressure | null> {
-    try {
-      return await firstValueFrom(this.svc.getBackpressure());
-    } catch {
-      return null;
+    if (e instanceof Error) {
+      return e.message;
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return 'Failed to send prompt';
   }
 }

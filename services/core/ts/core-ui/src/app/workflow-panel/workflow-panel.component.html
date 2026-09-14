@@ -1,0 +1,20 @@
+<section class="card panel">
+  <h2>Workflows</h2>
+  @if (!sortedWorkflows().length) {
+    <p class="muted">No workflows yet.</p>
+  }
+  <ul class="workflow-list">
+    @for (workflow of sortedWorkflows(); track workflow.id) {
+      <li class="workflow-row">
+        <button type="button" class="workflow-summary" (click)="toggle(workflow.clientPromptId)">
+          <span class="chevron">{{isExpanded(workflow.clientPromptId) ? '▾' : '▸'}}</span>
+          <span class="status-badge" [attr.data-status]="workflow.status">{{workflow.status}}</span>
+          <span class="workflow-objective">{{workflow.taskPlan?.objective ?? 'Decomposing…'}}</span>
+        </button>
+        @if (isExpanded(workflow.clientPromptId)) {
+          <app-workflow-detail [workflow]="workflow" />
+        }
+      </li>
+    }
+  </ul>
+</section>

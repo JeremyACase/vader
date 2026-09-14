@@ -1,0 +1,43 @@
+.panel {
+  padding: 1.25rem 1.5rem;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+.workflow-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workflow-row {
+  border-top: 1px solid #2a2e38;
+  padding: 0.5rem 0;
+}
+
+.workflow-row:first-child {
+  border-top: none;
+}
+
+.workflow-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workflow-objective {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
