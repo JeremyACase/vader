@@ -3,6 +3,18 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0]
+### Added
+- A submitted prompt now appears in the workflows panel immediately as a "Decomposing…"
+  placeholder, rather than leaving the panel unchanged until the server finishes decomposition and
+  the next poll surfaces the real workflow. The placeholder is dropped in favor of the real
+  workflow row the moment it comes back.
+### Changed
+- The submit form now allows only one prompt in flight at a time: sending is blocked, and the
+  button reads "Waiting on previous prompt…", until the current prompt's workflow has come back
+  from the server. This keeps the panel's placeholder-to-real handoff unambiguous instead of
+  juggling several in-flight prompts at once.
+
 ## [0.11.0]
 ### Added
 - An "Active workflows" panel that lists every workflow currently running, independent of the

@@ -6,6 +6,7 @@ import { firstValueFrom, of, timer } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { ClientPromptService } from './client-prompt.service';
 import { BackPressure, OrchestratorError } from './client-prompt.model';
+import { PendingWorkflowRegistry } from './workflow-updates/pending-workflow.registry';
 import { WorkflowPanelComponent } from './workflow-panel/workflow-panel.component';
 
 const BACKPRESSURE_POLL_INTERVAL_MS = 5000;
@@ -19,6 +20,7 @@ const BACKPRESSURE_POLL_INTERVAL_MS = 5000;
 })
 export class App {
   private svc = inject(ClientPromptService);
+  private pendingWorkflows = inject(PendingWorkflowRegistry);
   private fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   title = 'Vader Core UI';
@@ -47,6 +49,10 @@ export class App {
   /** The most recently submitted prompt's id, so the panel can auto-expand its workflow. */
   lastSubmittedPromptId = signal<string | null>(null);
 
+  /** True while a submitted prompt has no Workflow row back yet — blocks a second submission so
+   *  the panel only ever has to render one in-flight placeholder at a time. */
+  readonly hasPendingWorkflow = computed(() => this.pendingWorkflows.pending() !== null);
+
   backPressure = toSignal(
     timer(0, BACKPRESSURE_POLL_INTERVAL_MS).pipe(
       switchMap(() => this.svc.getBackpressure().pipe(catchError(() => of(null))))
@@ -73,13 +79,16 @@ export class App {
     this.files.set(selected);
   }
 
-  /** Submits the prompt and returns immediately — it does not wait for decomposition, so the
-   *  form stays usable while any number of workflows are running. Progress is tracked in the
-   *  active-workflows panel instead. */
+  /** Submits the prompt. Blocked while a previous prompt is still waiting on its Workflow row,
+   *  so at most one workflow is ever in flight from the form's perspective — that lets the panel
+   *  render an unambiguous placeholder for it until the server responds with the hydrated
+   *  workflow and its UUID. */
   async submit() {
     this.error.set(null);
     this.sent.set(false);
-    if (this.text.invalid || this.sending() || this.fileError()) return;
+    if (this.text.invalid || this.sending() || this.fileError() || this.hasPendingWorkflow()) {
+      return;
+    }
 
     this.sending.set(true);
     try {
@@ -93,6 +102,7 @@ export class App {
       }
       this.sent.set(true);
       this.lastSubmittedPromptId.set(res.body.id);
+      this.pendingWorkflows.register(res.body.id);
       this.text.reset('');
       this.files.set([]);
       const inputEl = this.fileInput();

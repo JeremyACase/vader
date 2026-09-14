@@ -9,8 +9,8 @@
 
     <section class="card">
       <h1>Submit a client prompt</h1>
-      <p class="muted">Send a prompt, with optional file attachments, to core-server. You can submit
-        another prompt at any time — it doesn't wait for earlier ones to finish.</p>
+      <p class="muted">Send a prompt, with optional file attachments, to core-server. Only one
+        prompt may be in flight at a time — send another once this one's workflow comes back.</p>
 
       <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
         <textarea
@@ -50,12 +50,14 @@
 
           <button type="submit"
                   (click)="submit()"
-                  [disabled]="text.invalid || sending() || !!fileError()"
+                  [disabled]="text.invalid || sending() || !!fileError() || hasPendingWorkflow()"
                   [attr.aria-busy]="sending()">
-            @if (!sending()) {
-              <span>Send prompt</span>
-            } @else {
+            @if (sending()) {
               <span>Sending…</span>
+            } @else if (hasPendingWorkflow()) {
+              <span>Waiting on previous prompt…</span>
+            } @else {
+              <span>Send prompt</span>
             }
           </button>
         </div>

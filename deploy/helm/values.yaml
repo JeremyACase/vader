@@ -123,7 +123,7 @@ vader:
       # When true (and operators.enabled is true), core-server runs the agent-harness operator:
       # it creates one Job per dispatched TaskAttempt, and does nothing else on its own -- the
       # scheduler decides *when* to dispatch, this only turns a dispatch into a real Job.
-      enabled: false
+      enabled: true
       # The Deployment running core-server; the operator watches it and cascade-deletes every
       # in-flight harness Job if core-server itself is removed from the cluster.
       ownerDeploymentName: vader-core-server

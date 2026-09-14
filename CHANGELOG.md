@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0]
+### Added
+- **Immediate workflow feedback in the UI.** Submitting a prompt now shows a placeholder in the
+  workflows panel the instant it is accepted, instead of leaving the panel empty until
+  decomposition finishes and the next poll picks it up. Only one prompt may be in flight from the
+  submit form at a time, so the panel always has an unambiguous placeholder to show and swap out
+  once the real workflow comes back.
+### Fixed
+- **The agent-harness operator is enabled by default in the Helm chart again.** A stale chart
+  default had it turned off regardless of `core-server`'s own default, so every dispatched task
+  attempt silently went nowhere until the reaper eventually timed it out. Deployed workflows now
+  actually execute.
+
 ## [0.12.0]
 ### Added
 - **Agent harness operator — end-to-end task execution.** `core-server` now dispatches
