@@ -2,9 +2,12 @@ package org.vader.core.server.service.strategies.storage;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import org.vader.common.model.vader.entity.FileContentEntity;
@@ -31,6 +34,16 @@ public class DatabaseFileStorageStrategy implements InterfaceFileStorageStrategy
     @Override
     public List<ObjectMetadataEntity> store(final List<MultipartFile> files) {
         return files.stream().map(this::toEntity).toList();
+    }
+
+    @Override
+    public Resource retrieve(final ObjectMetadataEntity metadata) {
+        var content = metadata.getFileContent();
+        if (Objects.isNull(content) || Objects.isNull(content.getData())) {
+            throw new FileStorageException(
+                "No database content stored for object '" + metadata.getId() + "'", null);
+        }
+        return new ByteArrayResource(content.getData());
     }
 
     private ObjectMetadataEntity toEntity(final MultipartFile file) {

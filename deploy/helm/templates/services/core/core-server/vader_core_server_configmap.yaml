@@ -140,6 +140,11 @@ data:
           enabled: {{ .Values.vader.mcp.databaseQuery.enabled }}
         backpressure:
           enabled: {{ .Values.vader.mcp.backpressure.enabled }}
+        object-storage:
+          enabled: {{ .Values.vader.mcp.objectStorage.enabled }}
+          # `int` avoids Helm/Go rendering this as scientific notation (e.g. 2.097152e+06),
+          # which plain interpolation of a non-"round" number this size is prone to.
+          max-inline-bytes: {{ int .Values.vader.mcp.objectStorage.maxInlineBytes }}
       kubernetes:
         namespace: {{ .Release.Namespace }}
       operators:

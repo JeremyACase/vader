@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -65,6 +67,20 @@ class LocalLlmOrchestrationStrategyTest {
         ReflectionTestUtils.setField(strategy, "toolCallbackProviders", objectProvider);
         ReflectionTestUtils.setField(strategy, "objectMapper", this.objectMapper);
         ReflectionTestUtils.setField(strategy, "fallbackToStatic", fallbackToStatic);
+        strategy.wire();
+        return strategy;
+    }
+
+    private LocalLlmOrchestrationStrategy strategyWithBuilder(final ChatClient.Builder builder) {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ToolCallbackProvider> objectProvider = mock(ObjectProvider.class);
+        when(objectProvider.stream()).thenReturn(Stream.empty());
+
+        var strategy = new LocalLlmOrchestrationStrategy();
+        ReflectionTestUtils.setField(strategy, "chatClientBuilder", builder);
+        ReflectionTestUtils.setField(strategy, "toolCallbackProviders", objectProvider);
+        ReflectionTestUtils.setField(strategy, "objectMapper", this.objectMapper);
+        ReflectionTestUtils.setField(strategy, "fallbackToStatic", true);
         strategy.wire();
         return strategy;
     }
@@ -165,6 +181,25 @@ class LocalLlmOrchestrationStrategyTest {
 
         assertThatThrownBy(() -> this.strategy(true).orchestrate(promptOf("plan a thing")))
             .isInstanceOf(OrchestratorResponseException.class);
+    }
+
+    /**
+     * Regression test for spring-projects/spring-ai#3537: reusing one {@link ChatClient} across
+     * calls corrupts its internal advisor-chain state under concurrency and intermittently fails
+     * with {@code IllegalStateException: No CallAdvisors available to execute}. This asserts the
+     * actual fix mechanism -- a fresh client built per call -- rather than trying to reproduce
+     * the timing-dependent upstream race itself.
+     */
+    @Test
+    void orchestrate_buildsFreshChatClientPerCall() {
+        when(this.chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+        var builder = spy(ChatClient.builder(this.chatModel));
+        var strategy = this.strategyWithBuilder(builder);
+
+        strategy.orchestrate(promptOf("first"));
+        strategy.orchestrate(promptOf("second"));
+
+        verify(builder, times(2)).build();
     }
 
     static final class DummyTools {

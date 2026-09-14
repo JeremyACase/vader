@@ -71,11 +71,35 @@ isolated `python:3.12-slim` sandbox pods. Both are off by default.
   - `DELETE /vader/core-server/python-sandbox/sandboxes/{name}`.
   - `502` when the Kubernetes API call fails.
 
+## Object storage
+
+Uploaded file *content* is reachable through one endpoint and one MCP tool, both backed by
+`ObjectStorageService`, regardless of which `InterfaceFileStorageStrategy` is active
+(`vader.storage.type`: `database` or `minio`) — neither the REST caller nor the calling agent
+needs to know or care which one it is.
+
+- REST: `GET /vader/core-server/object-storage/{objectMetadataId}/content` — streams the raw
+  bytes with the original `Content-Type` and a `Content-Disposition: attachment` filename. Served
+  by Spring's own `ResourceHttpRequestHandler` (the same engine behind static resource serving),
+  via a resolver that looks the id up through `ObjectStorageService` instead of a filesystem
+  location, so Range requests (RFC 7233, including a true `multipart/byteranges` response for a
+  multi-range request), conditional GETs, and HEAD all come for free rather than being
+  hand-rolled. `404` for an unknown id.
+- MCP (`vader.mcp.object-storage.enabled`, default true): `get_object_content(objectMetadataId)`
+  returns the object's content as base64, plus its filename/contentType/size. Objects over
+  `vader.mcp.object-storage.max-inline-bytes` (default 2 MiB) are rejected with the REST URL to
+  use instead, so one tool result can't blow the calling model's context budget.
+
+Get the id to pass either endpoint from `ObjectMetadata`'s own query surface below (e.g.
+`query_object_metadata` / `GET /data/object-metadata/query/params?clientPrompt.id=<id>`).
+
 ## Database query
 
 The `common:java:library:dao` engine is wired over the six entities that have a DTO mapper —
 `Workflow`, `ClientPrompt`, `TaskPlan`, `TaskGraph`, `Task`, `ObjectMetadata`
-(`FileContentEntity` is never registered, so file bytes are unreachable).
+(`FileContentEntity` is never registered as its own queryable entity, so raw file bytes never
+flow through the dynamic query engine — only through the dedicated object-storage endpoint/tool
+above).
 
 - REST: `GET|POST /vader/core-server/data/{workflow|client-prompt|task-plan|task-graph|task|object-metadata}/query...`
   — `POST /query` takes a `QueryFilter` body, `GET /query/params` takes URL params

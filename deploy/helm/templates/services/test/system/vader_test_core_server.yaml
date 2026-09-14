@@ -82,6 +82,33 @@ spec:
           echo "hello world" > /tmp/test-attachment.txt
           submit_and_await "Summarize the attached file." /tmp/test-attachment.txt
 
+          echo "== Object storage: download the file just uploaded =="
+          OM_QUERY="$SERVER/vader/core-server/data/object-metadata/query/params"
+          OM_BODY=$(curl -s --max-time 10 "$OM_QUERY?page=0&size=1&clientPrompt.id=$ID" || true)
+          echo "🔍 $OM_BODY"
+          OM_ID=$(echo "$OM_BODY" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+          [ -n "$OM_ID" ] || { echo "❌ no object-metadata id for prompt $ID"; exit 1; }
+          DOWNLOAD_URL="$SERVER/vader/core-server/object-storage/$OM_ID/content"
+
+          OUT_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$OUT_FILE" -w "%{http_code}" --max-time 15 "$DOWNLOAD_URL" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200, got $STATUS"; exit 1; }
+          grep -q "hello world" "$OUT_FILE" || { echo "❌ downloaded content did not match upload"; exit 1; }
+          echo "✅ full download matched the uploaded file"
+
+          RANGE_OUT=$(mktemp)
+          STATUS=$(curl -s -o "$RANGE_OUT" -w "%{http_code}" --max-time 15 \
+            -H "Range: bytes=0-4" "$DOWNLOAD_URL" || true)
+          [ "$STATUS" = "206" ] || { echo "❌ expected HTTP 206 for ranged request, got $STATUS"; exit 1; }
+          RANGE_BODY=$(cat "$RANGE_OUT")
+          [ "$RANGE_BODY" = "hello" ] || { echo "❌ expected 'hello', got '$RANGE_BODY'"; exit 1; }
+          echo "✅ ranged download returned only the requested bytes"
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "$SERVER/vader/core-server/object-storage/bogus-id/content" || true)
+          [ "$STATUS" = "404" ] || { echo "❌ expected HTTP 404 for unknown id, got $STATUS"; exit 1; }
+          echo "✅ unknown object id returns 404"
+
           echo "== Backpressure endpoint =="
           BP=$(curl -s --max-time 10 "$SERVER/vader/core-server/backpressure/ClientPrompt" || true)
           echo "🔍 $BP"

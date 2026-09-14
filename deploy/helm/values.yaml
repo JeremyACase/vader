@@ -96,6 +96,15 @@ vader:
       # When true, core-server exposes the inbox/outbox back pressure over the MCP endpoint
       # (list_backpressure_queues / get_backpressure), mirroring the REST /backpressure API.
       enabled: true
+    objectStorage:
+      # When true, core-server exposes get_object_content over the MCP endpoint: an agent hands
+      # it an ObjectMetadata id and gets the object's content back as base64, whether it's
+      # actually stored in MinIO or the database -- the tool hides that distinction.
+      enabled: true
+      # Objects larger than this many bytes are rejected by the tool (with the REST download URL
+      # to use instead) rather than inlined as base64, to keep a single tool result from blowing
+      # the calling model's context budget.
+      maxInlineBytes: 2097152
   operators:
     # Kubernetes operators core-server runs, each also exposed to LLMs as MCP tools.
     # Master switch: constructs the shared Kubernetes client and enables the RBAC the

@@ -1,6 +1,4 @@
 - make sure sidebar renders the workflow immediately when a user inputs it.
-- min.io and object storage
-- ensure LLMs can grab files from the object store/database using pointers
 - Global Controller Advice
 - add logging/persistence of entire lifecycle
 - Show it all in the UI.

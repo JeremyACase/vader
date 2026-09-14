@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0]
+### Added
+- `ObjectMetadata` now records the exact key an object was stored under when the MinIO strategy
+  is active, so its content can be read back later instead of only ever being written. This is a
+  storage-strategy implementation detail and is not exposed on the API-facing DTO.
+
 ## [0.12.0]
 ### Added
 - `TaskAttempt` and `TaskAttemptTranscript` models, recording each dispatch of a task to a

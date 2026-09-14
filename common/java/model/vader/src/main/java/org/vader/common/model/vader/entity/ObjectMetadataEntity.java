@@ -13,6 +13,15 @@ public class ObjectMetadataEntity extends AbstractModelEntity {
 
     private String bucketName;
 
+    /**
+     * The exact key the content was stored under in the bucket (MinIO strategy only), needed to
+     * read it back later since it is not derivable from {@link #originalFilename} alone (it is
+     * prefixed to avoid collisions). Null when the database storage strategy is active. Never
+     * exposed on the {@code ObjectMetadata} DTO -- it is a storage-strategy implementation
+     * detail, not something a caller should need to know or pass back.
+     */
+    private String objectKey;
+
     private String originalFilename;
 
     private String contentType;
@@ -50,6 +59,14 @@ public class ObjectMetadataEntity extends AbstractModelEntity {
 
     public void setBucketName(String bucketName) {
         this.bucketName = bucketName;
+    }
+
+    public String getObjectKey() {
+        return this.objectKey;
+    }
+
+    public void setObjectKey(String objectKey) {
+        this.objectKey = objectKey;
     }
 
     public String getOriginalFilename() {

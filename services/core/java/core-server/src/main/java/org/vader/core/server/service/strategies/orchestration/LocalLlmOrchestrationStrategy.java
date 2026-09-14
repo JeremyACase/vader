@@ -45,6 +45,11 @@ import org.vader.core.server.service.strategies.orchestration.interfaces.Interfa
  * {@code true} (the default), this returns the canned {@link StaticTaskPlan} instead of failing,
  * so {@code helm test} and CI pass with no Ollama in the cluster. A reachable LLM that returns
  * an unusable response still fails with {@link OrchestratorResponseException}.</p>
+ *
+ * <p>A fresh {@link ChatClient} is built for every call rather than cached on the bean:
+ * concurrent {@code .call()} invocations against one shared instance corrupt Spring AI's internal
+ * advisor-chain state (spring-projects/spring-ai#3537, still open as of 1.0.9) and intermittently
+ * fail with {@code IllegalStateException: No CallAdvisors available to execute}.</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "vader.orchestrator", name = "type", havingValue = "local")
@@ -79,16 +84,14 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
     @Value("${vader.orchestrator.local.fallback-to-static:true}")
     private boolean fallbackToStatic;
 
-    private ChatClient chatClient;
     private List<ToolCallback> toolCallbacks;
 
     /**
-     * Builds the chat client and flattens the registered tool providers into a single tool set,
-     * once dependencies are injected.
+     * Flattens the registered tool providers into a single tool set once dependencies are
+     * injected.
      */
     @PostConstruct
     void wire() {
-        this.chatClient = this.chatClientBuilder.build();
         this.toolCallbacks = this.toolCallbackProviders.stream()
             .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
             .toList();
@@ -100,7 +103,13 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
             this.toolCallbacks.size());
 
         try {
-            var llmPlan = this.chatClient.prompt()
+            // A fresh ChatClient is built per call rather than cached on the bean: concurrent
+            // .call() invocations against one shared instance corrupt Spring AI's internal
+            // advisor-chain state (spring-projects/spring-ai#3537, still open as of 1.0.9) and
+            // intermittently fail with "No CallAdvisors available to execute". Building from
+            // ChatClient.Builder is cheap -- it wraps an already-configured ChatModel, no new
+            // network connection -- so there is no real cost to paying it per call.
+            var llmPlan = this.chatClientBuilder.build().prompt()
                 .system(DECOMPOSITION_INSTRUCTIONS)
                 .user(clientPrompt.getText())
                 .toolCallbacks(this.toolCallbacks)

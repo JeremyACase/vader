@@ -266,6 +266,9 @@ A bad entry reads like an annotated file listing.
 | `vader.operators.python-sandbox.enabled` | `false` | Python sandbox operator |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
 | `vader.mcp.backpressure.enabled` | `true` | Expose inbox/outbox backpressure tools over MCP |
+| `vader.storage.type` | `database` | `database` or `minio`; picks the `InterfaceFileStorageStrategy` backing both upload and the object-storage download endpoint/tool |
+| `vader.mcp.object-storage.enabled` | `true` | Expose `get_object_content` (base64 object retrieval) over MCP |
+| `vader.mcp.object-storage.max-inline-bytes` | `2097152` | Objects over this size are rejected by `get_object_content` with the REST download URL instead of being inlined |
 | `vader.dao.max-page-size` | `100` | Cap on query page size |
 | `vader.kubernetes.namespace` | `default` | Namespace operators manage resources in |
 | `vader.scheduling.enabled` | `true` | Master switch for the background pollers (inbox drain, backpressure sampler) |
