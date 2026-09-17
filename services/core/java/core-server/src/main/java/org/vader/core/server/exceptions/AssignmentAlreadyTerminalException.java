@@ -1,4 +1,4 @@
-package org.vader.core.exceptions;
+package org.vader.core.server.exceptions;
 
 /**
  * Thrown when a harness reports a heartbeat or result against an assignment whose

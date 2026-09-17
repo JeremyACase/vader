@@ -22,4 +22,7 @@ pub enum HarnessError {
 
     #[error("core-server inference gateway is unreachable: {0}")]
     InferenceUnavailable(String),
+
+    #[error("core-server tool-call invocation is unreachable: {0}")]
+    ToolInvocationUnavailable(String),
 }

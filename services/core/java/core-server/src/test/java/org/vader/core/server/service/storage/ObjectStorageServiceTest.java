@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
-import org.vader.core.exceptions.ObjectNotFoundException;
+import org.vader.core.server.exceptions.ObjectNotFoundException;
 import org.vader.core.server.repository.ObjectMetadataRepository;
 import org.vader.core.server.service.strategies.storage.interfaces.InterfaceFileStorageStrategy;
 

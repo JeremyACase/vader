@@ -31,8 +31,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.exceptions.OrchestratorResponseException;
-import org.vader.core.exceptions.OrchestratorUnavailableException;
+import org.vader.core.server.exceptions.OrchestratorResponseException;
+import org.vader.core.server.exceptions.OrchestratorUnavailableException;
+import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 
 class LocalLlmOrchestrationStrategyTest {
 
@@ -54,34 +55,35 @@ class LocalLlmOrchestrationStrategyTest {
             .thenReturn(ToolCallingChatOptions.builder().build());
     }
 
-    private LocalLlmOrchestrationStrategy strategy(
-        final boolean fallbackToStatic, final ToolCallbackProvider... providers) {
-
+    private static McpToolCallbackRegistry registryWith(final ToolCallbackProvider... providers) {
         @SuppressWarnings("unchecked")
         ObjectProvider<ToolCallbackProvider> objectProvider = mock(ObjectProvider.class);
         when(objectProvider.stream()).thenReturn(Stream.of(providers));
 
+        var registry = new McpToolCallbackRegistry();
+        ReflectionTestUtils.setField(registry, "toolCallbackProviders", objectProvider);
+        ReflectionTestUtils.invokeMethod(registry, "wire");
+        return registry;
+    }
+
+    private LocalLlmOrchestrationStrategy strategy(
+        final boolean fallbackToStatic, final ToolCallbackProvider... providers) {
+
         var strategy = new LocalLlmOrchestrationStrategy();
         ReflectionTestUtils.setField(
             strategy, "chatClientBuilder", ChatClient.builder(this.chatModel));
-        ReflectionTestUtils.setField(strategy, "toolCallbackProviders", objectProvider);
+        ReflectionTestUtils.setField(strategy, "toolCallbackRegistry", registryWith(providers));
         ReflectionTestUtils.setField(strategy, "objectMapper", this.objectMapper);
         ReflectionTestUtils.setField(strategy, "fallbackToStatic", fallbackToStatic);
-        strategy.wire();
         return strategy;
     }
 
     private LocalLlmOrchestrationStrategy strategyWithBuilder(final ChatClient.Builder builder) {
-        @SuppressWarnings("unchecked")
-        ObjectProvider<ToolCallbackProvider> objectProvider = mock(ObjectProvider.class);
-        when(objectProvider.stream()).thenReturn(Stream.empty());
-
         var strategy = new LocalLlmOrchestrationStrategy();
         ReflectionTestUtils.setField(strategy, "chatClientBuilder", builder);
-        ReflectionTestUtils.setField(strategy, "toolCallbackProviders", objectProvider);
+        ReflectionTestUtils.setField(strategy, "toolCallbackRegistry", registryWith());
         ReflectionTestUtils.setField(strategy, "objectMapper", this.objectMapper);
         ReflectionTestUtils.setField(strategy, "fallbackToStatic", true);
-        strategy.wire();
         return strategy;
     }
 

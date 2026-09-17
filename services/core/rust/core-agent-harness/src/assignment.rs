@@ -48,6 +48,10 @@ pub struct Assignment {
     pub task_id: TaskId,
     pub assignment_id: AssignmentId,
     pub objective: String,
+    /// Background a task's own short `objective` never carries on its own: the original
+    /// client-submitted request, any files attached to it, and the results of any prerequisite
+    /// tasks this one depends on. Always at least the original request.
+    pub context: String,
     pub max_turns: u32,
     pub max_tokens: u64,
     pub deadline_seconds: u64,

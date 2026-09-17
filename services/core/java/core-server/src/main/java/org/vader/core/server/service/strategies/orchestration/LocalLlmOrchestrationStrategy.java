@@ -2,17 +2,11 @@ package org.vader.core.server.service.strategies.orchestration;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.retry.TransientAiException;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,8 +16,9 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.exceptions.OrchestratorResponseException;
-import org.vader.core.exceptions.OrchestratorUnavailableException;
+import org.vader.core.server.exceptions.OrchestratorResponseException;
+import org.vader.core.server.exceptions.OrchestratorUnavailableException;
+import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 
 /**
@@ -34,9 +29,9 @@ import org.vader.core.server.service.strategies.orchestration.interfaces.Interfa
  * chart also installs an Ollama deployment and {@code spring.ai.ollama.*} points this client at
  * it.</p>
  *
- * <p>The client prompt is sent alongside every tool currently registered in the application
- * (every {@code ToolCallbackProvider} bean — today the MCP operator tools), so the model may
- * call them while it plans. Structured output is handled by {@code ChatClient.entity(...)}
+ * <p>The client prompt is sent alongside every tool currently registered in the application (via
+ * {@link McpToolCallbackRegistry}), so the model may call them while it plans. Structured output
+ * is handled by {@code ChatClient.entity(...)}
  * against the lean {@link LlmTaskPlan} shape (objective + tasks only); this strategy then builds
  * a full {@link TaskPlan} from it and re-serializes to JSON to satisfy the
  * {@link InterfaceLlmOrchestrationStrategy} contract.</p>
@@ -76,7 +71,7 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
     private ChatClient.Builder chatClientBuilder;
 
     @Autowired
-    private ObjectProvider<ToolCallbackProvider> toolCallbackProviders;
+    private McpToolCallbackRegistry toolCallbackRegistry;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -84,23 +79,11 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
     @Value("${vader.orchestrator.local.fallback-to-static:true}")
     private boolean fallbackToStatic;
 
-    private List<ToolCallback> toolCallbacks;
-
-    /**
-     * Flattens the registered tool providers into a single tool set once dependencies are
-     * injected.
-     */
-    @PostConstruct
-    void wire() {
-        this.toolCallbacks = this.toolCallbackProviders.stream()
-            .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
-            .toList();
-    }
-
     @Override
     public String orchestrate(final ClientPrompt clientPrompt) {
+        var toolCallbacks = this.toolCallbackRegistry.all();
         logger.info("Requesting a decomposition from the local LLM with {} tool(s) available",
-            this.toolCallbacks.size());
+            toolCallbacks.size());
 
         try {
             // A fresh ChatClient is built per call rather than cached on the bean: concurrent
@@ -112,7 +95,7 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
             var llmPlan = this.chatClientBuilder.build().prompt()
                 .system(DECOMPOSITION_INSTRUCTIONS)
                 .user(clientPrompt.getText())
-                .toolCallbacks(this.toolCallbacks)
+                .toolCallbacks(toolCallbacks)
                 .call()
                 .entity(LlmTaskPlan.class);
 

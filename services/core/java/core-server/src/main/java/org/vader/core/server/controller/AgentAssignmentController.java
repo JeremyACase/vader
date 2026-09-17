@@ -13,14 +13,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.vader.core.exceptions.AssignmentAlreadyTerminalException;
-import org.vader.core.exceptions.OrchestratorUnavailableException;
-import org.vader.core.exceptions.UnknownAssignmentException;
+import org.vader.core.server.exceptions.AssignmentAlreadyTerminalException;
+import org.vader.core.server.exceptions.OrchestratorUnavailableException;
+import org.vader.core.server.exceptions.UnknownAssignmentException;
+import org.vader.core.server.exceptions.UnknownToolException;
 import org.vader.core.server.models.AssignmentResponse;
 import org.vader.core.server.models.HeartbeatRequest;
 import org.vader.core.server.models.InferenceRequest;
 import org.vader.core.server.models.InferenceTurn;
 import org.vader.core.server.models.ResultRequest;
+import org.vader.core.server.models.ToolCallInvocationRequest;
+import org.vader.core.server.models.ToolCallInvocationResult;
 import org.vader.core.server.service.agent.TaskAttemptService;
 
 /**
@@ -87,14 +90,29 @@ public class AgentAssignmentController {
     /**
      * Completes one inference turn. The only path a harness has to any LLM.
      *
-     * @param request the assignment id and prompt for this turn
-     * @return the model's response and its token cost
+     * @param request the assignment id and running conversation for this turn
+     * @return the model's response: either a final answer, or a request to call tools
      */
     @PostMapping("/inference")
     public ResponseEntity<InferenceTurn> inference(@RequestBody final InferenceRequest request) {
         var turn = this.taskAttemptService.recordInferenceTurn(
-            request.assignmentId(), request.prompt());
+            request.assignmentId(), request.messages());
         return ResponseEntity.ok(turn);
+    }
+
+    /**
+     * Executes one tool call a model requested during a prior inference turn.
+     *
+     * @param request the assignment id and tool call to execute
+     * @return the tool's raw result
+     */
+    @PostMapping("/tool-calls")
+    public ResponseEntity<ToolCallInvocationResult> invokeTool(
+        @RequestBody final ToolCallInvocationRequest request) {
+        var result = this.taskAttemptService.invokeTool(
+            request.assignmentId(), request.toolCallId(), request.toolName(),
+            request.argumentsJson());
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -140,5 +158,20 @@ public class AgentAssignmentController {
         logger.warn("Inference gateway unavailable: {}", exception.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
             .body(Map.of("error", "inference_unavailable", "message", exception.getMessage()));
+    }
+
+    /**
+     * Maps a tool-call request naming a tool that isn't registered to a 400 -- most likely a
+     * model hallucinating a tool it was never actually offered.
+     *
+     * @param exception the lookup failure
+     * @return a 400 response
+     */
+    @ExceptionHandler(UnknownToolException.class)
+    public ResponseEntity<Map<String, String>> handleUnknownTool(
+        final UnknownToolException exception) {
+        logger.warn("Rejected agent tool call: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(Map.of("error", "unknown_tool", "message", exception.getMessage()));
     }
 }

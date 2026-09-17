@@ -10,7 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.exceptions.ObjectNotFoundException;
+import org.vader.core.server.exceptions.ObjectNotFoundException;
 import org.vader.core.server.models.EncodedObjectContent;
 import org.vader.core.server.service.storage.ObjectContent;
 import org.vader.core.server.service.storage.ObjectDescriptor;

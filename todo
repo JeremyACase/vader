@@ -1,9 +1,5 @@
-- make sure sidebar renders the workflow immediately when a user inputs it.
 - Global Controller Advice
-- add logging/persistence of entire lifecycle
-- Show it all in the UI.
-
-- models: log all responses in the database
+- Show it all in the UI: DAGs, flows, etc.
 - allow ollama operator to be able to create new, specialized LLM's
 - compaction-as-a-service
 - evaluation testing as a part of the devops pipeline

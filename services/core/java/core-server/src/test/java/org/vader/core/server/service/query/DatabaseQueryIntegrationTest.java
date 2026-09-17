@@ -96,12 +96,12 @@ class DatabaseQueryIntegrationTest {
     }
 
     @Test
-    void describe_listsTheEightEntitiesAndNotFileContent() {
+    void describe_listsTheNineEntitiesAndNotFileContent() {
         assertThat(this.databaseQueryService.describe())
             .extracting(EntityDescription::name)
             .containsExactlyInAnyOrder(
                 "Workflow", "ClientPrompt", "TaskPlan", "TaskGraph", "Task", "ObjectMetadata",
-                "TaskAttempt", "TaskAttemptTranscript");
+                "TaskAttempt", "TaskAttemptTranscript", "TaskAttemptToolCall");
     }
 
     private static QueryFilterParameter parameter(

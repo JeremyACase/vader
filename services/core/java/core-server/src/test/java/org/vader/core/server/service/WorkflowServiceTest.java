@@ -22,7 +22,7 @@ import org.vader.common.library.implementation.service.mapper.TaskGraphDtoToEnti
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
-import org.vader.core.exceptions.OrchestratorResponseException;
+import org.vader.core.server.exceptions.OrchestratorResponseException;
 import org.vader.core.server.models.WorkflowDecomposedEvent;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.WorkflowRepository;

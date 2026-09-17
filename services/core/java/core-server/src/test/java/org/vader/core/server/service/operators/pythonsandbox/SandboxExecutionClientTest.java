@@ -16,7 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import org.vader.core.exceptions.SandboxExecutionException;
+import org.vader.core.server.exceptions.SandboxExecutionException;
 import org.vader.core.server.models.SandboxExecutionRequest;
 
 class SandboxExecutionClientTest {

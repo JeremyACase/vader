@@ -1,4 +1,4 @@
-package org.vader.core.exceptions;
+package org.vader.core.server.exceptions;
 
 /**
  * Thrown when the orchestrator LLM's response is missing, cannot be parsed as a task plan, or

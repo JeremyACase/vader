@@ -17,7 +17,7 @@ import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMap
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.common.model.vader.entity.WorkflowEntity;
-import org.vader.core.exceptions.OrchestratorResponseException;
+import org.vader.core.server.exceptions.OrchestratorResponseException;
 import org.vader.core.server.models.WorkflowDecomposedEvent;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.WorkflowRepository;

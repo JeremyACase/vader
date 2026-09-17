@@ -13,6 +13,11 @@ metadata:
     # which the scheduler only ever sets once every task has genuinely settled -- reaches
     # SUCCEEDED. Runs against the static orchestrator/inference gateway (test.yaml), so no
     # Ollama is needed and the canned response is deterministic.
+    #
+    # StaticInferenceGatewayStrategy scripts its very first turn as a request to call
+    # list_queryable_entities rather than answering directly, so every one of these real
+    # harness Jobs also exercises the full agent action loop -- including a real POST to
+    # /agent/tool-calls -- deterministically, with no need to race a live assignment for it.
 spec:
   restartPolicy: Never
   containers:
@@ -25,6 +30,7 @@ spec:
           PROMPT_URL="$SERVER/vader/core-server/client-prompt"
           WORKFLOW_QUERY="$SERVER/vader/core-server/data/workflow/query/params"
           TRANSCRIPT_QUERY="$SERVER/vader/core-server/data/task-attempt-transcript/query/params"
+          TOOL_CALL_QUERY="$SERVER/vader/core-server/data/task-attempt-tool-call/query/params"
 
           echo "== Health check =="
           STATUS=000
@@ -44,6 +50,15 @@ spec:
             "$SERVER/vader/core-server/agent/assignments/00000000-0000-0000-0000-000000000000" || true)
           [ "$UNKNOWN_STATUS" = "404" ] || { echo "❌ expected 404 for an unknown assignment, got $UNKNOWN_STATUS"; exit 1; }
           echo "✅ unknown assignment correctly rejected with 404"
+
+          echo "== Tool-call gateway rejects an unknown assignment =="
+          UNKNOWN_TOOL_CALL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST "$SERVER/vader/core-server/agent/tool-calls" \
+            -H "Content-Type: application/json" \
+            -d '{"assignmentId":"00000000-0000-0000-0000-000000000000","toolCallId":"test-call",
+                 "toolName":"list_queryable_entities","argumentsJson":"{}"}' || true)
+          [ "$UNKNOWN_TOOL_CALL_STATUS" = "404" ] || { echo "❌ expected 404 for an unknown assignment on /agent/tool-calls, got $UNKNOWN_TOOL_CALL_STATUS"; exit 1; }
+          echo "✅ tool-call gateway correctly rejects an unknown assignment with 404"
 
           echo "== Submit a prompt =="
           BODY_FILE=$(mktemp)
@@ -84,6 +99,17 @@ spec:
           echo "$TRANSCRIPT" | grep -qF "Static inference response" \
             || { echo "❌ no logged transcript contains the expected static response: $TRANSCRIPT"; exit 1; }
           echo "✅ the inference gateway call was logged to the transcript, end to end"
+
+          echo "== Spot-check: a real harness actually invoked the scripted tool call =="
+          echo "   (StaticInferenceGatewayStrategy's first turn always requests list_queryable_entities;"
+          echo "    a real harness Job must have called POST /agent/tool-calls to get past it)"
+          TOOL_CALL=$(curl -s --max-time 10 \
+            "$TOOL_CALL_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&toolName=list_queryable_entities" || true)
+          echo "$TOOL_CALL" | grep -q '"toolName":"list_queryable_entities"' \
+            || { echo "❌ no task-attempt-tool-call row for list_queryable_entities: $TOOL_CALL"; exit 1; }
+          echo "$TOOL_CALL" | grep -qF '"resultJson"' \
+            || { echo "❌ tool-call row has no resultJson: $TOOL_CALL"; exit 1; }
+          echo "✅ a real harness Job invoked /agent/tool-calls and the call was durably logged"
 
           echo "🎉 agent-harness system test passed"
 {{- end }}

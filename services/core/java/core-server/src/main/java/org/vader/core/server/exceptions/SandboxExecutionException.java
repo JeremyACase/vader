@@ -1,4 +1,4 @@
-package org.vader.core.exceptions;
+package org.vader.core.server.exceptions;
 
 /**
  * Thrown when a code-execution request to a Python sandbox pod's own HTTP server fails --

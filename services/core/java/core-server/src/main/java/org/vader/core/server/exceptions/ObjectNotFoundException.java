@@ -1,4 +1,4 @@
-package org.vader.core.exceptions;
+package org.vader.core.server.exceptions;
 
 /** Thrown when a referenced {@code ObjectMetadata} id does not correspond to any stored object. */
 public class ObjectNotFoundException extends RuntimeException {

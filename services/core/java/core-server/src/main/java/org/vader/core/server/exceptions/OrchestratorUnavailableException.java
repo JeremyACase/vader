@@ -1,4 +1,4 @@
-package org.vader.core.exceptions;
+package org.vader.core.server.exceptions;
 
 /**
  * Thrown when the orchestrator LLM cannot be reached at all — connection refused, timed out, or

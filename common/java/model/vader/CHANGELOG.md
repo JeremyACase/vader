@@ -3,6 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0]
+### Added
+- New `TaskAttemptToolCall` model, recording one tool call a model requested and had executed
+  during a task attempt -- the tool, its arguments, and its result -- as its own immutable,
+  durable audit record, written at the moment of execution rather than only ever appearing
+  embedded in a later transcript entry.
+
 ## [0.13.0]
 ### Added
 - `ObjectMetadata` now records the exact key an object was stored under when the MinIO strategy

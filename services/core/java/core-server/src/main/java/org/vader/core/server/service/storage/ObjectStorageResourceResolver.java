@@ -5,7 +5,7 @@ import java.util.List;
 import org.springframework.core.io.Resource;
 import org.springframework.web.servlet.resource.ResourceResolver;
 import org.springframework.web.servlet.resource.ResourceResolverChain;
-import org.vader.core.exceptions.ObjectNotFoundException;
+import org.vader.core.server.exceptions.ObjectNotFoundException;
 
 /**
  * Resolves the {@code {id}/content} portion of the object-storage download path to a stored

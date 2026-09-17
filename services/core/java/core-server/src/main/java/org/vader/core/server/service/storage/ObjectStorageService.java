@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
-import org.vader.core.exceptions.ObjectNotFoundException;
+import org.vader.core.server.exceptions.ObjectNotFoundException;
 import org.vader.core.server.repository.ObjectMetadataRepository;
 import org.vader.core.server.service.strategies.storage.interfaces.InterfaceFileStorageStrategy;
 

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.vader.core.exceptions.ObjectNotFoundException;
+import org.vader.core.server.exceptions.ObjectNotFoundException;
 
 class ObjectStorageResourceResolverTest {
 

@@ -1,4 +1,4 @@
-package org.vader.core.exceptions;
+package org.vader.core.server.exceptions;
 
 /**
  * Thrown when a harness calls the agent control plane or inference gateway with an assignment id
