@@ -84,6 +84,26 @@ vader:
       # rate, not how many harness Jobs may run at once -- see agentHarness.maxAttemptsPerTask
       # and the scheduler for the actual concurrency the task graph produces.
       maxConcurrency: 5
+  llm:
+    requestQueue:
+      # How often LlmRequestInbox polls for pending LLM requests. Much shorter than the other
+      # inboxes' 1000ms default: this is the only path by which a replica other than the one that
+      # enqueued a request (or the one already mid-request for an earlier one) ever notices a
+      # freed claim slot, so it directly adds to how long every blocked caller waits.
+      drainPollIntervalMs: 200
+      # How often a caller blocked in LlmRequestQueue re-checks whether its own request has been
+      # processed yet.
+      resultPollIntervalMs: 100
+      # A caller gives up once no request on the queue -- anywhere, by any replica -- has been
+      # claimed for this long. This, not maxWaitSeconds, is the real patience control: a deep but
+      # healthy queue keeps a caller waiting indefinitely (up to maxWaitSeconds) as long as it
+      # keeps seeing forward progress: only a genuinely stuck backend (nothing claimed at all)
+      # trips this.
+      stallTimeoutSeconds: 60
+      # Absolute backstop regardless of whether the queue is still making progress, so a queue
+      # that never actually stops moving (but never keeps up either) cannot block a caller
+      # forever.
+      maxWaitSeconds: 1800
   backpressure:
     # How often queue depth is sampled to derive ingress.queueRatePerMinute.
     sampleIntervalMs: 15000
@@ -95,7 +115,11 @@ vader:
     backpressure:
       # When true, core-server exposes the inbox/outbox back pressure over the MCP endpoint
       # (list_backpressure_queues / get_backpressure), mirroring the REST /backpressure API.
-      enabled: true
+      # Off by default: this is an operator/ops-debugging surface, not something a
+      # task-decomposition or task-execution agent needs, and every agent-harness inference turn
+      # offers the full registered tool set, so leaving it on just crowds out the tools a task
+      # actually needs. The REST /backpressure endpoint is unaffected either way.
+      enabled: false
     objectStorage:
       # When true, core-server exposes get_object_content over the MCP endpoint: an agent hands
       # it an ObjectMetadata id and gets the object's content back as base64, whether it's

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,11 @@ import org.vader.core.server.service.strategies.storage.FileStorageException;
  * strategy is active. Objects over the configured inline limit are rejected with a pointer to
  * the REST download endpoint instead, since base64-inlining an arbitrarily large object into a
  * tool result would blow the model's context budget.
+ *
+ * <p>Content type is a hard gate, not just a tool-description suggestion: a model deciding
+ * whether to call this tool or {@code stage_object} is guidance it can simply ignore, so
+ * anything that isn't recognizably text is refused here before it is ever read off disk, let
+ * alone base64-encoded into a result the model will see.</p>
  */
 @Component
 @ConditionalOnProperty(
@@ -29,6 +35,9 @@ import org.vader.core.server.service.strategies.storage.FileStorageException;
     havingValue = "true",
     matchIfMissing = true)
 public class ObjectStorageTools {
+
+    private static final Set<String> ADDITIONAL_TEXT_CONTENT_TYPES = Set.of(
+        "application/json", "application/xml", "application/x-yaml", "application/yaml");
 
     @Autowired
     private ObjectStorageService objectStorageService;
@@ -41,14 +50,19 @@ public class ObjectStorageTools {
      *
      * @param objectMetadataId the {@code ObjectMetadata} id, from {@code query_object_metadata}
      *     or {@code get_object_metadata_by_id}
-     * @return the encoded content, or {@code {"error": ...}} if unknown or too large
+     * @return the encoded content, or {@code {"error": ...}} if unknown, not text, or too large
      */
     @Tool(
         name = "get_object_content",
-        description = "Fetch a previously-uploaded object's raw content as base64, identified by "
-            + "the id returned from query_object_metadata / get_object_metadata_by_id. Works the "
+        description = "Fetch a previously-uploaded TEXT object's raw content as base64, inlined "
+            + "directly into this conversation, identified by the id returned from "
+            + "query_object_metadata / get_object_metadata_by_id. This tool refuses anything "
+            + "whose recorded content type isn't text -- spreadsheets, images, and every other "
+            + "binary format are rejected outright, not merely discouraged. Use stage_object for "
+            + "those instead, which writes the object straight into a sandbox's workspace "
+            + "without inlining it here; run_python_code can then read it by filename. Works the "
             + "same way regardless of whether the server is backed by MinIO or the database. "
-            + "Objects larger than the configured inline limit are rejected with the REST "
+            + "Objects larger than the configured inline limit are also rejected, with the REST "
             + "download URL to use instead.")
     public Object getObjectContent(
         @ToolParam(description = "The ObjectMetadata id, from query_object_metadata or "
@@ -67,7 +81,14 @@ public class ObjectStorageTools {
     private Object fetchOrReject(final String objectMetadataId) {
         var descriptor = this.objectStorageService.describe(objectMetadataId);
         Object result;
-        if (descriptor.size() > this.maxInlineBytes) {
+        if (!isTextContentType(descriptor.contentType())) {
+            result = Map.of(
+                "error", "'" + descriptor.filename() + "' has content type '"
+                    + descriptor.contentType() + "', which get_object_content refuses to inline "
+                    + "into this conversation. Create a sandbox (if you don't already have one) "
+                    + "and stage this object into it with stage_object, then inspect it with "
+                    + "run_python_code instead.");
+        } else if (descriptor.size() > this.maxInlineBytes) {
             result = Map.of(
                 "error", "Object is " + descriptor.size() + " bytes, over the "
                     + this.maxInlineBytes + " byte inline limit. Download it directly from "
@@ -80,6 +101,12 @@ public class ObjectStorageTools {
                 base64Of(content.resource()));
         }
         return result;
+    }
+
+    private static boolean isTextContentType(final String contentType) {
+        return contentType != null
+            && (contentType.startsWith("text/")
+                || ADDITIONAL_TEXT_CONTENT_TYPES.contains(contentType));
     }
 
     private String base64Of(final Resource resource) {

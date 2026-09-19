@@ -71,11 +71,20 @@ class WorkspaceCodeExecutor:
             return ""
         return output if isinstance(output, str) else output.decode(errors="replace")
 
+    def stage_file(self, filename: str, content: bytes) -> int:
+        """Writes raw bytes into the workspace, returning the byte count written.
+
+        Shared by the base64-staged path (``ExecutionRequest.files``) and the raw-body upload
+        endpoint, so both end up going through the same path-safety check.
+        """
+        path = self._safe_path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return len(content)
+
     def _stage_files(self, files: dict[str, str]) -> None:
         for filename, encoded_content in files.items():
-            path = self._safe_path(filename)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(base64.b64decode(encoded_content))
+            self.stage_file(filename, base64.b64decode(encoded_content))
 
     def _safe_path(self, filename: str) -> Path:
         workspace = self._workspace.resolve()

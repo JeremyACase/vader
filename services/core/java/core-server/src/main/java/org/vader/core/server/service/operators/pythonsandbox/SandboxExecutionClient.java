@@ -30,6 +30,8 @@ public class SandboxExecutionClient {
     private static final int EXEC_PORT = 8888;
     private static final String EXECUTE_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/execute";
+    private static final String STAGE_FILE_URI =
+        "http://{name}.{namespace}.svc.cluster.local:{port}/workspace/files/{filename}";
 
     @Autowired
     private RestClient sandboxExecutionRestClient;
@@ -61,6 +63,32 @@ public class SandboxExecutionClient {
                 "Could not run code in sandbox '" + sandboxName + "': " + e.getMessage(), e);
         }
         return result;
+    }
+
+    /**
+     * Writes raw bytes straight into a sandbox's persistent workspace, bypassing the JSON/
+     * base64 {@code files} path {@link #execute} uses -- the caller (a stage-object request that
+     * ultimately came from a model's tool call) never has to hold the content itself, only the
+     * confirmation this returns nothing more than.
+     *
+     * @param sandboxName the exact sandbox name
+     * @param filename the name to stage the content under inside the sandbox's workspace
+     * @param content the raw bytes to write
+     * @throws SandboxExecutionException if the sandbox is unreachable or returns an error
+     */
+    public void stageFile(final String sandboxName, final String filename, final byte[] content) {
+        try {
+            this.sandboxExecutionRestClient.put()
+                .uri(STAGE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(content)
+                .retrieve()
+                .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new SandboxExecutionException(
+                "Could not stage '" + filename + "' into sandbox '" + sandboxName + "': "
+                    + e.getMessage(), e);
+        }
     }
 
     /**

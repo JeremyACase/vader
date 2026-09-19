@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.ConversationRole;
+import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 
 class StaticInferenceGatewayStrategyTest {
@@ -20,7 +21,8 @@ class StaticInferenceGatewayStrategyTest {
     @BeforeEach
     void setUp() {
         this.toolCallbackRegistry = mock(McpToolCallbackRegistry.class);
-        when(this.toolCallbackRegistry.all()).thenReturn(List.of());
+        when(this.toolCallbackRegistry.forAudience(AgentToolAudience.TASK_EXECUTION))
+            .thenReturn(List.of());
         this.strategy = new StaticInferenceGatewayStrategy();
         ReflectionTestUtils.setField(
             this.strategy, "toolCallbackRegistry", this.toolCallbackRegistry);

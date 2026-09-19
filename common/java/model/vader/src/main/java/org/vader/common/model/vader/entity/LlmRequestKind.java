@@ -1,0 +1,14 @@
+package org.vader.common.model.vader.entity;
+
+/**
+ * Which shape of local-LLM call an {@link LlmRequestOutboxMessageEntity} carries -- determines
+ * how its {@code requestJson} is decoded and which tool audience is offered.
+ */
+public enum LlmRequestKind {
+
+    /** One harness turn: {@code requestJson} is a JSON array of {@code ConversationMessage}. */
+    INFERENCE_TURN,
+
+    /** One prompt decomposition: {@code requestJson} is the raw client-prompt text. */
+    DECOMPOSITION,
+}

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.vader.core.server.models.SandboxExecutionRequest;
 import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.models.StagedObjectInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 /**
@@ -82,7 +83,8 @@ public class PythonSandboxTools {
      * @param name the exact sandbox name, as returned by create or list
      * @param code the Python source to run
      * @param files a map of filename to base64-encoded content to stage into the sandbox's
-     *     workspace before running -- e.g. the output of {@code get_object_content} -- or
+     *     workspace before running -- for content the model itself generates, not for
+     *     previously-uploaded objects (use {@code stage_object} for those instead) -- or
      *     {@code null} if nothing needs staging
      * @return the run's stdout, stderr, exit code, and whether it timed out
      */
@@ -90,10 +92,13 @@ public class PythonSandboxTools {
         name = "run_python_code",
         description = "Run Python code inside an existing sandbox and return its stdout/stderr/"
             + "exit code. The sandbox's working directory persists across calls, so a file "
-            + "staged in one call (or a previous run_python_code call) is still there for a "
-            + "later one -- stage a file once, then run several analysis snippets against it. "
-            + "To analyze an uploaded file, fetch its content with get_object_content first and "
-            + "pass it here via 'files' (filename -> that same base64 content, unmodified).")
+            + "staged in one call (or a previous run_python_code call, or stage_object) is "
+            + "still there for a later one -- stage a file once, then run several analysis "
+            + "snippets against it. To analyze a previously-uploaded object, stage it first with "
+            + "stage_object and open it here by filename -- do not fetch it with "
+            + "get_object_content and pass it via 'files', which would needlessly inline the "
+            + "raw bytes into this conversation. 'files' here is only for content you generate "
+            + "yourself (e.g. a small helper data file).")
     public SandboxExecutionResult runPythonCode(
         @ToolParam(description = "The exact sandbox name, as returned by create_sandbox or "
             + "list_sandboxes.")
@@ -102,10 +107,45 @@ public class PythonSandboxTools {
         final String code,
         @ToolParam(
             required = false,
-            description = "Optional map of filename to base64-encoded content to write into "
-                + "the sandbox's workspace before running the code.")
+            description = "Optional map of filename to base64-encoded content, for content you "
+                + "generate yourself, to write into the sandbox's workspace before running the "
+                + "code. Do not use this for previously-uploaded objects -- use stage_object.")
         final Map<String, String> files) {
         var request = new SandboxExecutionRequest(code, files, null);
         return this.service.runCode(name, request);
+    }
+
+    /**
+     * Stages a previously-uploaded object directly into a sandbox's workspace.
+     *
+     * @param sandboxName the exact sandbox name, as returned by create or list
+     * @param objectMetadataId the {@code ObjectMetadata} id, from {@code query_object_metadata}
+     *     or {@code get_object_metadata_by_id}
+     * @param filename the name to stage it under; the object's original filename when omitted
+     * @return the staged filename, content type, and size -- never the content itself
+     */
+    @Tool(
+        name = "stage_object",
+        description = "Fetch a previously-uploaded object directly into an existing sandbox's "
+            + "persistent workspace, without its content ever passing through this "
+            + "conversation. Use this -- not get_object_content plus run_python_code's 'files' "
+            + "-- for any file you intend to analyze with code, especially spreadsheets, "
+            + "images, or any other binary format; it also has no size limit tied to a model's "
+            + "context. Returns only the staged filename, content type, and size. "
+            + "run_python_code can then open it by that filename from the sandbox's working "
+            + "directory.")
+    public StagedObjectInfo stageObject(
+        @ToolParam(description = "The exact sandbox name, as returned by create_sandbox or "
+            + "list_sandboxes.")
+        final String sandboxName,
+        @ToolParam(description = "The ObjectMetadata id, from query_object_metadata or "
+            + "get_object_metadata_by_id.")
+        final String objectMetadataId,
+        @ToolParam(
+            required = false,
+            description = "Optional filename to stage the object as inside the sandbox's "
+                + "workspace; defaults to the object's original filename when omitted.")
+        final String filename) {
+        return this.service.stageObject(sandboxName, objectMetadataId, filename);
     }
 }

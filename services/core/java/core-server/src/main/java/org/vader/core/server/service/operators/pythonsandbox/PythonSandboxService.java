@@ -1,16 +1,22 @@
 package org.vader.core.server.service.operators.pythonsandbox;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import org.vader.core.server.exceptions.SandboxExecutionException;
 import org.vader.core.server.models.ManagedResource;
 import org.vader.core.server.models.PythonSandboxSpec;
 import org.vader.core.server.models.SandboxExecutionRequest;
 import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.models.StagedObjectInfo;
+import org.vader.core.server.service.storage.ObjectStorageService;
 
 /**
  * Domain layer over {@link PythonSandboxOperator}, shared by the MCP tools and the REST
@@ -32,6 +38,9 @@ public class PythonSandboxService {
 
     @Autowired
     private SandboxExecutionClient executionClient;
+
+    @Autowired
+    private ObjectStorageService objectStorageService;
 
     @Value("${vader.kubernetes.namespace:default}")
     private String namespace;
@@ -78,6 +87,35 @@ public class PythonSandboxService {
     public SandboxExecutionResult runCode(
         final String name, final SandboxExecutionRequest request) {
         return this.executionClient.execute(name, request);
+    }
+
+    /**
+     * Fetches a previously-uploaded object and writes its raw bytes straight into a sandbox's
+     * workspace, so a model never has to hold (or re-emit) the content itself to get it there --
+     * unlike {@code run_python_code}'s {@code files} parameter, this has no size ceiling tied to
+     * a model's context budget.
+     *
+     * @param sandboxName the exact sandbox name
+     * @param objectMetadataId the {@code ObjectMetadata} id to stage
+     * @param filename the name to stage it under; the object's original filename when {@code
+     *     null}
+     * @return the staged filename, content type, and size -- never the content itself
+     */
+    public StagedObjectInfo stageObject(
+        final String sandboxName, final String objectMetadataId, final String filename) {
+        var content = this.objectStorageService.retrieve(objectMetadataId);
+        var resolvedFilename = Objects.requireNonNullElse(filename, content.filename());
+        var bytes = readAllBytes(content.resource());
+        this.executionClient.stageFile(sandboxName, resolvedFilename, bytes);
+        return new StagedObjectInfo(resolvedFilename, content.contentType(), content.size());
+    }
+
+    private static byte[] readAllBytes(final Resource resource) {
+        try (InputStream in = resource.getInputStream()) {
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new SandboxExecutionException("Could not read object content to stage", e);
+        }
     }
 
     private SandboxInfo toInfo(final ManagedResource resource) {

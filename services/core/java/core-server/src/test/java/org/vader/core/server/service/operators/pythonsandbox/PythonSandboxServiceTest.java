@@ -14,12 +14,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.models.ManagedResource;
 import org.vader.core.server.models.PythonSandboxSpec;
 import org.vader.core.server.models.SandboxExecutionRequest;
 import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.service.storage.ObjectContent;
+import org.vader.core.server.service.storage.ObjectStorageService;
 
 @ExtendWith(MockitoExtension.class)
 class PythonSandboxServiceTest {
@@ -29,6 +32,9 @@ class PythonSandboxServiceTest {
 
     @Mock
     private SandboxExecutionClient executionClient;
+
+    @Mock
+    private ObjectStorageService objectStorageService;
 
     @InjectMocks
     private PythonSandboxService service;
@@ -88,5 +94,34 @@ class PythonSandboxServiceTest {
         var result = this.service.runCode("vader-sandbox-a", request);
 
         assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void stageObject_fetchesTheObjectAndStagesItsRawBytesIntoTheSandbox() {
+        var bytes = "a,b\n1,2\n".getBytes();
+        var content = new ObjectContent(
+            new ByteArrayResource(bytes), "sales.csv", "text/csv", bytes.length);
+        when(this.objectStorageService.retrieve("obj-1")).thenReturn(content);
+
+        var info = this.service.stageObject("vader-sandbox-a", "obj-1", null);
+
+        assertThat(info.filename()).isEqualTo("sales.csv");
+        assertThat(info.contentType()).isEqualTo("text/csv");
+        assertThat(info.size()).isEqualTo(bytes.length);
+        verify(this.executionClient).stageFile("vader-sandbox-a", "sales.csv", bytes);
+    }
+
+    @Test
+    void stageObject_withAnExplicitFilename_stagesUnderThatNameInstead() {
+        var bytes = "x".getBytes();
+        var content = new ObjectContent(
+            new ByteArrayResource(bytes), "original.bin", "application/octet-stream",
+            bytes.length);
+        when(this.objectStorageService.retrieve("obj-1")).thenReturn(content);
+
+        var info = this.service.stageObject("vader-sandbox-a", "obj-1", "renamed.bin");
+
+        assertThat(info.filename()).isEqualTo("renamed.bin");
+        verify(this.executionClient).stageFile("vader-sandbox-a", "renamed.bin", bytes);
     }
 }

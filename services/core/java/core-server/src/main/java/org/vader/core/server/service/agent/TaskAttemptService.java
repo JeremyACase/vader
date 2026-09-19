@@ -306,13 +306,28 @@ public class TaskAttemptService {
         this.toolCallRepository.save(record);
     }
 
+    /**
+     * Persists this turn's transcript row, storing only the messages newly appended since the
+     * previous turn -- not the whole running conversation the harness resends on every call.
+     * That full history is already durable elsewhere: each prior turn's own {@code response} and
+     * the {@link TaskAttemptToolCallEntity} audit rows {@link #invokeTool} writes immediately.
+     * Re-persisting it here on every turn would mean storing the same tool-call content, in
+     * plaintext, once per remaining turn of the run.
+     */
     private void recordTranscript(
             final String assignmentId, final TaskAttemptEntity attempt,
             final List<ConversationMessage> messages, final InferenceTurn turn) {
+        var previousMessageCount = this.transcriptRepository
+            .findFirstByTaskAttemptIdOrderByTurnIndexDesc(assignmentId)
+            .map(TaskAttemptTranscriptEntity::getMessageCount)
+            .orElse(0);
+        var newMessages = messages.subList(previousMessageCount, messages.size());
+
         var transcript = new TaskAttemptTranscriptEntity();
         transcript.setTaskAttempt(attempt);
         transcript.setTurnIndex((int) this.transcriptRepository.countByTaskAttemptId(assignmentId));
-        transcript.setPrompt(this.toJson(messages));
+        transcript.setPrompt(this.toJson(newMessages));
+        transcript.setMessageCount(messages.size());
         transcript.setResponse(this.responseTextFor(turn));
         transcript.setTokensSpent(turn.tokensSpent());
         this.transcriptRepository.save(transcript);

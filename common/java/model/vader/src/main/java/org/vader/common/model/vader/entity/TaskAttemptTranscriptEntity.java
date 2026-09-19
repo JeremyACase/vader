@@ -12,6 +12,12 @@ import jakarta.validation.constraints.NotNull;
  * running: the prompt sent to the model and the response it returned, over the
  * {@code /agent/inference} gateway. Every harness turn is persisted here -- this is the durable
  * transcript backing "log everything from prompt to workflow finished."
+ *
+ * <p>{@code prompt} holds only the messages newly appended to the running conversation since the
+ * previous turn -- not the whole conversation, which the harness resends in full on every call.
+ * The full conversation for an attempt is reconstructable by concatenating every row's
+ * {@code prompt} in {@code turnIndex} order; {@code messageCount} is the cumulative running
+ * total as of this turn, letting the next turn know where its own delta starts.</p>
  */
 @Entity
 public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
@@ -27,6 +33,9 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
     @Lob
     @NotNull
     private String prompt;
+
+    @NotNull
+    private Integer messageCount;
 
     @Lob
     @NotNull
@@ -62,6 +71,14 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
 
     public void setPrompt(String prompt) {
         this.prompt = prompt;
+    }
+
+    public Integer getMessageCount() {
+        return this.messageCount;
+    }
+
+    public void setMessageCount(Integer messageCount) {
+        this.messageCount = messageCount;
     }
 
     public String getResponse() {

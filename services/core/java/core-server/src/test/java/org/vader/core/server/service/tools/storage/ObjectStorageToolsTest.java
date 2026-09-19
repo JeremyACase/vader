@@ -52,7 +52,7 @@ class ObjectStorageToolsTest {
     @Test
     void getObjectContent_overTheInlineLimit_returnsAnErrorWithTheDownloadUrl() {
         when(this.objectStorageService.describe(ID))
-            .thenReturn(new ObjectDescriptor(ID, "huge.bin", "application/octet-stream", 5000));
+            .thenReturn(new ObjectDescriptor(ID, "huge.txt", "text/plain", 5000));
 
         var result = this.tools.getObjectContent(ID);
 
@@ -73,5 +73,33 @@ class ObjectStorageToolsTest {
         @SuppressWarnings("unchecked")
         var map = (Map<String, String>) result;
         assertThat(map.get("error")).contains(ID);
+    }
+
+    @Test
+    void getObjectContent_withBinaryContentType_refusesRegardlessOfSize() {
+        when(this.objectStorageService.describe(ID)).thenReturn(new ObjectDescriptor(
+            ID, "EP_Tactics.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 100));
+
+        var result = this.tools.getObjectContent(ID);
+
+        assertThat(result).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        var map = (Map<String, String>) result;
+        assertThat(map.get("error"))
+            .contains("EP_Tactics.xlsx")
+            .contains("stage_object");
+    }
+
+    @Test
+    void getObjectContent_withJsonContentType_stillInlinesIt() {
+        when(this.objectStorageService.describe(ID))
+            .thenReturn(new ObjectDescriptor(ID, "data.json", "application/json", 2));
+        when(this.objectStorageService.retrieve(ID)).thenReturn(new ObjectContent(
+            new ByteArrayResource("{}".getBytes()), "data.json", "application/json", 2));
+
+        var result = this.tools.getObjectContent(ID);
+
+        assertThat(result).isInstanceOf(EncodedObjectContent.class);
     }
 }

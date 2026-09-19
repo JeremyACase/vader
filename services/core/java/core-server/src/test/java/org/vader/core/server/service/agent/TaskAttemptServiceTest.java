@@ -202,7 +202,40 @@ class TaskAttemptServiceTest {
         verify(this.transcriptRepository).save(transcriptCaptor.capture());
         assertThat(transcriptCaptor.getValue().getResponse()).isEqualTo("hello");
         assertThat(transcriptCaptor.getValue().getPrompt()).contains("hi");
+        assertThat(transcriptCaptor.getValue().getMessageCount()).isEqualTo(1);
         assertThat(transcriptCaptor.getValue().getTokensSpent()).isEqualTo(5L);
+    }
+
+    @Test
+    void recordInferenceTurn_onLaterTurns_persistsOnlyTheMessagesAddedSinceLastTime() {
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var previousTranscript = new TaskAttemptTranscriptEntity();
+        previousTranscript.setMessageCount(2);
+        when(this.transcriptRepository.findFirstByTaskAttemptIdOrderByTurnIndexDesc(ATTEMPT_ID))
+            .thenReturn(Optional.of(previousTranscript));
+        var messages = List.of(
+            new ConversationMessage(ConversationRole.SYSTEM, "instructions", null, null, null),
+            new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null),
+            new ConversationMessage(
+                ConversationRole.ASSISTANT, null,
+                List.of(new InferenceToolCall("call-1", "stage_object", "{}")), null, null),
+            new ConversationMessage(
+                ConversationRole.TOOL, "{\"filename\":\"a.csv\"}", null, "call-1",
+                "stage_object"));
+        when(this.inferenceGateway.complete(messages))
+            .thenReturn(new InferenceTurn("done", List.of(), 5L));
+
+        this.service.recordInferenceTurn(ATTEMPT_ID, messages);
+
+        var transcriptCaptor = ArgumentCaptor.forClass(TaskAttemptTranscriptEntity.class);
+        verify(this.transcriptRepository).save(transcriptCaptor.capture());
+        var savedPrompt = transcriptCaptor.getValue().getPrompt();
+        assertThat(savedPrompt)
+            .contains("stage_object")
+            .doesNotContain("instructions")
+            .doesNotContain("analyze the file");
+        assertThat(transcriptCaptor.getValue().getMessageCount()).isEqualTo(4);
     }
 
     @Test

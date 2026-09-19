@@ -1,3 +1,4 @@
+- add logging to harnesses
 - Global Controller Advice
 - Show it all in the UI: DAGs, flows, etc.
 - allow ollama operator to be able to create new, specialized LLM's

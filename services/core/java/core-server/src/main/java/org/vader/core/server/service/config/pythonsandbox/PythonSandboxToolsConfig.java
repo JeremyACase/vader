@@ -1,10 +1,13 @@
 package org.vader.core.server.service.config.pythonsandbox;
 
+import java.util.Set;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.vader.core.server.service.registries.AgentToolAudience;
+import org.vader.core.server.service.registries.ToolAudienceTag;
 import org.vader.core.server.service.tools.pythonsandbox.PythonSandboxTools;
 
 /**
@@ -29,5 +32,19 @@ public class PythonSandboxToolsConfig {
     @Bean
     public ToolCallbackProvider pythonSandboxToolCallbacks(final PythonSandboxTools tools) {
         return MethodToolCallbackProvider.builder().toolObjects(tools).build();
+    }
+
+    /**
+     * Sandbox code execution is offered only to a per-task {@code core-agent-harness} run --
+     * never to a higher-level orchestration agent.
+     *
+     * @param pythonSandboxToolCallbacks this config's own provider bean
+     * @return the audience tag
+     */
+    @Bean
+    public ToolAudienceTag pythonSandboxToolAudience(
+        final ToolCallbackProvider pythonSandboxToolCallbacks) {
+        return new ToolAudienceTag(
+            pythonSandboxToolCallbacks, Set.of(AgentToolAudience.TASK_EXECUTION));
     }
 }

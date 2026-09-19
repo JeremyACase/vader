@@ -7,7 +7,10 @@ import jakarta.validation.constraints.NotNull;
  * returned, while a {@link TaskAttempt} was running.
  *
  * <p>{@code taskAttemptId} is a shallow reference, same convention as every other cross-model
- * reference in this package.</p>
+ * reference in this package. {@code prompt} holds only the messages newly appended since the
+ * previous turn -- concatenate every turn's {@code prompt} in {@code turnIndex} order to
+ * reconstruct the full conversation; {@code messageCount} is the cumulative running total as of
+ * this turn.</p>
  */
 public class TaskAttemptTranscript extends AbstractModel {
 
@@ -19,6 +22,9 @@ public class TaskAttemptTranscript extends AbstractModel {
 
     @NotNull
     private String prompt;
+
+    @NotNull
+    private Integer messageCount;
 
     @NotNull
     private String response;
@@ -53,6 +59,14 @@ public class TaskAttemptTranscript extends AbstractModel {
 
     public void setPrompt(String prompt) {
         this.prompt = prompt;
+    }
+
+    public Integer getMessageCount() {
+        return this.messageCount;
+    }
+
+    public void setMessageCount(Integer messageCount) {
+        this.messageCount = messageCount;
     }
 
     public String getResponse() {

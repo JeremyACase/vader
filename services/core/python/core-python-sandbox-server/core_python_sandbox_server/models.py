@@ -32,3 +32,10 @@ class ExecutionResult(CamelModel):
     stderr: str
     exit_code: int
     timed_out: bool
+
+
+class StageFileResult(CamelModel):
+    """Acknowledges a raw file upload into the workspace, with no content echoed back."""
+
+    filename: str
+    size: int

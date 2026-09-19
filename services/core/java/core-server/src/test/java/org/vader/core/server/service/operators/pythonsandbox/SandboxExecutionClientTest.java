@@ -80,4 +80,34 @@ class SandboxExecutionClientTest {
             .isInstanceOf(SandboxExecutionException.class)
             .hasMessageContaining("vader-sandbox-a");
     }
+
+    @Test
+    void stageFile_putsTheRawBytesToTheSandboxsWorkspaceEndpoint() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andExpect(method(HttpMethod.PUT))
+            .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
+            .andExpect(content().bytes("raw bytes".getBytes()))
+            .andRespond(withSuccess("{\"filename\":\"report.xlsx\",\"size\":9}",
+                MediaType.APPLICATION_JSON));
+
+        this.client.stageFile("vader-sandbox-a", "report.xlsx", "raw bytes".getBytes());
+
+        this.mockServer.verify();
+    }
+
+    @Test
+    void stageFile_whenTheSandboxIsUnreachable_throwsSandboxExecutionException() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andRespond(withServerError());
+
+        assertThatThrownBy(() -> this.client.stageFile(
+            "vader-sandbox-a", "report.xlsx", "raw bytes".getBytes()))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("report.xlsx")
+            .hasMessageContaining("vader-sandbox-a");
+    }
 }

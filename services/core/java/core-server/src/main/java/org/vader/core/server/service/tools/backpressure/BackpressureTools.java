@@ -20,7 +20,7 @@ import org.vader.core.server.service.registries.BackpressureRegistry;
     prefix = "vader.mcp.backpressure",
     name = "enabled",
     havingValue = "true",
-    matchIfMissing = true)
+    matchIfMissing = false)
 public class BackpressureTools {
 
     @Autowired

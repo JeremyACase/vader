@@ -17,7 +17,7 @@ import java.util.List;
  * committing to the structured plan fields.</p>
  */
 @JsonClassDescription("A problem decomposed into a short list of actionable tasks")
-record LlmTaskPlan(
+public record LlmTaskPlan(
     @JsonPropertyDescription(
         "Step-by-step reasoning before the plan: restate the goal in your own words, identify "
             + "constraints or unknowns, decide whether any available tools would help, then "
@@ -36,7 +36,7 @@ record LlmTaskPlan(
      * @param title a short imperative title
      * @param description what to do, in one or two sentences
      */
-    record LlmTask(
+    public record LlmTask(
         @JsonPropertyDescription("A short imperative title")
         String title,
 

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.function.FunctionToolCallback;
@@ -14,6 +15,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.vader.common.library.dao.controller.GenericVaderDaoController;
 import org.vader.common.library.dao.model.QueryFilter;
+import org.vader.core.server.service.registries.AgentToolAudience;
+import org.vader.core.server.service.registries.ToolAudienceTag;
 
 /**
  * Programmatically registers per-entity MCP tools for every {@link GenericVaderDaoController}
@@ -53,6 +56,20 @@ public class DaoControllerToolsConfig {
             .flatMap(ctrl -> this.toolsFor((GenericVaderDaoController) ctrl).stream())
             .toArray(ToolCallback[]::new);
         return () -> callbacks;
+    }
+
+    /**
+     * Same reasoning as {@code DatabaseQueryToolsConfig}: not needed by a task-execution agent,
+     * whose context is already composed for it; reserved for an orchestration agent.
+     *
+     * @param daoControllerToolCallbacks this config's own provider bean
+     * @return the audience tag
+     */
+    @Bean
+    public ToolAudienceTag daoControllerToolAudience(
+        final ToolCallbackProvider daoControllerToolCallbacks) {
+        return new ToolAudienceTag(
+            daoControllerToolCallbacks, Set.of(AgentToolAudience.ORCHESTRATION));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

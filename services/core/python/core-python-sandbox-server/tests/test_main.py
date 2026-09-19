@@ -31,3 +31,19 @@ def test_execute_accepts_camel_case_timeout_field():
 
     assert response.status_code == 200
     assert response.json()["timedOut"] is True
+
+
+def test_stage_file_writes_the_raw_request_body_and_acks_with_no_content_echoed():
+    response = client.put("/workspace/files/report.xlsx", content=b"raw spreadsheet bytes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {"filename": "report.xlsx", "size": len(b"raw spreadsheet bytes")}
+
+
+def test_staged_file_is_then_visible_to_execute():
+    client.put("/workspace/files/staged.csv", content=b"a,b\n1,2\n")
+
+    response = client.post("/execute", json={"code": "print(open('staged.csv').read())"})
+
+    assert "1,2" in response.json()["stdout"]

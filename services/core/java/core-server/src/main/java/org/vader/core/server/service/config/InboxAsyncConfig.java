@@ -56,6 +56,25 @@ public class InboxAsyncConfig {
     }
 
     /**
+     * The dedicated single-thread executor for enqueue-triggered LLM-request inbox drains. A
+     * discarded nudge here is harmless -- {@code LlmRequestInbox}'s own much shorter scheduled
+     * poll (default 200ms, versus the other inboxes' 1000ms) is a tight enough safety net on its
+     * own.
+     *
+     * @return the executor
+     */
+    @Bean("llmRequestInboxExecutor")
+    public TaskExecutor llmRequestInboxExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("llm-request-inbox-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        return executor;
+    }
+
+    /**
      * The dedicated single-thread executor {@code TaskGraphSchedulerListener} hands
      * {@code TaskGraphScheduler#evaluate} off to.
      *

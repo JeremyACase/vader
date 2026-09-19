@@ -133,6 +133,12 @@ data:
         task-assignment:
           poll-interval-ms: {{ .Values.vader.inbox.taskAssignment.pollIntervalMs }}
           max-concurrency: {{ .Values.vader.inbox.taskAssignment.maxConcurrency }}
+      llm:
+        request-queue:
+          drain-poll-interval-ms: {{ .Values.vader.llm.requestQueue.drainPollIntervalMs }}
+          result-poll-interval-ms: {{ .Values.vader.llm.requestQueue.resultPollIntervalMs }}
+          stall-timeout-seconds: {{ .Values.vader.llm.requestQueue.stallTimeoutSeconds }}
+          max-wait-seconds: {{ .Values.vader.llm.requestQueue.maxWaitSeconds }}
       backpressure:
         sample-interval-ms: {{ .Values.vader.backpressure.sampleIntervalMs }}
       mcp:

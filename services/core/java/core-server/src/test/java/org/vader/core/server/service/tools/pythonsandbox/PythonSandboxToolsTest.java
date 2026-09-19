@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.vader.core.server.models.SandboxExecutionRequest;
 import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.models.StagedObjectInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,5 +66,16 @@ class PythonSandboxToolsTest {
         verify(this.service).runCode(eq("vader-sandbox-a"), requestCaptor.capture());
         assertThat(requestCaptor.getValue().code()).isEqualTo("print('hi')");
         assertThat(requestCaptor.getValue().files()).isEqualTo(files);
+    }
+
+    @Test
+    void stageObject_delegatesToTheServiceAndReturnsNoContent() {
+        var info = new StagedObjectInfo("report.xlsx", "application/vnd.ms-excel", 68911L);
+        when(this.service.stageObject("vader-sandbox-a", "obj-1", null)).thenReturn(info);
+
+        var result = this.tools.stageObject("vader-sandbox-a", "obj-1", null);
+
+        assertThat(result).isEqualTo(info);
+        verify(this.service).stageObject("vader-sandbox-a", "obj-1", null);
     }
 }

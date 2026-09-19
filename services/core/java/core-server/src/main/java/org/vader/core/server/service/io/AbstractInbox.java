@@ -20,9 +20,12 @@ import org.vader.core.server.service.backpressure.InterfaceQueueBackpressure;
  * transactions.</p>
  *
  * <p>{@link #drain()} is guarded by a non-reentrant flag: a scheduled drain and an
- * enqueue-triggered drain that overlap are coalesced rather than racing for the same row. The
- * flag is per-instance, so this is only single-replica safe -- a multi-replica deployment needs a
- * pessimistic lock or {@code SKIP LOCKED} on the claim query.</p>
+ * enqueue-triggered drain that overlap are coalesced rather than racing for the same row within
+ * one replica. The flag itself is per-instance, but that only governs how eagerly one replica
+ * polls -- the actual claim ({@link QueueMessageProcessor#claim}) is a conditional
+ * {@code UPDATE ... WHERE status = PENDING} that the database itself makes atomic, so it is safe
+ * for any number of replicas to be draining the same table concurrently: at most one of them ever
+ * wins a given row.</p>
  *
  * <p>Concrete subclasses supply the repository, {@link #handle}, and the
  * {@link InterfaceQueueBackpressure} identity/ceiling methods ({@code queuedModelType()},

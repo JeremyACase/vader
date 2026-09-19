@@ -11,9 +11,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
-from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult
+from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult, StageFileResult
 from core_python_sandbox_server.workspace_code_executor import WorkspaceCodeExecutor
 
 # The container sets SANDBOX_WORKSPACE_DIR=/workspace (see Dockerfile). Falling back to a temp
@@ -37,3 +37,14 @@ def health() -> dict[str, str]:
 def execute(request: ExecutionRequest) -> ExecutionResult:
     """Runs the submitted code in the persistent workspace and returns its output."""
     return executor.execute(request)
+
+
+@app.put("/workspace/files/{filename:path}", response_model=StageFileResult)
+async def stage_file(filename: str, request: Request) -> StageFileResult:
+    """Writes a raw request body straight into the workspace, staging it for a later
+    ``run_python_code`` call without ever encoding it as base64 -- core-server's own
+    stage-object path uses this to push a stored object's bytes in one hop, instead of round-
+    tripping them through an LLM's tool-calling conversation."""
+    content = await request.body()
+    size = executor.stage_file(filename, content)
+    return StageFileResult(filename=filename, size=size)

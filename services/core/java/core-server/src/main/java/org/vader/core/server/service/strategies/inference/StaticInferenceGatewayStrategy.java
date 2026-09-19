@@ -10,6 +10,7 @@ import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.ConversationRole;
 import org.vader.core.server.models.InferenceToolCall;
 import org.vader.core.server.models.InferenceTurn;
+import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 import org.vader.core.server.service.strategies.orchestration.StaticLlmOrchestrationStrategy;
 
@@ -51,7 +52,7 @@ public class StaticInferenceGatewayStrategy implements InterfaceInferenceGateway
     public InferenceTurn complete(final List<ConversationMessage> messages) {
         logger.debug(
             "Static inference turn requested with {} tool(s) registered",
-            this.toolCallbackRegistry.all().size());
+            this.toolCallbackRegistry.forAudience(AgentToolAudience.TASK_EXECUTION).size());
         return hasToolResult(messages) ? finalTurn() : scriptedToolCallTurn();
     }
 

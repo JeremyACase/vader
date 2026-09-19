@@ -272,7 +272,7 @@ A bad entry reads like an annotated file listing.
 | `vader.operators.python-sandbox.enabled` | `true` | Python sandbox operator |
 | `vader.operators.python-sandbox.sandbox.exec-timeout-seconds` | `30` | Ceiling on one `run_python_code` call, enforced by `core-python-sandbox-server` itself regardless of what a caller requests |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
-| `vader.mcp.backpressure.enabled` | `true` | Expose inbox/outbox backpressure tools over MCP |
+| `vader.mcp.backpressure.enabled` | `false` | Expose inbox/outbox backpressure tools over MCP -- an ops-debugging surface, not something task-execution agents need |
 | `vader.storage.type` | `database` | `database` or `minio`; picks the `InterfaceFileStorageStrategy` backing both upload and the object-storage download endpoint/tool |
 | `vader.mcp.object-storage.enabled` | `true` | Expose `get_object_content` (base64 object retrieval) over MCP |
 | `vader.mcp.object-storage.max-inline-bytes` | `2097152` | Objects over this size are rejected by `get_object_content` with the REST download URL instead of being inlined |
@@ -292,3 +292,7 @@ A bad entry reads like an annotated file listing.
 | `vader.agent-harness.ttl-seconds-after-finished` | `3600` | Backstop only: `AgentHarnessJobCleanupListener` deletes a finished Job as soon as its `TaskAttempt` settles, regardless of this value; Kubernetes only reaches this TTL if that explicit delete didn't run |
 | `vader.agent-harness.reaper.poll-interval-ms` | `30000` | How often to scan for attempts a harness will never report back on |
 | `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |
+| `vader.llm.request-queue.drain-poll-interval-ms` | `200` | `LlmRequestInbox`'s scheduled drain cadence -- the only path by which a replica other than the enqueuer (or one already mid-request) notices a freed claim slot, so this directly adds to every blocked caller's wait |
+| `vader.llm.request-queue.result-poll-interval-ms` | `100` | How often a caller blocked in `LlmRequestQueue` re-checks whether its own request has been processed |
+| `vader.llm.request-queue.stall-timeout-seconds` | `60` | The real patience control: a caller gives up once no request on the queue, anywhere, by any replica, has been claimed for this long. A deep-but-healthy queue does not trip this -- only a genuinely stuck backend does |
+| `vader.llm.request-queue.max-wait-seconds` | `1800` | Absolute backstop regardless of stall detection, so a queue that never stalls but also never keeps up cannot block a caller forever |

@@ -40,8 +40,11 @@ const TASK_INSTRUCTIONS: &str = "You are an autonomous agent completing one task
     gather anything you need yourself, using your available tools, rather than asking a \
     clarifying question. The next message gives you the task plus background: the original \
     request, any files attached to it, and the results of any prerequisite tasks. If a file is \
-    mentioned, fetch its actual content with get_object_content before analyzing it -- do not \
-    assume you already know what it contains. When you have fully completed the task, reply \
+    mentioned, do not assume you already know what it contains: create a Python sandbox, stage \
+    the file into it with stage_object, then inspect it with run_python_code -- reserve \
+    get_object_content for small text content you need to read directly, and never use it just \
+    to hand a file's bytes to run_python_code, since that inlines the raw content into this \
+    conversation instead of the sandbox's workspace. When you have fully completed the task, reply \
     with your final answer as plain text and do not call any more tools; that reply is what ends \
     this run and is treated as your finished result, not a question. Never end the run by asking \
     a question or requesting clarification -- if something is genuinely still missing after using \

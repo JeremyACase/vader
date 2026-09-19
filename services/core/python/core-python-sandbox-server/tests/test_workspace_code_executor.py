@@ -87,3 +87,28 @@ def test_execute_rejects_path_traversal(tmp_path):
 
     with pytest.raises(ValueError, match="escapes the workspace"):
         executor.execute(ExecutionRequest(code="pass", files={"../evil.txt": encoded}))
+
+
+def test_stage_file_writes_raw_bytes_and_returns_their_count(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    size = executor.stage_file("report.xlsx", b"not really an xlsx")
+
+    assert size == len(b"not really an xlsx")
+    assert (tmp_path / "report.xlsx").read_bytes() == b"not really an xlsx"
+
+
+def test_stage_file_result_is_visible_to_a_later_execute_call(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    executor.stage_file("data.csv", b"a,b\n1,2\n")
+
+    result = executor.execute(ExecutionRequest(code="print(open('data.csv').read())"))
+
+    assert "1,2" in result.stdout
+
+
+def test_stage_file_rejects_path_traversal(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    with pytest.raises(ValueError, match="escapes the workspace"):
+        executor.stage_file("../evil.bin", b"x")
