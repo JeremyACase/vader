@@ -13,11 +13,11 @@ import org.vader.common.model.vader.entity.ClientPromptOutboxMessageEntity;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.repository.ClientPromptOutboxMessageRepository;
 import org.vader.core.server.repository.OutboxMessageRepository;
-import org.vader.core.server.service.WorkflowService;
+import org.vader.core.server.service.agent.orchestrator.OrchestratorAgentService;
 
 /**
  * Inbox for client prompts: pops pending prompt messages and runs
- * {@link WorkflowService#decompose} on each, turning it into a persisted workflow.
+ * {@link OrchestratorAgentService#decompose} on each, turning it into a persisted workflow.
  *
  * <p>Drains are triggered two ways: on a fixed schedule (a safety net that also catches messages
  * left behind by a restart), and immediately after an enqueue commits (the common path, so a
@@ -31,13 +31,13 @@ public class ClientPromptInbox extends AbstractInbox<ClientPromptOutboxMessageEn
     @Autowired
     private ClientPromptOutboxMessageRepository messageRepository;
 
-    // Lazy: the inbox only needs the workflow service when it processes a message, never at
-    // construction. Injecting it eagerly drags the LLM orchestrator (and, in "local" mode, the
-    // whole Spring AI tool-calling graph) into the backpressure registry's dependencies, which
-    // closes a cycle back through this bean via the MCP tool callbacks.
+    // Lazy: the inbox only needs the orchestrator agent service when it processes a message,
+    // never at construction. Injecting it eagerly drags the LLM orchestrator (and, in "local"
+    // mode, the whole Spring AI tool-calling graph) into the backpressure registry's
+    // dependencies, which closes a cycle back through this bean via the MCP tool callbacks.
     @Autowired
     @Lazy
-    private WorkflowService workflowService;
+    private OrchestratorAgentService orchestratorAgentService;
 
     @Autowired
     @Qualifier("clientPromptInboxExecutor")
@@ -63,7 +63,7 @@ public class ClientPromptInbox extends AbstractInbox<ClientPromptOutboxMessageEn
 
     @Override
     protected void handle(final ClientPromptOutboxMessageEntity message) {
-        this.workflowService.decompose(message.getClientPrompt().getId());
+        this.orchestratorAgentService.decompose(message.getClientPrompt().getId());
     }
 
     /**

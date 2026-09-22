@@ -20,6 +20,14 @@ serde_json = "1"
 # No "v4" feature: the harness only ever parses ids core-server hands it, never generates one.
 uuid = { version = "1", features = ["serde"] }
 thiserror = "2"
+# `log` is the facade (this harness's SLF4J equivalent); `env_logger` is a minimal backend that
+# writes to stderr (so it shows up in `kubectl logs` with no extra plumbing) and reads its level
+# from `RUST_LOG`, same as core-server reads `logging.level.org.vader` -- both configurable per
+# deployment, neither hardcoded. Deliberately not `tracing`: this harness makes a few sequential
+# HTTP calls with no fan-out, so span-based structured tracing buys nothing here but extra
+# dependencies and binary size, which this crate's release profile is explicitly tuned against.
+log = "0.4"
+env_logger = "0.11"
 
 # Small, fast-starting binary: this runs as a short-lived k8s Job, potentially many at once.
 [profile.release]

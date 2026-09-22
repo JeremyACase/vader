@@ -22,6 +22,7 @@ class PythonSandboxManifestBuilderTest {
         ReflectionTestUtils.setField(this.builder, "cpuLimit", "500m");
         ReflectionTestUtils.setField(this.builder, "memoryLimit", "256Mi");
         ReflectionTestUtils.setField(this.builder, "execTimeoutSeconds", "30");
+        ReflectionTestUtils.setField(this.builder, "logLevel", "DEBUG");
     }
 
     @Test
@@ -39,6 +40,9 @@ class PythonSandboxManifestBuilderTest {
         assertThat(container.getEnv())
             .anyMatch(env -> "SANDBOX_EXEC_MAX_TIMEOUT_SECONDS".equals(env.getName())
                 && "30".equals(env.getValue()));
+        assertThat(container.getEnv())
+            .anyMatch(env -> "SANDBOX_LOG_LEVEL".equals(env.getName())
+                && "DEBUG".equals(env.getValue()));
 
         var readiness = container.getReadinessProbe();
         assertThat(readiness.getHttpGet().getPath()).isEqualTo("/health");

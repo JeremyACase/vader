@@ -31,13 +31,12 @@ impl CoreServerAdapter {
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, HarnessError> {
         let url = format!("{}{path}", self.base_url);
-        let response = self
-            .http_client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|source| HarnessError::ControlPlaneUnavailable(source.to_string()))?;
-        Self::body_on_success(response, HarnessError::ControlPlaneUnavailable).await
+        log::debug!("GET {url}");
+        let response = self.http_client.get(&url).send().await.map_err(|source| {
+            log::warn!("GET {url} failed: {source}");
+            HarnessError::ControlPlaneUnavailable(source.to_string())
+        })?;
+        Self::body_on_success(&url, response, HarnessError::ControlPlaneUnavailable).await
     }
 
     async fn post_no_content(
@@ -46,14 +45,18 @@ impl CoreServerAdapter {
         body: &impl serde::Serialize,
     ) -> Result<(), HarnessError> {
         let url = format!("{}{path}", self.base_url);
+        log::debug!("POST {url}");
         let response = self
             .http_client
             .post(&url)
             .json(body)
             .send()
             .await
-            .map_err(|source| HarnessError::ControlPlaneUnavailable(source.to_string()))?;
-        Self::ensure_success(response, HarnessError::ControlPlaneUnavailable)
+            .map_err(|source| {
+                log::warn!("POST {url} failed: {source}");
+                HarnessError::ControlPlaneUnavailable(source.to_string())
+            })?;
+        Self::ensure_success(&url, response, HarnessError::ControlPlaneUnavailable)
             .await
             .map(|_| ())
     }
@@ -65,17 +68,22 @@ impl CoreServerAdapter {
         to_error: impl Fn(String) -> HarnessError,
     ) -> Result<T, HarnessError> {
         let url = format!("{}{path}", self.base_url);
+        log::debug!("POST {url}");
         let response = self
             .http_client
             .post(&url)
             .json(body)
             .send()
             .await
-            .map_err(|source| to_error(source.to_string()))?;
-        Self::body_on_success(response, to_error).await
+            .map_err(|source| {
+                log::warn!("POST {url} failed: {source}");
+                to_error(source.to_string())
+            })?;
+        Self::body_on_success(&url, response, to_error).await
     }
 
     async fn ensure_success(
+        url: &str,
         response: reqwest::Response,
         to_error: impl Fn(String) -> HarnessError,
     ) -> Result<reqwest::Response, HarnessError> {
@@ -84,18 +92,20 @@ impl CoreServerAdapter {
         }
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
+        log::warn!("{url} returned HTTP {status}: {body}");
         Err(to_error(format!("HTTP {status}: {body}")))
     }
 
     async fn body_on_success<T: serde::de::DeserializeOwned>(
+        url: &str,
         response: reqwest::Response,
         to_error: impl Fn(String) -> HarnessError,
     ) -> Result<T, HarnessError> {
-        let response = Self::ensure_success(response, &to_error).await?;
-        response
-            .json::<T>()
-            .await
-            .map_err(|source| to_error(source.to_string()))
+        let response = Self::ensure_success(url, response, &to_error).await?;
+        response.json::<T>().await.map_err(|source| {
+            log::warn!("{url} returned a body that could not be parsed: {source}");
+            to_error(source.to_string())
+        })
     }
 }
 

@@ -1,5 +1,5 @@
-- add logging to harnesses
-- Global Controller Advice
+- Add an "Evaluator" Agent that evaluates a task plan prior to divvying off work
+- Ensure tasks can be decomposed
 - Show it all in the UI: DAGs, flows, etc.
 - allow ollama operator to be able to create new, specialized LLM's
 - compaction-as-a-service

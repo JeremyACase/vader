@@ -108,22 +108,29 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
 
         let outcome = loop {
             if self.budget.is_exhausted() {
+                log::warn!("assignment {assignment_id:?}: budget exhausted, ending run");
                 break HarnessOutcome::TimedOut;
             }
             if self.stall_detector.is_stalled() {
+                log::warn!("assignment {assignment_id:?}: stall detected, ending run");
                 break HarnessOutcome::Stalled;
             }
             match self.take_turn(assignment_id, &mut messages).await {
-                Ok(TurnOutcome::Finished(output)) => break HarnessOutcome::Succeeded { output },
+                Ok(TurnOutcome::Finished(output)) => {
+                    log::info!("assignment {assignment_id:?}: model produced a final answer");
+                    break HarnessOutcome::Succeeded { output };
+                }
                 Ok(TurnOutcome::Continuing) => {}
                 Err(error) => {
+                    log::error!("assignment {assignment_id:?}: turn failed: {error}");
                     break HarnessOutcome::Failed {
                         reason: error.to_string(),
-                    }
+                    };
                 }
             }
         };
 
+        log::info!("assignment {assignment_id:?}: reporting outcome {outcome:?}");
         self.control_plane
             .submit_result(assignment_id, &outcome)
             .await?;
@@ -138,6 +145,10 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         assignment_id: AssignmentId,
         messages: &mut Vec<ConversationMessage>,
     ) -> Result<TurnOutcome, HarnessError> {
+        log::debug!(
+            "assignment {assignment_id:?}: requesting a turn ({} message(s) so far)",
+            messages.len()
+        );
         let turn = self
             .inference_gateway
             .complete_turn(assignment_id, messages)
@@ -149,6 +160,10 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         let outcome = if turn.tool_calls.is_empty() {
             TurnOutcome::Finished(turn.content.unwrap_or_default())
         } else {
+            log::debug!(
+                "assignment {assignment_id:?}: model requested {} tool call(s)",
+                turn.tool_calls.len()
+            );
             self.append_tool_exchange(assignment_id, messages, turn.tool_calls)
                 .await?;
             TurnOutcome::Continuing
@@ -166,6 +181,10 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
     ) -> Result<(), HarnessError> {
         let mut tool_results = Vec::with_capacity(tool_calls.len());
         for tool_call in &tool_calls {
+            log::debug!(
+                "assignment {assignment_id:?}: invoking tool {}",
+                tool_call.name
+            );
             let result = self
                 .tool_executor
                 .invoke_tool(assignment_id, tool_call)
@@ -193,7 +212,7 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             )
             .await;
         if let Err(error) = heartbeat {
-            eprintln!("heartbeat failed (continuing): {error}");
+            log::warn!("assignment {assignment_id:?}: heartbeat failed (continuing): {error}");
         }
     }
 }

@@ -1,0 +1,19 @@
+<div class="update-history">
+  @if (!updates().length) {
+    <p class="muted">No updates recorded yet.</p>
+  }
+  <ol class="update-list">
+    @for (update of updates(); track update.id) {
+      <li class="update-item">
+        <div class="update-header">
+          <span class="status-badge" [attr.data-status]="update.type">{{update.type}}</span>
+          <span class="hint author">{{update.author}}</span>
+          @if (update.createdAt) {
+            <span class="hint">{{update.createdAt | date:'short'}}</span>
+          }
+        </div>
+        <p class="update-desc">{{update.description}}</p>
+      </li>
+    }
+  </ol>
+</div>

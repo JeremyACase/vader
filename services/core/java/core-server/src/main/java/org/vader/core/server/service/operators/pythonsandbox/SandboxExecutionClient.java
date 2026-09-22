@@ -28,6 +28,8 @@ import org.vader.core.server.models.SandboxExecutionResult;
 public class SandboxExecutionClient {
 
     private static final int EXEC_PORT = 8888;
+
+    private static final int MAX_SANDBOX_NAME_IN_ERROR = 80;
     private static final String EXECUTE_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/execute";
     private static final String STAGE_FILE_URI =
@@ -58,6 +60,8 @@ public class SandboxExecutionClient {
                 .body(this.withoutNullFiles(request))
                 .retrieve()
                 .body(SandboxExecutionResult.class);
+        } catch (IllegalArgumentException e) {
+            throw invalidSandboxName(sandboxName, e);
         } catch (RestClientException e) {
             throw new SandboxExecutionException(
                 "Could not run code in sandbox '" + sandboxName + "': " + e.getMessage(), e);
@@ -84,11 +88,34 @@ public class SandboxExecutionClient {
                 .body(content)
                 .retrieve()
                 .toBodilessEntity();
+        } catch (IllegalArgumentException e) {
+            throw invalidSandboxName(sandboxName, e);
         } catch (RestClientException e) {
             throw new SandboxExecutionException(
                 "Could not stage '" + filename + "' into sandbox '" + sandboxName + "': "
                     + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Builds the error for a {@code sandboxName} that made the target URI unbuildable -- e.g. a
+     * caller passing an entire code blob where a short sandbox name was expected. The message
+     * deliberately omits the underlying {@link IllegalArgumentException}'s own message (kept only
+     * as the cause): that message is the malformed URI itself, which would otherwise echo the
+     * offending value's full (and potentially huge) content straight back to whatever called
+     * this, unbounded.
+     */
+    private static SandboxExecutionException invalidSandboxName(
+            final String sandboxName, final IllegalArgumentException cause) {
+        return new SandboxExecutionException(
+            "'" + preview(sandboxName) + "' is not a valid sandbox name -- expected the exact "
+                + "name returned by create_sandbox or list_sandboxes.", cause);
+    }
+
+    private static String preview(final String value) {
+        return value.length() > MAX_SANDBOX_NAME_IN_ERROR
+            ? value.substring(0, MAX_SANDBOX_NAME_IN_ERROR) + "..."
+            : value;
     }
 
     /**

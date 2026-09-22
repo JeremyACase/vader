@@ -22,9 +22,11 @@ import org.vader.common.library.dao.model.QueryFilterParameter;
 import org.vader.common.library.dao.model.QueryOperatorType;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.core.server.models.EntityDescription;
+import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
 import org.vader.core.server.service.io.ClientPromptInbox;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
-import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
 @SpringBootTest
@@ -48,6 +50,12 @@ class DatabaseQueryIntegrationTest {
 
     @MockitoBean
     private InterfaceWorkflowSynthesisStrategy synthesisStrategy;
+
+    @MockitoBean
+    private InterfaceEvaluatorStrategy evaluatorStrategy;
+
+    @MockitoBean
+    private InterfaceReattemptDecisionStrategy reattemptDecisionStrategy;
 
     @Autowired
     private MockMvc mockMvc;
@@ -96,12 +104,12 @@ class DatabaseQueryIntegrationTest {
     }
 
     @Test
-    void describe_listsTheNineEntitiesAndNotFileContent() {
+    void describe_listsTheTenEntitiesAndNotFileContent() {
         assertThat(this.databaseQueryService.describe())
             .extracting(EntityDescription::name)
             .containsExactlyInAnyOrder(
                 "Workflow", "ClientPrompt", "TaskPlan", "TaskGraph", "Task", "ObjectMetadata",
-                "TaskAttempt", "TaskAttemptTranscript", "TaskAttemptToolCall");
+                "TaskAttempt", "TaskAttemptTranscript", "TaskAttemptToolCall", "TaskUpdate");
     }
 
     private static QueryFilterParameter parameter(

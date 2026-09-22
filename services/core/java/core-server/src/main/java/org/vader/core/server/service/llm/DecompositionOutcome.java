@@ -1,6 +1,6 @@
 package org.vader.core.server.service.llm;
 
-import org.vader.core.server.service.strategies.orchestration.LlmTaskPlan;
+import org.vader.core.server.service.agent.orchestrator.strategies.LlmTaskPlan;
 
 /**
  * The result of one decomposition attempt -- deliberately not an exception even when the LLM was

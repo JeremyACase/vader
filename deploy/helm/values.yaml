@@ -48,6 +48,10 @@ vader:
       # When the in-cluster LLM is unreachable, fall back to the canned static task plan rather
       # than returning a 503. Keeps `helm test` / CI green without an Ollama deployment.
       fallbackToStatic: true
+      # Bounds every individual Ollama HTTP call. Raise this if your hardware is slow enough that
+      # legitimate (if verbose) generations routinely exceed it -- but keep it well under
+      # agentHarness.deadlineSeconds, since a call this long already eats most of a task's budget.
+      requestTimeoutSeconds: 300
   storage:
     # Allowable values are:
     #   database - store uploaded file contents as BLOBs in the relational database (default;
@@ -84,6 +88,15 @@ vader:
       # rate, not how many harness Jobs may run at once -- see agentHarness.maxAttemptsPerTask
       # and the scheduler for the actual concurrency the task graph produces.
       maxConcurrency: 5
+    taskAttemptReview:
+      # How often the inbox polls for terminal attempts awaiting review. A newly-enqueued review
+      # is also drained immediately, so this is mostly a safety net.
+      pollIntervalMs: 1000
+      # Max attempts reviewed (evaluator verdict, then orchestrator reattempt decision if failed)
+      # concurrently. Kept at 1 by default since both steps make LLM calls already serialized
+      # through the single-worker requestQueue below -- raising this would only mean more callers
+      # queued up waiting for that same worker, not more actual parallelism.
+      maxConcurrency: 1
   llm:
     requestQueue:
       # How often LlmRequestInbox polls for pending LLM requests. Much shorter than the other
@@ -129,6 +142,13 @@ vader:
       # to use instead) rather than inlined as base64, to keep a single tool result from blowing
       # the calling model's context budget.
       maxInlineBytes: 2097152
+    taskUpdate:
+      # When true, core-server exposes post_task_update over the MCP endpoint: a task-execution
+      # agent can leave an interim progress note against the task it is working on. Never a
+      # pass/fail/timeout verdict -- those stay reserved for an independent evaluator (and, for
+      # timeouts, the reaper) -- and never against another task, regardless of what the calling
+      # model supplies.
+      enabled: true
   operators:
     # Kubernetes operators core-server runs, each also exposed to LLMs as MCP tools.
     # Master switch: constructs the shared Kubernetes client and enables the RBAC the

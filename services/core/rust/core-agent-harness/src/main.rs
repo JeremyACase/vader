@@ -25,13 +25,19 @@ const DEFAULT_STALL_REPEATS: u32 = 3;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), HarnessError> {
+    // Defaults to "info" -- matching core-server's own default (logging.vader: INFO) -- when
+    // RUST_LOG is unset, rather than env_logger's own default of "warn" (which would print
+    // nothing at all in the common case, unlike every other Vader service).
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     let task_id = TaskId::parse(&required_env("TASK_ID")?)?;
     let assignment_id = AssignmentId::parse(&required_env("ASSIGNMENT_ID")?)?;
     let core_server_url = required_env("CORE_SERVER_URL")?;
 
-    println!(
+    log::info!(
         "core-agent-harness starting: task={:?} assignment={:?} core_server={core_server_url}",
-        task_id, assignment_id
+        task_id,
+        assignment_id
     );
 
     let adapter = CoreServerAdapter::new(core_server_url);
@@ -56,10 +62,13 @@ async fn main() -> Result<(), HarnessError> {
     );
     let outcome = runner.run(assignment).await?;
 
-    println!("core-agent-harness finished: {outcome:?}");
+    log::info!("core-agent-harness finished: {outcome:?}");
     Ok(())
 }
 
 fn required_env(key: &str) -> Result<String, HarnessError> {
-    std::env::var(key).map_err(|_| HarnessError::MissingEnv(key.to_string()))
+    std::env::var(key).map_err(|_| {
+        log::error!("required environment variable {key} is not set");
+        HarnessError::MissingEnv(key.to_string())
+    })
 }

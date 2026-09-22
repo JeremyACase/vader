@@ -14,7 +14,6 @@
 
 .workflow-row {
   border-top: 1px solid #2a2e38;
-  padding: 0.5rem 0;
 }
 
 .workflow-row:first-child {
@@ -28,16 +27,45 @@
   width: 100%;
   background: none;
   border: none;
-  padding: 0;
+  border-radius: 6px;
+  padding: 0.6rem 0.5rem;
   color: inherit;
   font: inherit;
-  font-size: 1rem;
+  font-size: 0.9rem;
   cursor: pointer;
   text-align: left;
+}
+
+.workflow-summary:hover:not(:disabled) {
+  background: #1c1f27;
+}
+
+.workflow-summary.selected {
+  background: #1f2f4f;
+}
+
+.workflow-summary:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .workflow-objective {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #2a2e38;
+}
+
+.pagination button {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
 }

@@ -20,8 +20,9 @@ import org.vader.core.server.service.storage.ObjectStorageService;
 
 /**
  * Domain layer over {@link PythonSandboxOperator}, shared by the MCP tools and the REST
- * controller so both go through one code path — the same split as {@code WorkflowService} sitting
- * under both {@code ClientPromptController} and the orchestrator.
+ * controller so both go through one code path — the same split as
+ * {@code OrchestratorAgentService} sitting under both {@code ClientPromptController} and the
+ * orchestrator.
  *
  * <p>Mirrors {@link PythonSandboxOperator}'s condition (both the master switch and this
  * operator's own flag) since this bean autowires that operator directly.</p>

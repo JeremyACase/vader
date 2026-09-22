@@ -6,9 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
+import org.vader.core.server.service.agent.orchestrator.strategies.LlmTaskPlan;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
-import org.vader.core.server.service.strategies.orchestration.LlmTaskPlan;
 
 /**
  * Actually asks the in-cluster Ollama instance to decompose one client prompt, via Spring AI's
@@ -39,6 +39,20 @@ public class DecompositionLlmExecutor {
         in your own words, identify any constraints or unknowns, decide whether any of your
         available tools would materially help, and sketch your overall approach. Write this
         reasoning before filling in `objective` and `tasks` — it will be shown to the user.
+
+        List tasks in the order they would naturally happen. Most plans have real dependencies —
+        a task that needs another task's output cannot run in parallel with it. Use
+        `dependsOnIndices` to say so: it holds the 0-based positions, in this same tasks array, of
+        every task that must finish first. Only reference earlier positions (a task can never
+        depend on itself or on something listed after it); leave it empty for a task that can
+        start immediately. Do not default every task to an empty list just because it is easier —
+        think about which tasks actually need another one's result.
+
+        For example, "research competitors, then write a positioning doc, then get it reviewed"
+        is three tasks where task 1 (write) has `dependsOnIndices: [0]` and task 2 (review) has
+        `dependsOnIndices: [1]` — each waits only on the one task immediately before it, not on
+        every prior task. A plan whose tasks are all independent (e.g. "fetch three unrelated
+        reports") correctly leaves every `dependsOnIndices` empty.
 
         You have been given a set of tools. Call a tool only when doing so materially helps you
         plan or gather information the plan needs; otherwise just plan. Do not call tools

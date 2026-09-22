@@ -112,6 +112,11 @@ data:
           # When the in-cluster LLM is unreachable, return the canned static plan instead of
           # failing -- lets `helm test` / CI pass with no Ollama in the cluster.
           fallback-to-static: {{ .Values.vader.orchestrator.local.fallbackToStatic }}
+          # Bounds every Ollama HTTP call (decomposition, inference turns, evaluation,
+          # reattempt decisions, synthesis); the JDK HTTP client Spring auto-detects here has no
+          # timeout of its own, so an unbounded call would otherwise wedge the single-worker LLM
+          # queue forever instead of failing and freeing it for the next request.
+          request-timeout-seconds: {{ .Values.vader.orchestrator.local.requestTimeoutSeconds }}
         {{- end }}
       storage:
         type: {{ .Values.vader.storage.type | default "database" }}
@@ -133,6 +138,9 @@ data:
         task-assignment:
           poll-interval-ms: {{ .Values.vader.inbox.taskAssignment.pollIntervalMs }}
           max-concurrency: {{ .Values.vader.inbox.taskAssignment.maxConcurrency }}
+        task-attempt-review:
+          poll-interval-ms: {{ .Values.vader.inbox.taskAttemptReview.pollIntervalMs }}
+          max-concurrency: {{ .Values.vader.inbox.taskAttemptReview.maxConcurrency }}
       llm:
         request-queue:
           drain-poll-interval-ms: {{ .Values.vader.llm.requestQueue.drainPollIntervalMs }}
@@ -151,6 +159,8 @@ data:
           # `int` avoids Helm/Go rendering this as scientific notation (e.g. 2.097152e+06),
           # which plain interpolation of a non-"round" number this size is prone to.
           max-inline-bytes: {{ int .Values.vader.mcp.objectStorage.maxInlineBytes }}
+        task-update:
+          enabled: {{ .Values.vader.mcp.taskUpdate.enabled }}
       kubernetes:
         namespace: {{ .Release.Namespace }}
       operators:
@@ -162,6 +172,9 @@ data:
             image: {{ .Values.vader.operators.pythonSandbox.sandbox.image }}
             image-pull-policy: {{ .Values.infrastructure.image.pullPolicy }}
             exec-timeout-seconds: {{ .Values.vader.operators.pythonSandbox.sandbox.execTimeoutSeconds }}
+            # Passed to the sandbox pod as SANDBOX_LOG_LEVEL, so its log verbosity tracks
+            # core-server's own (logging.vader) the same way agent-harness's log-level does.
+            log-level: {{ .Values.logging.vader }}
             resources:
               requests:
                 cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.cpu }}
@@ -176,6 +189,11 @@ data:
         image: {{ include "vader.core.agentHarness.image" . | quote }}
         image-pull-policy: {{ .Values.infrastructure.image.pullPolicy }}
         core-server-url: http://vader-core-server:{{ .Values.convenience.variables.spring.port }}
+        # Passed to each harness Job as RUST_LOG, so the harness's log verbosity tracks
+        # core-server's own (logging.vader) rather than needing a second knob kept in sync by
+        # hand. env_logger's level names are case-insensitive, so core-server's "INFO"-style
+        # value works unchanged.
+        log-level: {{ .Values.logging.vader }}
         max-turns: {{ .Values.vader.agentHarness.maxTurns }}
         max-tokens: {{ .Values.vader.agentHarness.maxTokens }}
         deadline-seconds: {{ .Values.vader.agentHarness.deadlineSeconds }}

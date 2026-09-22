@@ -20,9 +20,11 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.core.server.repository.ClientPromptOutboxMessageRepository;
 import org.vader.core.server.repository.WorkflowRepository;
+import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
 import org.vader.core.server.service.io.ClientPromptInbox;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
-import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
 @SpringBootTest
@@ -51,6 +53,12 @@ class ClientPromptControllerIntegrationTest {
 
     @MockitoBean
     private InterfaceWorkflowSynthesisStrategy synthesisStrategy;
+
+    @MockitoBean
+    private InterfaceEvaluatorStrategy evaluatorStrategy;
+
+    @MockitoBean
+    private InterfaceReattemptDecisionStrategy reattemptDecisionStrategy;
 
     @Autowired
     private MockMvc mockMvc;

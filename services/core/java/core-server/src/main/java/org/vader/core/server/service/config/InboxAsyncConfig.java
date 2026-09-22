@@ -56,6 +56,24 @@ public class InboxAsyncConfig {
     }
 
     /**
+     * The dedicated single-thread executor for enqueue-triggered attempt-review inbox drains. A
+     * discarded nudge here is harmless -- the review pipeline's own scheduled poll is a tight
+     * enough safety net on its own, same reasoning as {@code llmRequestInboxExecutor}.
+     *
+     * @return the executor
+     */
+    @Bean("taskAttemptReviewInboxExecutor")
+    public TaskExecutor taskAttemptReviewInboxExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("task-attempt-review-inbox-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        return executor;
+    }
+
+    /**
      * The dedicated single-thread executor for enqueue-triggered LLM-request inbox drains. A
      * discarded nudge here is harmless -- {@code LlmRequestInbox}'s own much shorter scheduled
      * poll (default 200ms, versus the other inboxes' 1000ms) is a tight enough safety net on its

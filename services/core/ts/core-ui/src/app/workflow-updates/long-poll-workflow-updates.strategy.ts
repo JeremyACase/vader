@@ -5,6 +5,7 @@ import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { ClientPrompt, Workflow } from '../client-prompt.model';
 import { DaoPage } from '../dao-page.model';
 import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
+import { TaskUpdate } from '../task-update.model';
 import { InterfaceWorkflowUpdatesStrategy } from './workflow-updates.strategy';
 
 const POLL_INTERVAL_MS = 3000;
@@ -22,24 +23,33 @@ const POLL_INTERVAL_MS = 3000;
 export class LongPollWorkflowUpdatesStrategy implements InterfaceWorkflowUpdatesStrategy {
   private http = inject(HttpClient);
 
-  private readonly recentWorkflows$ = this.poll<Workflow[]>(() =>
-    this.http
-      .get<DaoPage<Workflow>>('/vader/core-server/data/workflow/query/params', {
-        params: new HttpParams()
-          .set('page', '0')
-          .set('size', '50')
-          .set('sort-descending', 'true')
-          .set('sort-by-fields', 'createdAt')
-      })
-      .pipe(map((page) => page.content))
-  );
-
+  private readonly recentWorkflowsCache = new Map<string, Observable<DaoPage<Workflow>>>();
+  private readonly workflowCache = new Map<string, Observable<Workflow>>();
   private readonly taskAttemptsCache = new Map<string, Observable<TaskAttempt[]>>();
   private readonly transcriptsCache = new Map<string, Observable<TaskAttemptTranscript[]>>();
+  private readonly taskUpdatesCache = new Map<string, Observable<TaskUpdate[]>>();
   private readonly promptTextCache = new Map<string, Observable<string>>();
 
-  recentWorkflows(): Observable<Workflow[]> {
-    return this.recentWorkflows$;
+  recentWorkflows(page: number, pageSize: number): Observable<DaoPage<Workflow>> {
+    return this.cached(this.recentWorkflowsCache, `${page}:${pageSize}`, () =>
+      this.poll(() =>
+        this.http.get<DaoPage<Workflow>>('/vader/core-server/data/workflow/query/params', {
+          params: new HttpParams()
+            .set('page', String(page))
+            .set('size', String(pageSize))
+            .set('sort-descending', 'true')
+            .set('sort-by-fields', 'createdAt')
+        })
+      )
+    );
+  }
+
+  workflow(workflowId: string): Observable<Workflow> {
+    return this.cached(this.workflowCache, workflowId, () =>
+      this.poll(() =>
+        this.http.get<Workflow>(`/vader/core-server/data/workflow/query/${workflowId}`)
+      )
+    );
   }
 
   taskAttempts(taskId: string): Observable<TaskAttempt[]> {
@@ -74,6 +84,23 @@ export class LongPollWorkflowUpdatesStrategy implements InterfaceWorkflowUpdates
                 .set('taskAttempt.id', taskAttemptId)
             }
           )
+          .pipe(map((page) => page.content))
+      )
+    );
+  }
+
+  taskUpdates(taskId: string): Observable<TaskUpdate[]> {
+    return this.cached(this.taskUpdatesCache, taskId, () =>
+      this.poll(() =>
+        this.http
+          .get<DaoPage<TaskUpdate>>('/vader/core-server/data/task-update/query/params', {
+            params: new HttpParams()
+              .set('page', '0')
+              .set('size', '50')
+              .set('sort-descending', 'true')
+              .set('sort-by-fields', 'createdAt')
+              .set('task.id', taskId)
+          })
           .pipe(map((page) => page.content))
       )
     );

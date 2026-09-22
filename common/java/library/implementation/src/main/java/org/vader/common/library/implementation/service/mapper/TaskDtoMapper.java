@@ -12,7 +12,8 @@ import org.vader.common.model.vader.entity.TaskEntity;
  *
  * <p>{@code subTasks} are mapped recursively. The parent task and the {@code dependsOn} tasks are
  * emitted as shallow id references -- embedding them would recurse back through this task's own
- * subtree.</p>
+ * subtree. {@code taskUpdates} are emitted as shallow id references too, per the default mapper
+ * convention for the "many" side of a relationship.</p>
  */
 @Service
 @Transactional
@@ -40,6 +41,14 @@ public class TaskDtoMapper extends GenericDtoMapper<TaskEntity, Task> {
                 }
             }
             to.setDependsOnTaskIds(dependsOnTaskIds);
+
+            var taskUpdateIds = new ArrayList<String>();
+            if (Objects.nonNull(from.getTaskUpdates())) {
+                for (var taskUpdate : from.getTaskUpdates()) {
+                    taskUpdateIds.add(taskUpdate.getId());
+                }
+            }
+            to.setTaskUpdateIds(taskUpdateIds);
         }
         return to;
     }

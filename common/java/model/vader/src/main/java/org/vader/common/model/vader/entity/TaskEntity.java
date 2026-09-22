@@ -51,6 +51,9 @@ public class TaskEntity extends AbstractModelEntity {
     @ManyToMany(mappedBy = "dependsOn", fetch = FetchType.LAZY)
     private Set<TaskEntity> dependents = new LinkedHashSet<>();
 
+    @OneToMany(mappedBy = "task", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Set<TaskUpdateEntity> taskUpdates = new LinkedHashSet<>();
+
     @Override
     public String getModelType() {
         return "Task";
@@ -110,5 +113,13 @@ public class TaskEntity extends AbstractModelEntity {
 
     public void setDependents(Set<TaskEntity> dependents) {
         this.dependents = dependents;
+    }
+
+    public Set<TaskUpdateEntity> getTaskUpdates() {
+        return this.taskUpdates;
+    }
+
+    public void setTaskUpdates(Set<TaskUpdateEntity> taskUpdates) {
+        this.taskUpdates = taskUpdates;
     }
 }

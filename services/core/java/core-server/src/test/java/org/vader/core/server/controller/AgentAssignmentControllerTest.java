@@ -9,25 +9,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.exceptions.UnknownToolException;
 import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.ConversationRole;
 import org.vader.core.server.models.InferenceRequest;
 import org.vader.core.server.models.InferenceTurn;
 import org.vader.core.server.models.ToolCallInvocationRequest;
 import org.vader.core.server.models.ToolCallInvocationResult;
-import org.vader.core.server.service.agent.TaskAttemptService;
+import org.vader.core.server.service.agent.task.TaskAgentService;
 
 class AgentAssignmentControllerTest {
 
     private static final String ASSIGNMENT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 
-    private TaskAttemptService taskAttemptService;
+    private TaskAgentService taskAttemptService;
     private AgentAssignmentController controller;
 
     @BeforeEach
     void setUp() {
-        this.taskAttemptService = mock(TaskAttemptService.class);
+        this.taskAttemptService = mock(TaskAgentService.class);
         this.controller = new AgentAssignmentController();
         ReflectionTestUtils.setField(
             this.controller, "taskAttemptService", this.taskAttemptService);
@@ -60,15 +59,5 @@ class AgentAssignmentControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isSameAs(result);
-    }
-
-    @Test
-    void handleUnknownTool_returnsBadRequestWithStableErrorCode() {
-        var response = this.controller.handleUnknownTool(
-            new UnknownToolException("No tool registered with name 'bogus_tool'"));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("error")).isEqualTo("unknown_tool");
-        assertThat(response.getBody().get("message")).contains("bogus_tool");
     }
 }

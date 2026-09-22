@@ -17,8 +17,10 @@ import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.core.server.models.ConversationMessage;
+import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.InferenceTurn;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.ReattemptDecisionRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 
 /**
@@ -41,7 +43,7 @@ import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
  * inbox (in this replica or another) can actually see and claim it; each poll must issue a fresh
  * read rather than reuse a cached, stale copy of the entity from an earlier read in the same
  * Hibernate session; and the wait must not pin the caller's own ambient transaction (e.g.
- * {@code TaskAttemptService.recordInferenceTurn}'s) open, and its DB connection with it, for
+ * {@code TaskAgentService.recordInferenceTurn}'s) open, and its DB connection with it, for
  * however long the LLM takes to answer.</p>
  *
  * <p>The wait itself is stall-based, not a fixed per-request clock: a deep-but-healthy queue must
@@ -54,6 +56,16 @@ import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
  * {@code stallTimeoutSeconds} does this give up -- that is the actual signal the LLM backend is
  * stuck, not merely busy. {@code maxWaitSeconds} remains as an absolute backstop so a queue that
  * somehow never stops making slow progress cannot block a caller forever.</p>
+ *
+ * <p>Crucially, that stall check only ever applies while the awaited message is still
+ * {@code PENDING}. {@link LlmRequestInbox#maxOpenMessages()} is hardcoded to {@code 1}, so once
+ * a message is claimed it is -- by definition -- the single thing "the most recent claim" could
+ * possibly refer to; its own claim timestamp stops moving the instant it starts being processed,
+ * not because the backend went quiet but because there is nothing else left to claim. Applying
+ * the stall heuristic past that point would fail any single call that legitimately runs longer
+ * than {@code stallTimeoutSeconds} (a cold local model loading into memory on CPU easily can),
+ * misreporting a slow-but-working backend as "unreachable." Once claimed, a request is trusted
+ * to actually be in flight and is bounded only by the generous {@code maxWaitSeconds} backstop.</p>
  */
 @Service
 public class LlmRequestQueue {
@@ -112,6 +124,29 @@ public class LlmRequestQueue {
         return this.fromJson(responseJson, DecompositionOutcome.class);
     }
 
+    /**
+     * Submits one attempt evaluation and blocks until it completes.
+     *
+     * @param request the task and attempt outcome to judge
+     * @return the evaluator's verdict, or an unreachable outcome the caller decides how to handle
+     */
+    public EvaluationOutcome submitEvaluation(final EvaluationRequest request) {
+        var responseJson = this.submit(LlmRequestKind.EVALUATION, this.toJson(request));
+        return this.fromJson(responseJson, EvaluationOutcome.class);
+    }
+
+    /**
+     * Submits one reattempt decision and blocks until it completes.
+     *
+     * @param request the failed task's context
+     * @return the reattempt decision, or an unreachable outcome the caller decides how to handle
+     */
+    public ReattemptDecisionOutcome submitReattemptDecision(
+            final ReattemptDecisionRequest request) {
+        var responseJson = this.submit(LlmRequestKind.REATTEMPT_DECISION, this.toJson(request));
+        return this.fromJson(responseJson, ReattemptDecisionOutcome.class);
+    }
+
     private String submit(final LlmRequestKind kind, final String requestJson) {
         var messageId = this.enqueue(kind, requestJson);
         return this.awaitResult(messageId);
@@ -133,26 +168,37 @@ public class LlmRequestQueue {
         var waitStarted = Instant.now();
         var overallDeadline = waitStarted.plusSeconds(this.maxWaitSeconds);
         var message = this.fetchFresh(messageId);
-        while (isStillOpen(message) && this.stillHasPatience(waitStarted, overallDeadline)) {
+        while (isStillOpen(message)
+                && this.stillHasPatience(waitStarted, overallDeadline, message)) {
             sleep(this.resultPollIntervalMs);
             message = this.fetchFresh(messageId);
         }
         return this.resultOf(messageId, message, waitStarted);
     }
 
-    private boolean stillHasPatience(final Instant waitStarted, final Instant overallDeadline) {
+    private boolean stillHasPatience(
+            final Instant waitStarted, final Instant overallDeadline,
+            final LlmRequestOutboxMessageEntity message) {
         var now = Instant.now();
-        return now.isBefore(overallDeadline) && !this.isStalled(waitStarted, now);
+        return now.isBefore(overallDeadline)
+            && (isClaimed(message) || !this.isStalled(waitStarted, now));
     }
 
     /**
      * Whether the queue has gone quiet for too long -- nothing claimed anywhere, for
      * {@code stallTimeoutSeconds}, since either the last known activity or (if nothing has ever
      * been claimed at all) since this particular wait began.
+     *
+     * <p>Only meaningful while the awaited message is still {@code PENDING}; see the class-level
+     * Javadoc for why a {@code CLAIMED} message must never be judged by this check.</p>
      */
     private boolean isStalled(final Instant waitStarted, final Instant now) {
         var lastActivity = this.fetchLastClaimedAt().orElse(waitStarted);
         return now.isAfter(lastActivity.plusSeconds(this.stallTimeoutSeconds));
+    }
+
+    private static boolean isClaimed(final LlmRequestOutboxMessageEntity message) {
+        return message.getStatus() == OutboxMessageStatus.CLAIMED;
     }
 
     private Optional<Instant> fetchLastClaimedAt() {
@@ -166,13 +212,9 @@ public class LlmRequestQueue {
             final Instant waitStarted) {
         String result;
         if (isStillOpen(message)) {
-            var now = Instant.now();
-            var reason = this.isStalled(waitStarted, now)
-                ? "no request on this queue has been claimed for " + this.stallTimeoutSeconds
-                    + "s -- the local LLM backend looks stuck"
-                : "the overall " + this.maxWaitSeconds + "s wait elapsed";
             throw new LlmRequestQueueException(
-                "Timed out waiting for LLM request " + messageId + " to be processed: " + reason);
+                "Timed out waiting for LLM request " + messageId + " to be processed: "
+                    + this.timeoutReasonFor(message, waitStarted));
         } else if (message.getStatus() == OutboxMessageStatus.FAILED) {
             throw new LlmRequestQueueException(
                 "LLM request " + messageId + " failed: " + message.getFailureReason());
@@ -180,6 +222,15 @@ public class LlmRequestQueue {
             result = message.getResponseJson();
         }
         return result;
+    }
+
+    private String timeoutReasonFor(
+            final LlmRequestOutboxMessageEntity message, final Instant waitStarted) {
+        var isStalledPending = !isClaimed(message) && this.isStalled(waitStarted, Instant.now());
+        return isStalledPending
+            ? "no request on this queue has been claimed for " + this.stallTimeoutSeconds
+                + "s -- the local LLM backend looks stuck"
+            : "the overall " + this.maxWaitSeconds + "s wait elapsed";
     }
 
     private static boolean isStillOpen(final LlmRequestOutboxMessageEntity message) {

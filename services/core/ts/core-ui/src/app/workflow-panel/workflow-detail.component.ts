@@ -3,13 +3,16 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs/operators';
 import { ActiveWorkflowsService } from '../active-workflows.service';
 import { Task, Workflow } from '../client-prompt.model';
-import { TaskRowComponent } from './task-row.component';
+import { flattenTasks } from '../workflow-dag/task-graph-layout.builder';
+import { TaskDetailComponent } from '../workflow-dag/task-detail.component';
+import { WorkflowDagComponent } from '../workflow-dag/workflow-dag.component';
 
-/** Renders one expanded workflow: its originating prompt, task plan, and task graph. */
+/** Renders one selected workflow: its originating prompt, task graph (as a DAG), and — once a
+ *  node is clicked — that task's full detail. */
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [TaskRowComponent],
+  imports: [WorkflowDagComponent, TaskDetailComponent],
   templateUrl: './workflow-detail.component.html',
   styleUrl: './workflow-detail.component.css'
 })
@@ -27,21 +30,18 @@ export class WorkflowDetailComponent {
     { initialValue: '' }
   );
 
-  readonly tasks = computed<Task[]>(() => this.workflow().taskPlan?.taskGraph.tasks ?? []);
+  private tasks = computed<Task[]>(() =>
+    flattenTasks(this.workflow().taskPlan?.taskGraph.tasks ?? [])
+  );
 
-  private expandedTaskIds = signal<ReadonlySet<string>>(new Set());
+  selectedTaskId = signal<string | null>(null);
 
-  isExpanded(taskId: string): boolean {
-    return this.expandedTaskIds().has(taskId);
-  }
+  readonly selectedTask = computed<Task | undefined>(() => {
+    const id = this.selectedTaskId();
+    return id ? this.tasks().find((task) => task.id === id) : undefined;
+  });
 
-  toggleTask(taskId: string): void {
-    const next = new Set(this.expandedTaskIds());
-    if (next.has(taskId)) {
-      next.delete(taskId);
-    } else {
-      next.add(taskId);
-    }
-    this.expandedTaskIds.set(next);
+  selectTask(taskId: string): void {
+    this.selectedTaskId.set(taskId);
   }
 }

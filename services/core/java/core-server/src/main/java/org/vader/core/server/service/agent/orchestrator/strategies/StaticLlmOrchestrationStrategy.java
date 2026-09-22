@@ -1,0 +1,30 @@
+package org.vader.core.server.service.agent.orchestrator.strategies;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Service;
+import org.vader.common.model.vader.dto.ClientPrompt;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
+
+/**
+ * Returns a fixed, schema-valid task plan without calling any LLM.
+ *
+ * <p>Active when {@code vader.orchestrator.type} is {@code static}. It exists so the full
+ * prompt -&gt; core-server -&gt; decomposition -&gt; persistence path can be exercised
+ * deterministically -- notably by the Helm test hook -- without deploying Ollama or waiting on a
+ * model download.</p>
+ */
+@Service
+@ConditionalOnProperty(prefix = "vader.orchestrator", name = "type", havingValue = "static")
+public class StaticLlmOrchestrationStrategy implements InterfaceLlmOrchestrationStrategy {
+
+    private static final Logger logger =
+        LoggerFactory.getLogger(StaticLlmOrchestrationStrategy.class);
+
+    @Override
+    public String orchestrate(final ClientPrompt clientPrompt) {
+        logger.info("Returning the static task plan for prompt: '{}'", clientPrompt.getText());
+        return StaticTaskPlan.JSON;
+    }
+}

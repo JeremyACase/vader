@@ -63,7 +63,7 @@ public class PythonSandboxTools {
     /**
      * Deletes a Python sandbox and its Kubernetes resources.
      *
-     * @param name the exact sandbox name, as returned by create or list
+     * @param sandboxName the exact sandbox name, as returned by create or list
      * @return a short confirmation message
      */
     @Tool(
@@ -72,15 +72,15 @@ public class PythonSandboxTools {
     public String deleteSandbox(
         @ToolParam(description = "The exact sandbox name, as returned by create_sandbox or "
             + "list_sandboxes.")
-        final String name) {
-        this.service.delete(name);
-        return "Deleted sandbox '" + name + "'.";
+        final String sandboxName) {
+        this.service.delete(sandboxName);
+        return "Deleted sandbox '" + sandboxName + "'.";
     }
 
     /**
      * Runs code inside an existing sandbox.
      *
-     * @param name the exact sandbox name, as returned by create or list
+     * @param sandboxName the exact sandbox name, as returned by create or list
      * @param code the Python source to run
      * @param files a map of filename to base64-encoded content to stage into the sandbox's
      *     workspace before running -- for content the model itself generates, not for
@@ -102,7 +102,7 @@ public class PythonSandboxTools {
     public SandboxExecutionResult runPythonCode(
         @ToolParam(description = "The exact sandbox name, as returned by create_sandbox or "
             + "list_sandboxes.")
-        final String name,
+        final String sandboxName,
         @ToolParam(description = "The Python source to run.")
         final String code,
         @ToolParam(
@@ -112,7 +112,7 @@ public class PythonSandboxTools {
                 + "code. Do not use this for previously-uploaded objects -- use stage_object.")
         final Map<String, String> files) {
         var request = new SandboxExecutionRequest(code, files, null);
-        return this.service.runCode(name, request);
+        return this.service.runCode(sandboxName, request);
     }
 
     /**

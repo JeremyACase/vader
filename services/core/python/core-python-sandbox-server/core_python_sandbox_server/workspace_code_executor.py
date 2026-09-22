@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,8 @@ from pathlib import Path
 from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult
 
 SUBMITTED_CODE_FILENAME = "_submitted_code.py"
+
+logger = logging.getLogger(__name__)
 
 
 class WorkspaceCodeExecutor:
@@ -52,6 +55,7 @@ class WorkspaceCodeExecutor:
                 timed_out=False,
             )
         except subprocess.TimeoutExpired as error:
+            logger.warning("submitted code timed out after %s seconds", timeout)
             result = ExecutionResult(
                 stdout=self._decode(error.stdout),
                 stderr=self._decode(error.stderr),
@@ -90,5 +94,6 @@ class WorkspaceCodeExecutor:
         workspace = self._workspace.resolve()
         candidate = (workspace / filename).resolve()
         if not candidate.is_relative_to(workspace):
+            logger.warning("rejected file path escaping the workspace: %s", filename)
             raise ValueError(f"'{filename}' escapes the workspace directory")
         return candidate

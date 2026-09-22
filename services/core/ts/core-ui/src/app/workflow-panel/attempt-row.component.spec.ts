@@ -2,12 +2,18 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Observable, Subject } from 'rxjs';
 import { ActiveWorkflowsService } from '../active-workflows.service';
 import { Workflow } from '../client-prompt.model';
+import { DaoPage } from '../dao-page.model';
 import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
+import { TaskUpdate } from '../task-update.model';
 import { AttemptRowComponent } from './attempt-row.component';
 
 class FakeActiveWorkflowsService {
-  recentWorkflows(): Observable<Workflow[]> {
-    return new Subject<Workflow[]>().asObservable();
+  recentWorkflows(): Observable<DaoPage<Workflow>> {
+    return new Subject<DaoPage<Workflow>>().asObservable();
+  }
+
+  workflow(): Observable<Workflow> {
+    return new Subject<Workflow>().asObservable();
   }
 
   taskAttempts(): Observable<TaskAttempt[]> {
@@ -16,6 +22,10 @@ class FakeActiveWorkflowsService {
 
   transcripts(): Observable<TaskAttemptTranscript[]> {
     return new Subject<TaskAttemptTranscript[]>().asObservable();
+  }
+
+  taskUpdates(): Observable<TaskUpdate[]> {
+    return new Subject<TaskUpdate[]>().asObservable();
   }
 
   promptText(): Observable<string> {

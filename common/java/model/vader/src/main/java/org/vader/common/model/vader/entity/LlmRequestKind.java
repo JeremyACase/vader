@@ -11,4 +11,16 @@ public enum LlmRequestKind {
 
     /** One prompt decomposition: {@code requestJson} is the raw client-prompt text. */
     DECOMPOSITION,
+
+    /**
+     * One evaluator verdict on a settled attempt: {@code requestJson} is a JSON
+     * {@code EvaluationRequest}.
+     */
+    EVALUATION,
+
+    /**
+     * One orchestrator reattempt decision on a failed attempt: {@code requestJson} is a JSON
+     * {@code ReattemptDecisionRequest}.
+     */
+    REATTEMPT_DECISION,
 }

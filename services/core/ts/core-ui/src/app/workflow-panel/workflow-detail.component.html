@@ -1,34 +1,29 @@
 <div class="detail">
-  <p class="prompt-text"><strong>Prompt:</strong> {{promptText()}}</p>
+  <div class="detail-main">
+    <p class="prompt-text"><strong>Prompt:</strong> {{promptText()}}</p>
 
-  @if (workflow().result; as result) {
-    <div class="final-result">
-      <p class="final-result-label"><strong>Result</strong></p>
-      <p class="final-result-text">{{result}}</p>
-    </div>
-  }
-
-  @if (workflow().taskPlan; as taskPlan) {
-    @if (taskPlan.reasoning) {
-      <p class="reasoning"><strong>Reasoning:</strong> {{taskPlan.reasoning}}</p>
+    @if (workflow().result; as result) {
+      <div class="final-result">
+        <p class="final-result-label"><strong>Result</strong></p>
+        <p class="final-result-text">{{result}}</p>
+      </div>
     }
-    <p class="objective"><strong>Objective:</strong> {{taskPlan.objective}}</p>
 
-    <ul class="task-list">
-      @for (task of tasks(); track task.id) {
-        <li class="task-item">
-          <button type="button" class="task-summary" (click)="toggleTask(task.id!)">
-            <span class="chevron">{{isExpanded(task.id!) ? '▾' : '▸'}}</span>
-            <span class="task-title">{{task.title}}</span>
-          </button>
-          <p class="task-desc">{{task.description}}</p>
-          @if (isExpanded(task.id!)) {
-            <app-task-row [taskId]="task.id!" />
-          }
-        </li>
+    @if (workflow().taskPlan; as taskPlan) {
+      @if (taskPlan.reasoning) {
+        <p class="reasoning"><strong>Reasoning:</strong> {{taskPlan.reasoning}}</p>
       }
-    </ul>
-  } @else {
-    <p class="muted">Decomposing your prompt — the task plan isn't ready yet.</p>
+      <p class="objective"><strong>Objective:</strong> {{taskPlan.objective}}</p>
+
+      <app-workflow-dag [workflow]="workflow()" (taskSelected)="selectTask($event)" />
+    } @else {
+      <p class="muted">Decomposing your prompt — the task plan isn't ready yet.</p>
+    }
+  </div>
+
+  @if (selectedTask(); as task) {
+    <aside class="detail-side">
+      <app-task-detail [task]="task" />
+    </aside>
   }
 </div>

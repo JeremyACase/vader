@@ -3,6 +3,49 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0]
+### Added
+- Tasks now get a `CREATED` update the moment a workflow is decomposed (author: system), and a
+  `RUNNING` update the moment a harness first makes contact (author: task agent), so a task's
+  history no longer starts blank and only accumulates entries once something happens to it.
+
+## [0.19.2]
+### Fixed
+- Every Ollama HTTP call now has a bounded read timeout (`vader.orchestrator.local.request-timeout-seconds`,
+  default 5 minutes). The JDK HTTP client Spring auto-detects had no timeout of its own, so a
+  single slow or hung generation could wedge the entire single-worker LLM queue permanently --
+  every other request (including a workflow's very first task) would eventually report the
+  backend as unreachable, even though it never actually cleared on its own; recovery required an
+  operator to manually restart the Ollama pod. Confirmed via a live thread dump before fixing.
+
+## [0.19.1]
+### Fixed
+- The Python sandbox tools' identifying parameter is now consistently named `sandboxName` across
+  `run_python_code` and `delete_sandbox` (matching `stage_object`), reducing a small model's odds
+  of swapping which argument holds the code versus the sandbox name. A malformed sandbox name also
+  now fails with a short, clear error instead of an unbounded one echoing the offending value's
+  full content.
+
+## [0.19.0]
+### Added
+- An Evaluator Agent now independently judges each task's outcome instead of trusting the
+  harness's self-report, and the Orchestrator decides whether a failure is worth retrying instead
+  of blindly retrying to the attempt cap. Both run on their own durable review pipeline, off the
+  scheduler's own thread, and record their verdicts and reasoning as `TaskUpdate`s.
+
+## [0.18.0]
+### Added
+- A task-execution agent can now leave an interim progress note against its own task via the new
+  `post_task_update` MCP tool -- never a pass/fail verdict, and never against another task
+  regardless of what the calling model supplies.
+
+## [0.17.0]
+### Added
+- `TaskUpdate` is now queryable the same way as every other entity, laying the groundwork for an
+  evaluator agent to record a pass/fail/timeout verdict (or an interim note) against a task, and
+  for the orchestrator to read that history back when deciding whether a failed task is worth
+  re-attempting.
+
 ## [0.16.0]
 ### Added
 - **Every inference strategy now offers the harness the full MCP tool inventory, on every task

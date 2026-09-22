@@ -1,12 +1,16 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
 import { firstValueFrom, of, timer } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
+import { ActiveWorkflowsService } from './active-workflows.service';
 import { ClientPromptService } from './client-prompt.service';
-import { BackPressure, OrchestratorError } from './client-prompt.model';
+import { BackPressure, OrchestratorError, Workflow } from './client-prompt.model';
+import { NavItem } from './nav-rail/nav-item.model';
+import { NavRailComponent } from './nav-rail/nav-rail.component';
 import { PendingWorkflowRegistry } from './workflow-updates/pending-workflow.registry';
+import { WorkflowDetailComponent } from './workflow-panel/workflow-detail.component';
 import { WorkflowPanelComponent } from './workflow-panel/workflow-panel.component';
 
 const BACKPRESSURE_POLL_INTERVAL_MS = 5000;
@@ -14,14 +18,38 @@ const BACKPRESSURE_POLL_INTERVAL_MS = 5000;
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ReactiveFormsModule, WorkflowPanelComponent],
+  imports: [ReactiveFormsModule, NavRailComponent, WorkflowPanelComponent, WorkflowDetailComponent],
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
 export class App {
   private svc = inject(ClientPromptService);
+  private activeWorkflowsService = inject(ActiveWorkflowsService);
   private pendingWorkflows = inject(PendingWorkflowRegistry);
   private fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+
+  readonly navItems: NavItem[] = [
+    { id: 'workflows', label: 'Workflows', icon: 'workflows' },
+    { id: 'prompt', label: 'Prompt', icon: 'prompt' }
+  ];
+
+  /** Which nav-rail item's panel is open, if any. Clicking the already-active item closes it. */
+  activeNavId = signal<string | null>('workflows');
+
+  toggleNavItem(id: string): void {
+    this.activeNavId.update((current) => (current === id ? null : id));
+  }
+
+  /** The workflow selected in the left panel, kept live across polls independent of whatever
+   *  page that panel is currently showing. */
+  selectedWorkflowId = signal<string | null>(null);
+
+  selectedWorkflow = toSignal(
+    toObservable(this.selectedWorkflowId).pipe(
+      switchMap((id) => (id ? this.activeWorkflowsService.workflow(id) : of(null)))
+    ),
+    { initialValue: null as Workflow | null }
+  );
 
   title = 'Vader Core UI';
 

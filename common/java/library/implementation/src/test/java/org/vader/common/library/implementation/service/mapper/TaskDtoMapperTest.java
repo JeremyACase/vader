@@ -6,6 +6,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.entity.TaskEntity;
+import org.vader.common.model.vader.entity.TaskUpdateEntity;
+import org.vader.common.model.vader.entity.TaskUpdateType;
 
 class TaskDtoMapperTest {
 
@@ -75,5 +77,25 @@ class TaskDtoMapperTest {
     @Test
     void map_withNoDependencies_returnsEmptyList() {
         assertThat(this.mapper.map(task("t1", "root")).getDependsOnTaskIds()).isEmpty();
+    }
+
+    @Test
+    void map_emitsTaskUpdatesAsShallowIdReferences() {
+        var task = task("t1", "root");
+        var update = new TaskUpdateEntity();
+        update.setId("u1");
+        update.setTask(task);
+        update.setType(TaskUpdateType.FAILED);
+        update.setDescription("did not converge");
+        task.setTaskUpdates(new LinkedHashSet<>(List.of(update)));
+
+        var dto = this.mapper.map(task);
+
+        assertThat(dto.getTaskUpdateIds()).containsExactly("u1");
+    }
+
+    @Test
+    void map_withNoTaskUpdates_returnsEmptyList() {
+        assertThat(this.mapper.map(task("t1", "root")).getTaskUpdateIds()).isEmpty();
     }
 }

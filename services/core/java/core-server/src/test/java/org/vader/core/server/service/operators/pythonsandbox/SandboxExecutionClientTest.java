@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -31,6 +32,26 @@ class SandboxExecutionClientTest {
         this.client = new SandboxExecutionClient();
         ReflectionTestUtils.setField(this.client, "sandboxExecutionRestClient", builder.build());
         ReflectionTestUtils.setField(this.client, "namespace", "vader");
+    }
+
+    /**
+     * A sandbox name unbuildable into a valid host component reaches this far without
+     * {@code MockRestServiceServer} noticing (it intercepts requests after the URI is already
+     * built, and template expansion alone happily percent-encodes spaces/newlines into a
+     * syntactically-parseable, if absurd, URI). The real JDK HTTP client rejects such a URI at
+     * connection time instead -- reproduced here with a request factory that fails the same way,
+     * independent of what MockRestServiceServer would otherwise accept.
+     */
+    private static SandboxExecutionClient clientWithRejectingRequestFactory() {
+        ClientHttpRequestFactory factory = (uri, httpMethod) -> {
+            throw new IllegalArgumentException("Unsupported URI " + uri);
+        };
+        var client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(
+            client, "sandboxExecutionRestClient",
+            RestClient.builder().requestFactory(factory).build());
+        ReflectionTestUtils.setField(client, "namespace", "vader");
+        return client;
     }
 
     @Test
@@ -82,6 +103,19 @@ class SandboxExecutionClientTest {
     }
 
     @Test
+    void execute_withAnInvalidSandboxName_throwsWithoutEchoingItsFullContent() {
+        var hugeInvalidName = "import pandas as pd\n".repeat(20);
+        var client = clientWithRejectingRequestFactory();
+
+        assertThatThrownBy(() -> client.execute(
+            hugeInvalidName, new SandboxExecutionRequest("pass", Map.of(), null)))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("not a valid sandbox name")
+            .satisfies(e -> assertThat(e.getMessage().length())
+                .isLessThan(hugeInvalidName.length()));
+    }
+
+    @Test
     void stageFile_putsTheRawBytesToTheSandboxsWorkspaceEndpoint() {
         this.mockServer
             .expect(requestTo(
@@ -109,5 +143,18 @@ class SandboxExecutionClientTest {
             .isInstanceOf(SandboxExecutionException.class)
             .hasMessageContaining("report.xlsx")
             .hasMessageContaining("vader-sandbox-a");
+    }
+
+    @Test
+    void stageFile_withAnInvalidSandboxName_throwsWithoutEchoingItsFullContent() {
+        var hugeInvalidName = "import pandas as pd\n".repeat(20);
+        var client = clientWithRejectingRequestFactory();
+
+        assertThatThrownBy(() -> client.stageFile(
+            hugeInvalidName, "report.xlsx", "raw bytes".getBytes()))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("not a valid sandbox name")
+            .satisfies(e -> assertThat(e.getMessage().length())
+                .isLessThan(hugeInvalidName.length()));
     }
 }

@@ -1,23 +1,16 @@
 package org.vader.core.server.controller;
 
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import java.util.List;
-import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.vader.core.server.exceptions.SandboxExecutionException;
 import org.vader.core.server.models.SandboxExecutionRequest;
 import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
@@ -36,8 +29,6 @@ import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxServic
     havingValue = "true",
     matchIfMissing = false)
 public class PythonSandboxController {
-
-    private static final Logger logger = LoggerFactory.getLogger(PythonSandboxController.class);
 
     @Autowired
     private PythonSandboxService service;
@@ -88,36 +79,6 @@ public class PythonSandboxController {
     public ResponseEntity<SandboxExecutionResult> execute(
         @PathVariable final String name, @RequestBody final SandboxExecutionRequest request) {
         return ResponseEntity.ok(this.service.runCode(name, request));
-    }
-
-    /**
-     * Maps a Kubernetes API failure to a 502, since the failure originates upstream of this
-     * service rather than in the caller's request.
-     *
-     * @param exception the Kubernetes client failure
-     * @return a 502 response describing the failure
-     */
-    @ExceptionHandler(KubernetesClientException.class)
-    public ResponseEntity<Map<String, String>> handleKubernetes(
-        final KubernetesClientException exception) {
-        logger.warn("Kubernetes call failed: {}", exception.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(Map.of("error", "kubernetes_error", "message", exception.getMessage()));
-    }
-
-    /**
-     * Maps a sandbox execution failure (unreachable, transport error) to a 502, mirroring how a
-     * Kubernetes API failure above is treated -- upstream of this service, not the caller's fault.
-     *
-     * @param exception the execution failure
-     * @return a 502 response describing the failure
-     */
-    @ExceptionHandler(SandboxExecutionException.class)
-    public ResponseEntity<Map<String, String>> handleExecutionFailure(
-        final SandboxExecutionException exception) {
-        logger.warn("Sandbox execution failed: {}", exception.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(Map.of("error", "sandbox_execution_failed", "message", exception.getMessage()));
     }
 
     /**

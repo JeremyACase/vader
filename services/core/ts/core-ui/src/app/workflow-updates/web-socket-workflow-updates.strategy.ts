@@ -3,12 +3,20 @@ import { Observable } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import { WebSocketSubject, webSocket } from 'rxjs/webSocket';
 import { Workflow } from '../client-prompt.model';
+import { DaoPage } from '../dao-page.model';
 import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
+import { TaskUpdate } from '../task-update.model';
 import { InterfaceWorkflowUpdatesStrategy } from './workflow-updates.strategy';
 
 /** One multiplexed message on the BFF's proposed workflow-updates socket. */
 interface WorkflowUpdateMessage<T> {
-  channel: 'active-workflows' | 'task-attempts' | 'transcripts' | 'prompt-text';
+  channel:
+    | 'active-workflows'
+    | 'workflow'
+    | 'task-attempts'
+    | 'transcripts'
+    | 'task-updates'
+    | 'prompt-text';
   key: string | null;
   payload: T;
 }
@@ -25,8 +33,12 @@ interface WorkflowUpdateMessage<T> {
 export class WebSocketWorkflowUpdatesStrategy implements InterfaceWorkflowUpdatesStrategy {
   private socket: WebSocketSubject<WorkflowUpdateMessage<unknown>> | null = null;
 
-  recentWorkflows(): Observable<Workflow[]> {
-    return this.channel<Workflow[]>('active-workflows', null);
+  recentWorkflows(page: number, pageSize: number): Observable<DaoPage<Workflow>> {
+    return this.channel<DaoPage<Workflow>>('active-workflows', `${page}:${pageSize}`);
+  }
+
+  workflow(workflowId: string): Observable<Workflow> {
+    return this.channel<Workflow>('workflow', workflowId);
   }
 
   taskAttempts(taskId: string): Observable<TaskAttempt[]> {
@@ -35,6 +47,10 @@ export class WebSocketWorkflowUpdatesStrategy implements InterfaceWorkflowUpdate
 
   transcripts(taskAttemptId: string): Observable<TaskAttemptTranscript[]> {
     return this.channel<TaskAttemptTranscript[]>('transcripts', taskAttemptId);
+  }
+
+  taskUpdates(taskId: string): Observable<TaskUpdate[]> {
+    return this.channel<TaskUpdate[]>('task-updates', taskId);
   }
 
   promptText(clientPromptId: string): Observable<string> {

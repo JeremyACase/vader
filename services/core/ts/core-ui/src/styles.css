@@ -74,7 +74,8 @@ button:disabled {
   color: #7fa8ff;
 }
 
-.status-badge[data-status="SUCCEEDED"] {
+.status-badge[data-status="SUCCEEDED"],
+.status-badge[data-status="COMPLETED"] {
   background: #163b2c;
   color: #6fcf97;
 }
@@ -84,4 +85,9 @@ button:disabled {
 .status-badge[data-status="STALLED"] {
   background: #4a1f22;
   color: #f08080;
+}
+
+.status-badge[data-status="UPDATE"] {
+  background: #1f2f4f;
+  color: #7fa8ff;
 }

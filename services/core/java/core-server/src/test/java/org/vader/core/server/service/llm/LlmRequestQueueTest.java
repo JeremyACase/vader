@@ -20,10 +20,13 @@ import org.springframework.transaction.TransactionStatus;
 import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.ConversationRole;
+import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.InferenceTurn;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.ReattemptDecisionRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 
 class LlmRequestQueueTest {
@@ -81,6 +84,53 @@ class LlmRequestQueueTest {
     }
 
     @Test
+    void submitEvaluation_enqueuesAndPublishesBeforeAwaitingTheResult() {
+        when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
+            var message = new LlmRequestOutboxMessageEntity();
+            message.setStatus(OutboxMessageStatus.PROCESSED);
+            message.setResponseJson(
+                "{\"verdict\":{\"passed\":true,\"reasoning\":\"looks right\"},"
+                    + "\"unreachableReason\":null}");
+            return Optional.of(message);
+        });
+        var request = new EvaluationRequest(
+            "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of());
+
+        var outcome = this.queue.submitEvaluation(request);
+
+        assertThat(outcome.isUnreachable()).isFalse();
+        assertThat(outcome.verdict().passed()).isTrue();
+        var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
+        verify(this.messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getKind()).isEqualTo(LlmRequestKind.EVALUATION);
+        verify(this.eventPublisher)
+            .publishEvent(new OutboxMessageEnqueuedEvent("LlmRequest"));
+    }
+
+    @Test
+    void submitReattemptDecision_enqueuesAndPublishesBeforeAwaitingTheResult() {
+        when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
+            var message = new LlmRequestOutboxMessageEntity();
+            message.setStatus(OutboxMessageStatus.PROCESSED);
+            message.setResponseJson(
+                "{\"decision\":{\"shouldReattempt\":true,\"reasoning\":\"worth trying\"},"
+                    + "\"unreachableReason\":null}");
+            return Optional.of(message);
+        });
+        var request = new ReattemptDecisionRequest(
+            "title", "description", 1, 3, "it broke", List.of());
+
+        var outcome = this.queue.submitReattemptDecision(request);
+
+        assertThat(outcome.isUnreachable()).isFalse();
+        assertThat(outcome.decision().shouldReattempt()).isTrue();
+        var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
+        verify(this.messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getKind())
+            .isEqualTo(LlmRequestKind.REATTEMPT_DECISION);
+    }
+
+    @Test
     void submitInferenceTurn_whenTheMessageSettlesFailed_throwsWithTheFailureReason() {
         when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
             var message = new LlmRequestOutboxMessageEntity();
@@ -123,6 +173,53 @@ class LlmRequestQueueTest {
             .isInstanceOf(LlmRequestQueueException.class)
             .hasMessageContaining("Timed out")
             .hasMessageContaining("looks stuck");
+    }
+
+    @Test
+    void submitInferenceTurn_whenTheAwaitedMessageIsClaimed_ignoresStallAndKeepsWaiting() {
+        // A long-running single call (maxOpenMessages == 1, so nothing else can ever be claimed
+        // while it's in flight) must not be killed by the stall heuristic once it is claimed --
+        // it is, by definition, actively being worked, not stuck.
+        ReflectionTestUtils.setField(this.queue, "stallTimeoutSeconds", 0L);
+        ReflectionTestUtils.setField(this.queue, "maxWaitSeconds", 60L);
+        var pollCount = new java.util.concurrent.atomic.AtomicInteger();
+        when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
+            var message = new LlmRequestOutboxMessageEntity();
+            if (pollCount.incrementAndGet() < 3) {
+                message.setStatus(OutboxMessageStatus.CLAIMED);
+            } else {
+                message.setStatus(OutboxMessageStatus.PROCESSED);
+                message.setResponseJson(
+                    "{\"content\":\"done\",\"toolCalls\":[],\"tokensSpent\":1}");
+            }
+            return Optional.of(message);
+        });
+        when(this.messageRepository.findMostRecentClaimedAt())
+            .thenReturn(Optional.of(java.time.OffsetDateTime.now().minusMinutes(5)));
+
+        var result = this.queue.submitInferenceTurn(userTurn("hi"));
+
+        assertThat(result.content()).isEqualTo("done");
+        assertThat(pollCount.get()).isEqualTo(3);
+    }
+
+    @Test
+    void submitInferenceTurn_whenClaimedMessageOutlastsTheMaxWait_throwsTheGenericTimeout() {
+        ReflectionTestUtils.setField(this.queue, "stallTimeoutSeconds", 0L);
+        ReflectionTestUtils.setField(this.queue, "maxWaitSeconds", 0L);
+        when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
+            var message = new LlmRequestOutboxMessageEntity();
+            message.setStatus(OutboxMessageStatus.CLAIMED);
+            return Optional.of(message);
+        });
+        when(this.messageRepository.findMostRecentClaimedAt())
+            .thenReturn(Optional.of(java.time.OffsetDateTime.now().minusMinutes(5)));
+
+        assertThatThrownBy(() -> this.queue.submitInferenceTurn(userTurn("hi")))
+            .isInstanceOf(LlmRequestQueueException.class)
+            .hasMessageContaining("Timed out")
+            .hasMessageContaining("wait elapsed")
+            .hasMessageNotContaining("looks stuck");
     }
 
     @Test

@@ -35,7 +35,7 @@ public class DatabaseQueryToolsConfig {
     /**
      * Not needed by a task-execution agent -- a task's own context (the original request, any
      * attached files, prerequisite results) is already composed for it by
-     * {@code TaskAttemptService.contextFor}. Reserved for an orchestration agent looking up
+     * {@code TaskAgentService.contextFor}. Reserved for an orchestration agent looking up
      * system state to plan or decide with.
      *
      * @param databaseQueryToolCallbacks this config's own provider bean

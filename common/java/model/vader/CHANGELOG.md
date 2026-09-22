@@ -3,6 +3,24 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0]
+### Added
+- `TaskUpdate` now records who authored it (system, task agent, orchestrator, or evaluator) and
+  two new update types, `CREATED` and `RUNNING`, so a task's history starts the moment it's
+  planned rather than only once something happens to it.
+
+## [0.16.0]
+### Added
+- A queue-message entity backing the new attempt-review pipeline, plus two new local-LLM request
+  kinds (evaluation, reattempt decision) sharing the existing durable request queue.
+### Changed
+- `TaskUpdate` now references the specific attempt it's about, not just the task.
+
+## [0.15.0]
+### Added
+- New `TaskUpdate` model recording an evaluator/orchestrator verdict or progress note against a
+  task; `Task` carries a shallow reference to its updates.
+
 ## [0.14.0]
 ### Added
 - New `TaskAttemptToolCall` model, recording one tool call a model requested and had executed

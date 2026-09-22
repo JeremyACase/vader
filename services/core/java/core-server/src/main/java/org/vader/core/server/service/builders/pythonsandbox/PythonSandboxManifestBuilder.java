@@ -61,6 +61,13 @@ public class PythonSandboxManifestBuilder {
     @Value("${vader.operators.python-sandbox.sandbox.exec-timeout-seconds:30}")
     private String execTimeoutSeconds;
 
+    // Passed straight through as SANDBOX_LOG_LEVEL, read by logging_config.configure_logging();
+    // Python's stdlib logging level names (INFO, DEBUG, ...) match core-server's own
+    // logging.level.org.vader value unchanged, the same reasoning
+    // AgentHarnessManifestBuilder documents for RUST_LOG.
+    @Value("${vader.operators.python-sandbox.sandbox.log-level:INFO}")
+    private String logLevel;
+
     /**
      * Builds both manifests for the sandbox named {@code name}.
      *
@@ -138,6 +145,10 @@ public class PythonSandboxManifestBuilder {
             .addNewEnv()
                 .withName("SANDBOX_EXEC_MAX_TIMEOUT_SECONDS")
                 .withValue(this.execTimeoutSeconds)
+            .endEnv()
+            .addNewEnv()
+                .withName("SANDBOX_LOG_LEVEL")
+                .withValue(this.logLevel)
             .endEnv()
             .withNewResources()
                 .addToRequests("cpu", new Quantity(this.cpuRequest))

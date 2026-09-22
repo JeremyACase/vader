@@ -41,6 +41,12 @@ public class AgentHarnessManifestBuilder {
     @Value("${vader.agent-harness.core-server-url:http://vader-core-server:8080}")
     private String coreServerUrl;
 
+    // Passed straight through as RUST_LOG -- env_logger's own level names are case-insensitive,
+    // so core-server's own logging.vader value (e.g. "INFO") works unchanged, keeping harness
+    // log verbosity in step with core-server's without a second knob to keep in sync by hand.
+    @Value("${vader.agent-harness.log-level:info}")
+    private String logLevel;
+
     @Value("${vader.agent-harness.deadline-seconds:600}")
     private long deadlineSeconds;
 
@@ -114,6 +120,7 @@ public class AgentHarnessManifestBuilder {
             .addNewEnv().withName("TASK_ID").withValue(spec.taskId()).endEnv()
             .addNewEnv().withName("ASSIGNMENT_ID").withValue(spec.assignmentId()).endEnv()
             .addNewEnv().withName("CORE_SERVER_URL").withValue(this.coreServerUrl).endEnv()
+            .addNewEnv().withName("RUST_LOG").withValue(this.logLevel).endEnv()
             .withNewResources()
                 .addToRequests("cpu", new Quantity(this.cpuRequest))
                 .addToRequests("memory", new Quantity(this.memoryRequest))

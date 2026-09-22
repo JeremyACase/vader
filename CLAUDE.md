@@ -19,6 +19,11 @@ prompts and displays results.
 
 ## Build and run
 
+Aside from the JVM and the Java server code, no build environment needs to be installed on the
+host. Angular, Rust, and Python builds/tests/lints each run inside a dockerized environment,
+wired into and invoked by the top-level `./gradlew build` — a local `node`/`cargo`/`python`
+install is only needed if you want to run that module's tooling directly, outside Gradle.
+
 ```bash
 # Full build (all modules + Angular)
 ./gradlew build
@@ -261,6 +266,11 @@ signatures; those belong in git and are always recoverable with `git log` / `git
 A good entry reads like a release note to a developer upgrading from the previous version.
 A bad entry reads like an annotated file listing.
 
+**Please summarize changes, don't enumerate them.** One version entry is one short paragraph (or
+a couple of terse bullets at most) — not a bulleted list with bolded sub-headers, and not one
+bullet per class/file touched. If a change needs several bullets to explain, that's a sign to
+compress it further, not to add structure.
+
 ## Key runtime knobs (application.properties / env)
 
 | Property | Default | Effect |
@@ -268,6 +278,7 @@ A bad entry reads like an annotated file listing.
 | `vader.orchestrator.type` | `static` | `static` or `local` (Ollama) |
 | `vader.orchestrator.local.model` | — | Ollama model name |
 | `vader.orchestrator.local.fallback-to-static` | `true` | Return static plan when LLM unreachable |
+| `vader.orchestrator.local.request-timeout-seconds` | `300` | Read timeout on every Ollama HTTP call (decomposition, inference turns, evaluation, reattempt decisions, synthesis) -- the JDK HTTP client Spring auto-detects has none of its own, so an unbounded call would otherwise wedge the single-worker `LlmRequestQueue` forever |
 | `vader.operators.enabled` | `true` | Master switch for Kubernetes operators. Set to `false` where no cluster is reachable (unit/integration test runs, CI) |
 | `vader.operators.python-sandbox.enabled` | `true` | Python sandbox operator |
 | `vader.operators.python-sandbox.sandbox.exec-timeout-seconds` | `30` | Ceiling on one `run_python_code` call, enforced by `core-python-sandbox-server` itself regardless of what a caller requests |
@@ -276,6 +287,7 @@ A bad entry reads like an annotated file listing.
 | `vader.storage.type` | `database` | `database` or `minio`; picks the `InterfaceFileStorageStrategy` backing both upload and the object-storage download endpoint/tool |
 | `vader.mcp.object-storage.enabled` | `true` | Expose `get_object_content` (base64 object retrieval) over MCP |
 | `vader.mcp.object-storage.max-inline-bytes` | `2097152` | Objects over this size are rejected by `get_object_content` with the REST download URL instead of being inlined |
+| `vader.mcp.task-update.enabled` | `true` | Expose `post_task_update` over MCP -- a task-execution agent leaving an interim progress note against its own task; never a pass/fail/timeout verdict, and never against another task regardless of what the calling model supplies |
 | `vader.dao.max-page-size` | `100` | Cap on query page size |
 | `vader.kubernetes.namespace` | `default` | Namespace operators manage resources in |
 | `vader.scheduling.enabled` | `true` | Master switch for the background pollers (inbox drain, backpressure sampler) |
@@ -288,7 +300,9 @@ A bad entry reads like an annotated file listing.
 | `vader.agent-harness.max-turns` | `20` | Turn cap handed to each harness, enforced server-side |
 | `vader.agent-harness.max-tokens` | `200000` | Token cap handed to each harness, enforced server-side |
 | `vader.agent-harness.deadline-seconds` | `600` | Wall-clock deadline handed to each harness; also the Job's `activeDeadlineSeconds` |
-| `vader.agent-harness.max-attempts-per-task` | `3` | Retries (fresh `TaskAttempt` + Job) before a task is permanently failed |
+| `vader.agent-harness.max-attempts-per-task` | `3` | Hard ceiling on attempts per task, checked by `OrchestratorAgentService.decideReattempt` before it even consults the reattempt-decision strategy |
+| `vader.inbox.task-attempt-review.poll-interval-ms` | `1000` | Scheduled attempt-review inbox drain cadence -- evaluates a newly-terminal attempt and, on failure, asks the orchestrator whether it's worth re-attempting |
+| `vader.inbox.task-attempt-review.max-concurrency` | `1` | Max attempts reviewed concurrently; kept low since both review steps' LLM calls are already serialized through the single-worker `LlmRequestQueue` |
 | `vader.agent-harness.ttl-seconds-after-finished` | `3600` | Backstop only: `AgentHarnessJobCleanupListener` deletes a finished Job as soon as its `TaskAttempt` settles, regardless of this value; Kubernetes only reaches this TTL if that explicit delete didn't run |
 | `vader.agent-harness.reaper.poll-interval-ms` | `30000` | How often to scan for attempts a harness will never report back on |
 | `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |

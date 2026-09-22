@@ -14,7 +14,9 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.core.server.models.ConversationMessage;
+import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.ReattemptDecisionRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 import org.vader.core.server.repository.OutboxMessageRepository;
 import org.vader.core.server.service.io.AbstractInbox;
@@ -52,7 +54,8 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
     // Lazy: this inbox is itself one of BackpressureRegistry's queues, and both executors depend
     // on McpToolCallbackRegistry, which -- in "local" mode -- drags in the whole Spring AI
     // tool-calling graph, wiring BackpressureTools back to BackpressureRegistry and closing a
-    // cycle back through this bean. Same reasoning as ClientPromptInbox's lazy WorkflowService.
+    // cycle back through this bean. Same reasoning as ClientPromptInbox's lazy
+    // OrchestratorAgentService.
     @Autowired
     @Lazy
     private InferenceTurnLlmExecutor inferenceTurnExecutor;
@@ -60,6 +63,14 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
     @Autowired
     @Lazy
     private DecompositionLlmExecutor decompositionExecutor;
+
+    @Autowired
+    @Lazy
+    private EvaluationLlmExecutor evaluationExecutor;
+
+    @Autowired
+    @Lazy
+    private ReattemptDecisionLlmExecutor reattemptDecisionExecutor;
 
     @Autowired
     @Qualifier("llmRequestInboxExecutor")
@@ -87,6 +98,10 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
                 this.inferenceTurnExecutor.execute(this.readMessages(message.getRequestJson())));
             case DECOMPOSITION -> this.toJson(
                 this.decompositionExecutor.execute(message.getRequestJson()));
+            case EVALUATION -> this.toJson(this.evaluationExecutor.execute(
+                this.readValue(message.getRequestJson(), EvaluationRequest.class)));
+            case REATTEMPT_DECISION -> this.toJson(this.reattemptDecisionExecutor.execute(
+                this.readValue(message.getRequestJson(), ReattemptDecisionRequest.class)));
         };
         message.setResponseJson(responseJson);
         this.messageRepository.save(message);
@@ -98,6 +113,15 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
         } catch (JsonProcessingException e) {
             throw new LlmRequestQueueException(
                 "Could not deserialize inference-turn request", e);
+        }
+    }
+
+    private <T> T readValue(final String requestJson, final Class<T> type) {
+        try {
+            return this.objectMapper.readValue(requestJson, type);
+        } catch (JsonProcessingException e) {
+            throw new LlmRequestQueueException(
+                "Could not deserialize " + type.getSimpleName() + " request", e);
         }
     }
 

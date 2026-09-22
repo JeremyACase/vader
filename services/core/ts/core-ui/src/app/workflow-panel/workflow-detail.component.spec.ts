@@ -1,21 +1,31 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Observable, of, Subject } from 'rxjs';
+import { Observable, Subject, of } from 'rxjs';
 import { ActiveWorkflowsService } from '../active-workflows.service';
 import { Workflow } from '../client-prompt.model';
+import { DaoPage } from '../dao-page.model';
 import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
+import { TaskUpdate } from '../task-update.model';
 import { WorkflowDetailComponent } from './workflow-detail.component';
 
 class FakeActiveWorkflowsService {
-  recentWorkflows(): Observable<Workflow[]> {
-    return new Subject<Workflow[]>().asObservable();
+  recentWorkflows(): Observable<DaoPage<Workflow>> {
+    return new Subject<DaoPage<Workflow>>().asObservable();
+  }
+
+  workflow(): Observable<Workflow> {
+    return new Subject<Workflow>().asObservable();
   }
 
   taskAttempts(): Observable<TaskAttempt[]> {
-    return new Subject<TaskAttempt[]>().asObservable();
+    return of([]);
   }
 
   transcripts(): Observable<TaskAttemptTranscript[]> {
     return new Subject<TaskAttemptTranscript[]>().asObservable();
+  }
+
+  taskUpdates(): Observable<TaskUpdate[]> {
+    return of([]);
   }
 
   promptText(): Observable<string> {
@@ -61,5 +71,28 @@ describe('WorkflowDetailComponent', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).not.toContain('Result');
+  });
+
+  it('shows the task detail once a task node is selected', () => {
+    fixture.componentRef.setInput(
+      'workflow',
+      workflow({
+        taskPlan: {
+          objective: 'Ship it',
+          taskGraph: {
+            tasks: [
+              { id: 't1', title: 'Design', description: 'Draw it', subTasks: [], dependsOnTaskIds: [] }
+            ]
+          }
+        }
+      })
+    );
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedTask()).toBeUndefined();
+    fixture.componentInstance.selectTask('t1');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedTask()?.title).toBe('Design');
   });
 });

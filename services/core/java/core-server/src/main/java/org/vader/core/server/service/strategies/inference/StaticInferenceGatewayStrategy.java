@@ -10,9 +10,9 @@ import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.ConversationRole;
 import org.vader.core.server.models.InferenceToolCall;
 import org.vader.core.server.models.InferenceTurn;
+import org.vader.core.server.service.agent.orchestrator.strategies.StaticLlmOrchestrationStrategy;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
-import org.vader.core.server.service.strategies.orchestration.StaticLlmOrchestrationStrategy;
 
 /**
  * Returns a fixed, scripted turn sequence -- no LLM, no network call. Active whenever

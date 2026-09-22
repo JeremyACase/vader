@@ -3,7 +3,7 @@ package org.vader.core.server.service.strategies.inference;
 import java.util.List;
 import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.InferenceTurn;
-import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 
 /**
  * The only path from {@code /vader/core-server/agent/inference} to a model: this, not the

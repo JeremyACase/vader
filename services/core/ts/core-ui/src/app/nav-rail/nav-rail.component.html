@@ -1,0 +1,27 @@
+<nav class="nav-rail" aria-label="Primary">
+  @for (item of items(); track item.id) {
+    <button
+      type="button"
+      class="nav-item"
+      [class.active]="isActive(item.id)"
+      [attr.aria-pressed]="isActive(item.id)"
+      [attr.aria-label]="item.label"
+      title="{{item.label}}"
+      (click)="itemClicked.emit(item.id)">
+      <svg viewBox="0 0 24 24" class="nav-icon" aria-hidden="true">
+        @switch (item.icon) {
+          @case ('workflows') {
+            <circle cx="5" cy="12" r="2.75" />
+            <circle cx="18" cy="5" r="2.75" />
+            <circle cx="18" cy="19" r="2.75" />
+            <path d="M7.3 10.7 15.7 6.3M7.3 13.3 15.7 17.7" />
+          }
+          @case ('prompt') {
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke-linejoin="round" />
+          }
+        }
+      </svg>
+      <span class="nav-label">{{item.label}}</span>
+    </button>
+  }
+</nav>

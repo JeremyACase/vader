@@ -13,6 +13,10 @@ import java.util.List;
  * tasks leave it {@code null}); embedding the parent object here, rather than referencing it by
  * id, would recurse back through this task's own {@code subTasks}. {@code dependsOnTaskIds} are
  * shallow references too, for the same reason -- they're graph edges, not owned children.
+ * {@code taskUpdateIds} are shallow references as well -- the default for any "many" side
+ * association, per the mapper conventions -- since {@link TaskUpdate}s are independently
+ * queryable by id and hydrating them here would risk an uncapped in-memory load per row of a
+ * paginated task query.
  */
 public class Task extends AbstractModel {
 
@@ -27,6 +31,8 @@ public class Task extends AbstractModel {
     private List<@Valid Task> subTasks = new ArrayList<>();
 
     private List<String> dependsOnTaskIds = new ArrayList<>();
+
+    private List<String> taskUpdateIds = new ArrayList<>();
 
     @Override
     public String getModelType() {
@@ -71,5 +77,13 @@ public class Task extends AbstractModel {
 
     public void setDependsOnTaskIds(List<String> dependsOnTaskIds) {
         this.dependsOnTaskIds = dependsOnTaskIds;
+    }
+
+    public List<String> getTaskUpdateIds() {
+        return this.taskUpdateIds;
+    }
+
+    public void setTaskUpdateIds(List<String> taskUpdateIds) {
+        this.taskUpdateIds = taskUpdateIds;
     }
 }
