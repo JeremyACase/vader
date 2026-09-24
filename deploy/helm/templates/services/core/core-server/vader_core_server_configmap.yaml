@@ -1,3 +1,11 @@
+{{- if and (eq .Values.vader.orchestrator.type "static") (ne (.Values.vader.mode | default "PROD") "TEST") }}
+{{- fail (printf "vader.orchestrator.type=static returns canned results and is only permitted with vader.mode=TEST (got %s). Use vader.orchestrator.type=local." (.Values.vader.mode | default "PROD")) }}
+{{- end }}
+{{- if eq .Values.vader.orchestrator.type "local" }}
+{{- if le (int .Values.vader.orchestrator.local.contextTokens) (int .Values.vader.orchestrator.local.maxOutputTokens) }}
+{{- fail (printf "vader.orchestrator.local.contextTokens (%v) must be larger than vader.orchestrator.local.maxOutputTokens (%v): Ollama reserves the output cap out of the context window, leaving no room for the prompt." .Values.vader.orchestrator.local.contextTokens .Values.vader.orchestrator.local.maxOutputTokens) }}
+{{- end }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -58,8 +66,15 @@ data:
             options:
               model: {{ .Values.vader.orchestrator.local.model }}
               temperature: 0
-        # Bounded retry so an unreachable LLM degrades to the fallback plan in seconds, not
-        # minutes, when fallback-to-static is on.
+              # Caps every single response (Ollama's num_predict) so a runaway generation ends
+              # instead of holding Ollama's only slot indefinitely. These are Spring AI's default
+              # options, merged into every chat call. See vader.orchestrator.local.maxOutputTokens.
+              num-predict: {{ required "vader.orchestrator.local.maxOutputTokens is required when orchestrator.type is local" .Values.vader.orchestrator.local.maxOutputTokens }}
+              # Context window (Ollama's num_ctx) for every call. Without it Ollama falls back to
+              # its own small default and silently truncates longer prompts from the front. See
+              # vader.orchestrator.local.contextTokens.
+              num-ctx: {{ required "vader.orchestrator.local.contextTokens is required when orchestrator.type is local" .Values.vader.orchestrator.local.contextTokens }}
+        # Bounded retry so an unreachable LLM degrades to a failure in seconds, not minutes.
         retry:
           max-attempts: 2
           backoff:
@@ -106,12 +121,13 @@ data:
       mode: {{ .Values.vader.mode | default "PROD" }}
       orchestrator:
         type: {{ .Values.vader.orchestrator.type | default "local" }}
+        # How many times a freshly-decomposed task plan may be sent back for revision (a
+        # structural problem, or the refinement critique flags it) before the last plan is used
+        # anyway rather than blocking the prompt indefinitely.
+        max-task-plan-revisions: {{ .Values.vader.orchestrator.maxTaskPlanRevisions | default 1 }}
         {{- if eq .Values.vader.orchestrator.type "local" }}
         local:
           model: {{ .Values.vader.orchestrator.local.model }}
-          # When the in-cluster LLM is unreachable, return the canned static plan instead of
-          # failing -- lets `helm test` / CI pass with no Ollama in the cluster.
-          fallback-to-static: {{ .Values.vader.orchestrator.local.fallbackToStatic }}
           # Bounds every Ollama HTTP call (decomposition, inference turns, evaluation,
           # reattempt decisions, synthesis); the JDK HTTP client Spring auto-detects here has no
           # timeout of its own, so an unbounded call would otherwise wedge the single-worker LLM
@@ -141,6 +157,7 @@ data:
         task-attempt-review:
           poll-interval-ms: {{ .Values.vader.inbox.taskAttemptReview.pollIntervalMs }}
           max-concurrency: {{ .Values.vader.inbox.taskAttemptReview.maxConcurrency }}
+          llm-retry-interval-ms: {{ .Values.vader.inbox.taskAttemptReview.llmRetryIntervalMs }}
       llm:
         request-queue:
           drain-poll-interval-ms: {{ .Values.vader.llm.requestQueue.drainPollIntervalMs }}
@@ -175,6 +192,11 @@ data:
             # Passed to the sandbox pod as SANDBOX_LOG_LEVEL, so its log verbosity tracks
             # core-server's own (logging.vader) the same way agent-harness's log-level does.
             log-level: {{ .Values.logging.vader }}
+            # create_sandbox blocks until the pod is actually ready (or this budget is spent) so a
+            # caller that immediately stages a file or runs code right after create_sandbox
+            # returns doesn't race the pod's own startup.
+            ready-poll-max-attempts: {{ .Values.vader.operators.pythonSandbox.sandbox.readyPollMaxAttempts }}
+            ready-poll-interval-ms: {{ .Values.vader.operators.pythonSandbox.sandbox.readyPollIntervalMs }}
             resources:
               requests:
                 cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.cpu }}

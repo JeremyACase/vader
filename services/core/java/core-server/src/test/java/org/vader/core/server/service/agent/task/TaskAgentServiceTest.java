@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,9 +14,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -42,6 +45,7 @@ import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.repository.TaskAttemptToolCallRepository;
 import org.vader.core.server.repository.TaskAttemptTranscriptRepository;
 import org.vader.core.server.service.agent.TaskUpdateService;
+import org.vader.core.server.service.operators.pythonsandbox.TaskAttemptSandboxService;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
 
@@ -144,23 +148,59 @@ class TaskAgentServiceTest {
             .contains("Analyze the uploaded spreadsheet and write a report.");
     }
 
-    @Test
-    void fetchAssignment_contextListsFilesAttachedToTheOriginalRequest() {
-        var attempt = attemptInWorkflow(WORKFLOW_ID);
-        var clientPrompt =
-            attempt.getTask().getTaskGraph().getTaskPlan().getWorkflow().getClientPrompt();
+    private static TaskAttemptEntity attemptWithAttachedFile(final String originalFilename) {
         var file = new ObjectMetadataEntity();
-        file.setOriginalFilename("sales.csv");
+        file.setId(UUID.randomUUID().toString());
+        file.setOriginalFilename(originalFilename);
         file.setContentType("text/csv");
-        clientPrompt.setFiles(Set.of(file));
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        attempt.getTask().getTaskGraph().getTaskPlan().getWorkflow().getClientPrompt()
+            .setFiles(Set.of(file));
+        return attempt;
+    }
+
+    @Test
+    void fetchAssignment_withTheSandboxEnabled_saysAttachedFilesAreAlreadyInTheWorkingDirectory() {
+        ReflectionTestUtils.setField(
+            this.service, "taskAttemptSandboxService", mock(TaskAttemptSandboxService.class));
+        var attempt = attemptWithAttachedFile("sales.csv");
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        var response = this.service.fetchAssignment(ATTEMPT_ID);
+
+        assertThat(response.context())
+            .contains("\"sales.csv\"")
+            .contains("already in your Python working directory")
+            .contains("run_python_code")
+            .doesNotContain("get_object_content")
+            .doesNotContain("stage_object")
+            .doesNotContain("create_sandbox");
+    }
+
+    @Test
+    void fetchAssignment_withTheSandboxEnabled_namesFilesExactlyAsTheyAreStaged() {
+        ReflectionTestUtils.setField(
+            this.service, "taskAttemptSandboxService", mock(TaskAttemptSandboxService.class));
+        var attempt = attemptWithAttachedFile("reports/q3.xlsx");
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        var response = this.service.fetchAssignment(ATTEMPT_ID);
+
+        assertThat(response.context()).contains("\"reports_q3.xlsx\"");
+    }
+
+    @Test
+    void fetchAssignment_withTheSandboxDisabled_pointsOnlyAtGetObjectContent() {
+        var attempt = attemptWithAttachedFile("sales.csv");
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
 
         var response = this.service.fetchAssignment(ATTEMPT_ID);
 
         assertThat(response.context())
             .contains("sales.csv")
-            .contains("stage_object")
-            .contains("get_object_content");
+            .contains("get_object_content")
+            .doesNotContain("working directory")
+            .doesNotContain("stage_object");
     }
 
     @Test
@@ -229,7 +269,7 @@ class TaskAgentServiceTest {
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
-        var turn = new InferenceTurn("hello", List.of(), 5L);
+        var turn = new InferenceTurn("hello", List.of(), 5L, "stop");
         when(this.inferenceGateway.complete(messages)).thenReturn(turn);
 
         var result = this.service.recordInferenceTurn(ATTEMPT_ID, messages);
@@ -241,6 +281,7 @@ class TaskAgentServiceTest {
         assertThat(transcriptCaptor.getValue().getPrompt()).contains("hi");
         assertThat(transcriptCaptor.getValue().getMessageCount()).isEqualTo(1);
         assertThat(transcriptCaptor.getValue().getTokensSpent()).isEqualTo(5L);
+        assertThat(transcriptCaptor.getValue().getFinishReason()).isEqualTo("stop");
     }
 
     @Test
@@ -261,7 +302,7 @@ class TaskAgentServiceTest {
                 ConversationRole.TOOL, "{\"filename\":\"a.csv\"}", null, "call-1",
                 "stage_object"));
         when(this.inferenceGateway.complete(messages))
-            .thenReturn(new InferenceTurn("done", List.of(), 5L));
+            .thenReturn(new InferenceTurn("done", List.of(), 5L, "stop"));
 
         this.service.recordInferenceTurn(ATTEMPT_ID, messages);
 
@@ -283,7 +324,7 @@ class TaskAgentServiceTest {
             new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null));
         var toolCalls = List.of(new InferenceToolCall("call-1", "get_object_content", "{}"));
         when(this.inferenceGateway.complete(messages))
-            .thenReturn(new InferenceTurn(null, toolCalls, 5L));
+            .thenReturn(new InferenceTurn(null, toolCalls, 5L, "stop"));
 
         this.service.recordInferenceTurn(ATTEMPT_ID, messages);
 
@@ -293,11 +334,49 @@ class TaskAgentServiceTest {
     }
 
     @Test
+    void recordInferenceTurn_whenToolCallsComeWithEmptyContent_stillPersistsTheToolCalls() {
+        // Ollama's shape for a tool-call turn: content is "" rather than null.
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var messages = List.of(
+            new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null));
+        var toolCalls = List.of(new InferenceToolCall("", "run_python_code", "{\"code\":\"1\"}"));
+        when(this.inferenceGateway.complete(messages))
+            .thenReturn(new InferenceTurn("", toolCalls, 5L, "stop"));
+
+        this.service.recordInferenceTurn(ATTEMPT_ID, messages);
+
+        var transcriptCaptor = ArgumentCaptor.forClass(TaskAttemptTranscriptEntity.class);
+        verify(this.transcriptRepository).save(transcriptCaptor.capture());
+        assertThat(transcriptCaptor.getValue().getResponse()).contains("run_python_code");
+    }
+
+    @Test
+    void recordInferenceTurn_whenTheTurnHasBothTextAndToolCalls_persistsBoth() {
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var messages = List.of(
+            new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null));
+        var toolCalls = List.of(new InferenceToolCall("", "run_python_code", "{}"));
+        when(this.inferenceGateway.complete(messages))
+            .thenReturn(new InferenceTurn("Let me look at the sheets.", toolCalls, 5L, "stop"));
+
+        this.service.recordInferenceTurn(ATTEMPT_ID, messages);
+
+        var transcriptCaptor = ArgumentCaptor.forClass(TaskAttemptTranscriptEntity.class);
+        verify(this.transcriptRepository).save(transcriptCaptor.capture());
+        assertThat(transcriptCaptor.getValue().getResponse())
+            .contains("Let me look at the sheets.")
+            .contains("run_python_code");
+    }
+
+    @Test
     void invokeTool_delegatesToTheRegisteredCallbackAndReturnsItsResult() {
         var attempt = attemptInWorkflow(WORKFLOW_ID);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
-        when(toolCallback.call("{\"id\":\"abc\"}")).thenReturn("{\"content\":\"...\"}");
+        when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
+            .thenReturn("{\"content\":\"...\"}");
         when(this.toolCallbackRegistry.findByName("get_object_content"))
             .thenReturn(Optional.of(toolCallback));
 
@@ -309,11 +388,29 @@ class TaskAgentServiceTest {
     }
 
     @Test
+    void invokeTool_passesTheCallingAttemptsOwnIdAsServerSuppliedToolContext() {
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var toolCallback = mock(ToolCallback.class);
+        when(toolCallback.call(anyString(), any(ToolContext.class))).thenReturn("{}");
+        when(this.toolCallbackRegistry.findByName("run_python_code"))
+            .thenReturn(Optional.of(toolCallback));
+
+        this.service.invokeTool(ATTEMPT_ID, "call-1", "run_python_code", "{\"code\":\"pass\"}");
+
+        var contextCaptor = ArgumentCaptor.forClass(ToolContext.class);
+        verify(toolCallback).call(eq("{\"code\":\"pass\"}"), contextCaptor.capture());
+        assertThat(TaskAttemptToolContext.taskAttemptIdFrom(contextCaptor.getValue()))
+            .isEqualTo(ATTEMPT_ID);
+    }
+
+    @Test
     void invokeTool_persistsAnImmutableAuditRowBeforeReturning() {
         var attempt = attemptInWorkflow(WORKFLOW_ID);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
-        when(toolCallback.call("{\"id\":\"abc\"}")).thenReturn("{\"content\":\"...\"}");
+        when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
+            .thenReturn("{\"content\":\"...\"}");
         when(this.toolCallbackRegistry.findByName("get_object_content"))
             .thenReturn(Optional.of(toolCallback));
 
@@ -334,7 +431,7 @@ class TaskAgentServiceTest {
         var attempt = attemptInWorkflow(WORKFLOW_ID);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
-        when(toolCallback.call("{\"id\":\"abc\"}"))
+        when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
             .thenThrow(new IllegalStateException("sandbox pod unreachable"));
         when(this.toolCallbackRegistry.findByName("stage_object"))
             .thenReturn(Optional.of(toolCallback));
@@ -353,7 +450,7 @@ class TaskAgentServiceTest {
         var attempt = attemptInWorkflow(WORKFLOW_ID);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
-        when(toolCallback.call("{\"id\":\"abc\"}"))
+        when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
             .thenThrow(new IllegalStateException("sandbox pod unreachable"));
         when(this.toolCallbackRegistry.findByName("stage_object"))
             .thenReturn(Optional.of(toolCallback));
@@ -387,7 +484,7 @@ class TaskAgentServiceTest {
         var toolCallback = mock(ToolCallback.class);
         when(this.toolCallbackRegistry.findByName("post_task_update"))
             .thenReturn(Optional.of(toolCallback));
-        when(toolCallback.call(anyString()))
+        when(toolCallback.call(anyString(), any(ToolContext.class)))
             .thenReturn("Recorded update against task real-task-id.");
 
         this.service.invokeTool(
@@ -396,7 +493,7 @@ class TaskAgentServiceTest {
                 + "\"description\":\"note\"}");
 
         var argumentsCaptor = ArgumentCaptor.forClass(String.class);
-        verify(toolCallback).call(argumentsCaptor.capture());
+        verify(toolCallback).call(argumentsCaptor.capture(), any(ToolContext.class));
         assertThat(argumentsCaptor.getValue())
             .contains("\"taskId\":\"real-task-id\"")
             .contains("\"taskAttemptId\":\"" + ATTEMPT_ID + "\"")

@@ -1,9 +1,6 @@
 package org.vader.core.server.service.agent.orchestrator.strategies;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
@@ -21,40 +18,25 @@ import org.vader.core.server.service.llm.LlmRequestQueue;
  * writes a response back. It never talks to Ollama directly -- that's
  * {@code ReattemptDecisionLlmExecutor}, called only from inside the inbox.</p>
  *
- * <p>When the LLM is unreachable and {@code vader.orchestrator.local.fallback-to-static} is
- * {@code true} (the default), this falls back to approving the retry, same as
- * {@link StaticReattemptDecisionStrategy} -- so {@code helm test} and CI pass with no Ollama in
- * the cluster. A reachable LLM that returns nothing usable still fails loudly.</p>
+ * <p>An unreachable LLM always fails loudly, in every {@code vader.mode} -- never a canned
+ * "retry" answer. That canned answer exists only behind {@link StaticReattemptDecisionStrategy},
+ * permitted only in {@code vader.mode=TEST}.</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "vader.orchestrator", name = "type", havingValue = "local")
 public class LocalReattemptDecisionStrategy implements InterfaceReattemptDecisionStrategy {
 
-    private static final Logger logger =
-        LoggerFactory.getLogger(LocalReattemptDecisionStrategy.class);
-
     @Autowired
     private LlmRequestQueue requestQueue;
-
-    @Value("${vader.orchestrator.local.fallback-to-static:true}")
-    private boolean fallbackToStatic;
 
     @Override
     public ReattemptDecision decide(final ReattemptDecisionRequest request) {
         var outcome = this.requestQueue.submitReattemptDecision(request);
-        return outcome.isUnreachable()
-            ? this.handleUnreachable(outcome.unreachableReason())
-            : outcome.decision();
-    }
-
-    private ReattemptDecision handleUnreachable(final String reason) {
-        if (this.fallbackToStatic) {
-            logger.warn("Local LLM unreachable ({}); defaulting to retry.", reason);
-            return new ReattemptDecision(
-                true, "Local LLM unreachable; defaulting to retry.");
+        if (outcome.isUnreachable()) {
+            throw new OrchestratorUnavailableException(
+                "Could not reach the local LLM to decide whether to re-attempt this task.",
+                new IllegalStateException(outcome.unreachableReason()));
         }
-        throw new OrchestratorUnavailableException(
-            "Could not reach the local LLM to decide whether to re-attempt this task.",
-            new IllegalStateException(reason));
+        return outcome.decision();
     }
 }

@@ -30,9 +30,10 @@ public class ReattemptDecisionLlmExecutor {
         Retrying makes sense when the failure looks transient or addressable (a tool call that
         can be retried differently, a misunderstanding that clearer instructions would fix, an
         approach that has not yet been tried). It does not make sense when the task is
-        fundamentally unachievable as stated, when prior updates show the same failure repeating
-        despite different approaches, or when nothing about a fresh attempt would plausibly change
-        the outcome.
+        fundamentally unachievable as stated, when updates from earlier attempts show the same
+        failure repeating despite different approaches, or when nothing about a fresh attempt
+        would plausibly change the outcome. On a first attempt there are no earlier attempts, so
+        there is no repeating pattern to point to -- judge the one failure on its own merits.
 
         Set `shouldReattempt` to your decision and explain your reasoning in `reasoning` -- this
         is recorded as the durable audit trail for this task, so be specific about what makes you
@@ -69,7 +70,7 @@ public class ReattemptDecisionLlmExecutor {
 
     private String userPromptFor(final ReattemptDecisionRequest request) {
         var priorUpdates = request.priorUpdateDescriptions().isEmpty()
-            ? "(none)"
+            ? "(none -- no earlier attempt of this task has been made)"
             : String.join("\n", request.priorUpdateDescriptions());
 
         return """
@@ -82,7 +83,7 @@ public class ReattemptDecisionLlmExecutor {
             Why the latest attempt failed:
             %s
 
-            Prior updates already recorded against this task:
+            Updates from earlier attempts of this task:
             %s
             """.formatted(
                 request.taskTitle(), request.taskDescription(), request.attemptNumber(),

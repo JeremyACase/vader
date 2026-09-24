@@ -1,6 +1,7 @@
 package org.vader.core.server.service.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -21,6 +22,7 @@ import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
+import org.vader.core.server.exceptions.OrchestratorUnavailableException;
 import org.vader.core.server.models.TaskAttemptSettledEvent;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.service.agent.evaluator.EvaluatorAgentService;
@@ -36,6 +38,7 @@ class TaskAttemptReviewServiceTest {
     private ApplicationEventPublisher eventPublisher;
     private EvaluatorAgentService evaluatorAgentService;
     private OrchestratorAgentService orchestratorAgentService;
+    private TaskAttemptReviewRetryService retryService;
     private TaskAttemptReviewService service;
 
     @BeforeEach
@@ -45,6 +48,7 @@ class TaskAttemptReviewServiceTest {
         this.eventPublisher = mock(ApplicationEventPublisher.class);
         this.evaluatorAgentService = mock(EvaluatorAgentService.class);
         this.orchestratorAgentService = mock(OrchestratorAgentService.class);
+        this.retryService = mock(TaskAttemptReviewRetryService.class);
 
         this.service = new TaskAttemptReviewService();
         ReflectionTestUtils.setField(
@@ -55,6 +59,7 @@ class TaskAttemptReviewServiceTest {
             this.service, "evaluatorAgentService", this.evaluatorAgentService);
         ReflectionTestUtils.setField(
             this.service, "orchestratorAgentService", this.orchestratorAgentService);
+        ReflectionTestUtils.setField(this.service, "retryService", this.retryService);
     }
 
     private static TaskAttemptEntity attemptInWorkflow(final TaskAttemptStatus status) {
@@ -141,5 +146,34 @@ class TaskAttemptReviewServiceTest {
         verify(this.eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().workflowId()).isEqualTo(WORKFLOW_ID);
         assertThat(eventCaptor.getValue().assignmentId()).isEqualTo(ATTEMPT_ID);
+    }
+
+    @Test
+    void review_whenItCompletes_resumesTheWorkflowIfItWasAwaitingTheLlm() {
+        var attempt = attemptInWorkflow(TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.evaluatorAgentService.evaluate(ATTEMPT_ID))
+            .thenReturn(TaskUpdateType.COMPLETED);
+
+        this.service.review(ATTEMPT_ID);
+
+        verify(this.retryService).resumeIfNoLongerWaiting(attempt);
+    }
+
+    @Test
+    void review_whenTheLlmIsUnavailable_propagatesWithoutResumingOrSettling() {
+        // The inbox decides what an outage means (defer and retry); the review itself must
+        // neither claim the LLM is back nor publish a settlement for a verdict it never reached.
+        var attempt = attemptInWorkflow(TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.evaluatorAgentService.evaluate(ATTEMPT_ID)).thenThrow(
+            new OrchestratorUnavailableException(
+                "Could not reach the local LLM to evaluate this attempt.",
+                new IllegalStateException("connection refused")));
+
+        assertThatThrownBy(() -> this.service.review(ATTEMPT_ID))
+            .isInstanceOf(OrchestratorUnavailableException.class);
+        verify(this.retryService, never()).resumeIfNoLongerWaiting(any());
+        verify(this.eventPublisher, never()).publishEvent(any());
     }
 }

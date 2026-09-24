@@ -44,6 +44,9 @@ public class TaskAttemptReviewService {
     // in "local" mode -- drag in the whole Spring AI tool-calling graph, closing a cycle back
     // through this bean. Same reasoning as ClientPromptInbox's lazy OrchestratorAgentService.
     @Autowired
+    private TaskAttemptReviewRetryService retryService;
+
+    @Autowired
     @Lazy
     private EvaluatorAgentService evaluatorAgentService;
 
@@ -65,6 +68,8 @@ public class TaskAttemptReviewService {
         if (verdictType != TaskUpdateType.COMPLETED) {
             this.orchestratorAgentService.decideReattempt(attemptId);
         }
+        // Only reached once every LLM call above succeeded -- the LLM is evidently answering.
+        this.retryService.resumeIfNoLongerWaiting(attempt);
         this.publishSettled(attempt);
     }
 

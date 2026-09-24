@@ -18,6 +18,7 @@ import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.core.server.models.ConversationMessage;
 import org.vader.core.server.models.ConversationRole;
+import org.vader.core.server.models.DecompositionRequest;
 import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.EvaluationVerdict;
 import org.vader.core.server.models.InferenceTurn;
@@ -78,7 +79,7 @@ class LlmRequestInboxTest {
         var message = new LlmRequestOutboxMessageEntity();
         message.setKind(LlmRequestKind.INFERENCE_TURN);
         message.setRequestJson(new ObjectMapper().writeValueAsString(messages));
-        var turn = new InferenceTurn("hello", List.of(), 5L);
+        var turn = new InferenceTurn("hello", List.of(), 5L, "stop");
         when(this.inferenceTurnExecutor.execute(messages)).thenReturn(turn);
 
         ReflectionTestUtils.invokeMethod(this.inbox, "handle", message);
@@ -91,10 +92,12 @@ class LlmRequestInboxTest {
     void handle_forDecomposition_executesAndStoresTheSerializedOutcome() {
         var message = new LlmRequestOutboxMessageEntity();
         message.setKind(LlmRequestKind.DECOMPOSITION);
-        message.setRequestJson("plan a birthday party");
+        message.setRequestJson(
+            "{\"clientPromptText\":\"plan a birthday party\",\"revisionGuidance\":null}");
         var plan = new LlmTaskPlan("reasoning", "throw a party",
             List.of(new LlmTaskPlan.LlmTask("book venue", "find a place", List.of())));
-        when(this.decompositionExecutor.execute("plan a birthday party"))
+        when(this.decompositionExecutor.execute(
+            new DecompositionRequest("plan a birthday party", null)))
             .thenReturn(new DecompositionOutcome(plan, null));
 
         ReflectionTestUtils.invokeMethod(this.inbox, "handle", message);

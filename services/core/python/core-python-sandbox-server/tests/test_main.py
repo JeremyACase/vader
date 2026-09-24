@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
 
 from core_python_sandbox_server.main import app
@@ -47,3 +49,19 @@ def test_staged_file_is_then_visible_to_execute():
     response = client.post("/execute", json={"code": "print(open('staged.csv').read())"})
 
     assert "1,2" in response.json()["stdout"]
+
+
+def test_head_on_a_file_never_staged_returns_404():
+    # The app's workspace is shared across this module's tests, so use a name no other test does.
+    response = client.head(f"/workspace/files/never-staged-{uuid.uuid4()}.xlsx")
+
+    assert response.status_code == 404
+
+
+def test_head_on_a_staged_file_returns_200():
+    filename = f"staged-{uuid.uuid4()}.xlsx"
+    client.put(f"/workspace/files/{filename}", content=b"raw spreadsheet bytes")
+
+    response = client.head(f"/workspace/files/{filename}")
+
+    assert response.status_code == 200

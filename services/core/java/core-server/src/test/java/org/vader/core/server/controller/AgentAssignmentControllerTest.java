@@ -36,7 +36,7 @@ class AgentAssignmentControllerTest {
     void inference_forwardsTheConversationAndReturnsTheTurn() {
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
-        var turn = new InferenceTurn("hello", List.of(), 5L);
+        var turn = new InferenceTurn("hello", List.of(), 5L, "stop");
         when(this.taskAttemptService.recordInferenceTurn(ASSIGNMENT_ID, messages))
             .thenReturn(turn);
 

@@ -32,4 +32,6 @@ export interface TaskAttemptTranscript {
   prompt: string;
   response: string;
   tokensSpent: number;
+  /** Why the model stopped generating (e.g. `stop`, or `length` when cut off at the output cap). */
+  finishReason?: string | null;
 }

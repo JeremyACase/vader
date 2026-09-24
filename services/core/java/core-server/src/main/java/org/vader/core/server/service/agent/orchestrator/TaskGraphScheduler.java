@@ -90,7 +90,7 @@ public class TaskGraphScheduler {
     @Transactional
     public void evaluate(final String workflowId) {
         var workflow = this.workflowRepository.findById(workflowId).orElseThrow();
-        if (workflow.getStatus() != WorkflowStatus.RUNNING) {
+        if (isTerminal(workflow.getStatus())) {
             return;
         }
 
@@ -123,6 +123,14 @@ public class TaskGraphScheduler {
         logger.info("Dispatching task {} (attempt {}) as assignment {}",
             task.getId(), attemptNumber, saved.getId());
         this.taskAssignmentOutbox.enqueue(saved);
+    }
+
+    /**
+     * {@code AWAITING_LLM} is deliberately not terminal: a workflow paused on one task's review
+     * must keep dispatching and reviewing everything else that doesn't depend on it.
+     */
+    private static boolean isTerminal(final WorkflowStatus status) {
+        return status == WorkflowStatus.SUCCEEDED || status == WorkflowStatus.FAILED;
     }
 
     private TaskProgress computeProgress(final TaskEntity task) {

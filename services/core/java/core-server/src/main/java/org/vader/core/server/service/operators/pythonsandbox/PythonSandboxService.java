@@ -46,17 +46,67 @@ public class PythonSandboxService {
     @Value("${vader.kubernetes.namespace:default}")
     private String namespace;
 
+    // reconcile() itself returns as soon as the Deployment/Service are *created*, not once the
+    // pod is actually serving traffic -- without waiting here, a caller (a model, per its own
+    // task instructions) that immediately stages a file or runs code right after create_sandbox
+    // returns hits a real race: the sandbox's Service has no ready endpoints yet, so the very
+    // next call fails with a connection error. The default (30 * 500ms = 15s) comfortably covers
+    // this image's typical readinessProbe pass time (2s initial delay + a 5s period, per
+    // PythonSandboxManifestBuilder) even on a cold pull.
+    @Value("${vader.operators.python-sandbox.sandbox.ready-poll-max-attempts:30}")
+    private int readyPollMaxAttempts;
+
+    @Value("${vader.operators.python-sandbox.sandbox.ready-poll-interval-ms:500}")
+    private long readyPollIntervalMs;
+
+    private static final String RUNNING_PHASE = "Running";
+
     /**
      * Creates a sandbox, or returns the existing one if a sandbox of the resolved name is already
-     * present.
+     * present, waiting (up to a bounded timeout) for it to actually be ready to accept requests.
      *
      * @param requestedName an optional friendly name; a unique name is generated when blank
-     * @return the sandbox details
+     * @return the sandbox details; {@code phase} may still be {@code "Pending"} if it did not
+     *     become ready within the wait budget
      */
     public SandboxInfo create(final String requestedName) {
-        var name = SandboxNaming.resolve(requestedName);
-        var managed = this.operator.reconcile(new PythonSandboxSpec(name, null));
+        return this.ensureReady(SandboxNaming.resolve(requestedName));
+    }
+
+    /**
+     * Creates the sandbox named exactly {@code name} if it doesn't already exist, then waits (up
+     * to the same bounded timeout as {@link #create}) for it to be ready. Unlike {@link #create},
+     * the name is used verbatim rather than resolved through {@link SandboxNaming} -- for a
+     * caller that already owns a deterministic name, such as an attempt-owned sandbox.
+     *
+     * @param name the exact, already-valid sandbox name
+     * @return the sandbox details; {@code phase} may still be {@code "Pending"} if it did not
+     *     become ready within the wait budget
+     */
+    public SandboxInfo ensureReady(final String name) {
+        var spec = new PythonSandboxSpec(name, null);
+        var managed = this.awaitReady(spec, this.operator.reconcile(spec));
         return this.toInfo(managed);
+    }
+
+    private ManagedResource awaitReady(
+            final PythonSandboxSpec spec, final ManagedResource initial) {
+        var managed = initial;
+        var attempts = 0;
+        while (!RUNNING_PHASE.equals(managed.phase()) && attempts < this.readyPollMaxAttempts) {
+            sleep(this.readyPollIntervalMs);
+            managed = this.operator.reconcile(spec);
+            attempts++;
+        }
+        return managed;
+    }
+
+    private static void sleep(final long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -109,6 +159,22 @@ public class PythonSandboxService {
         var bytes = readAllBytes(content.resource());
         this.executionClient.stageFile(sandboxName, resolvedFilename, bytes);
         return new StagedObjectInfo(resolvedFilename, content.contentType(), content.size());
+    }
+
+    /**
+     * Stages a previously-uploaded object under {@code filename}, unless a file of that name is
+     * already in the sandbox's workspace -- cheap enough to call before every code run, and it
+     * restores a file lost to a container restart without re-sending bytes that are still there.
+     *
+     * @param sandboxName the exact sandbox name
+     * @param objectMetadataId the {@code ObjectMetadata} id to stage
+     * @param filename the name to stage it under
+     */
+    public void stageObjectIfAbsent(
+        final String sandboxName, final String objectMetadataId, final String filename) {
+        if (!this.executionClient.isStaged(sandboxName, filename)) {
+            this.stageObject(sandboxName, objectMetadataId, filename);
+        }
     }
 
     private static byte[] readAllBytes(final Resource resource) {

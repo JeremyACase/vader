@@ -63,6 +63,18 @@ class PythonSandboxManifestBuilderTest {
     }
 
     @Test
+    void buildDeployment_mountsTheWorkspaceOnAnEmptyDirSoItSurvivesContainerRestarts() {
+        var podSpec = this.builder.buildDeployment("vader-sandbox-a").getSpec().getTemplate()
+            .getSpec();
+
+        var volume = podSpec.getVolumes().get(0);
+        assertThat(volume.getEmptyDir()).isNotNull();
+        var mount = podSpec.getContainers().get(0).getVolumeMounts().get(0);
+        assertThat(mount.getName()).isEqualTo(volume.getName());
+        assertThat(mount.getMountPath()).isEqualTo("/workspace");
+    }
+
+    @Test
     void buildService_exposesTheExecPortOverClusterIp() {
         Service service = this.builder.buildService("vader-sandbox-a");
 

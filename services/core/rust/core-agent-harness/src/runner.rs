@@ -16,13 +16,21 @@ pub enum HarnessOutcome {
     Stalled,
 }
 
-/// What one completed turn means for the run as a whole: either the model produced its final
-/// answer, or it requested tools and the run should take another turn with their results folded
-/// in.
+/// What one completed turn means for the run as a whole: the model produced its final answer, it
+/// requested tools (or needs a nudge) and the run should take another turn, or its reply was cut
+/// off at the output token cap and is unusable.
 enum TurnOutcome {
     Finished(String),
     Continuing,
+    CutOff,
 }
+
+/// Reported as the failure reason when a turn is cut off at the output token cap. Failing the
+/// attempt outright, rather than nudging, is deliberate: at temperature 0 the same conversation
+/// just runs into the same cap again, and a clear reason lets the reattempt decision (and a human
+/// reading the task) see exactly what went wrong instead of an empty reply or a generic stall.
+const OUTPUT_CAP_FAILURE_REASON: &str = "The model's reply was cut off at the output token cap \
+    before it finished, so its answer or tool call was incomplete and could not be used.";
 
 /// Frames the action-loop protocol for the model: call tools as needed, and a plain-text reply
 /// with no further tool calls is what ends the run. Without this, a model has no way to know that
@@ -35,20 +43,32 @@ enum TurnOutcome {
 /// background (the original request, any attached files, and any prerequisite tasks' results)
 /// that a lone task description wouldn't otherwise include, specifically so the model has what it
 /// needs to avoid needing to ask in the first place.
+///
+/// Says nothing about creating or staging into a sandbox: `core-server` provisions the attempt's
+/// own sandbox and stages every attached file into it on the first `run_python_code` call, so
+/// the model never has a sandbox name to carry between calls (and get wrong).
 const TASK_INSTRUCTIONS: &str = "You are an autonomous agent completing one task from a larger \
     workflow. No human is available to answer follow-up questions during this run -- you must \
     gather anything you need yourself, using your available tools, rather than asking a \
     clarifying question. The next message gives you the task plus background: the original \
     request, any files attached to it, and the results of any prerequisite tasks. If a file is \
-    mentioned, do not assume you already know what it contains: create a Python sandbox, stage \
-    the file into it with stage_object, then inspect it with run_python_code -- reserve \
-    get_object_content for small text content you need to read directly, and never use it just \
-    to hand a file's bytes to run_python_code, since that inlines the raw content into this \
-    conversation instead of the sandbox's workspace. When you have fully completed the task, reply \
+    mentioned, do not assume you already know what it contains: every attached file is already \
+    in your Python working directory, so inspect it with run_python_code, opening it by exactly \
+    the filename you are given. Wait for each tool result before relying on it in a later call. \
+    When you have fully completed the task, reply \
     with your final answer as plain text and do not call any more tools; that reply is what ends \
     this run and is treated as your finished result, not a question. Never end the run by asking \
     a question or requesting clarification -- if something is genuinely still missing after using \
     your tools, state your best attempt and explain what was missing instead.";
+
+/// Sent back to the model when it ends a turn with neither tool calls nor any text. Small local
+/// models occasionally return a completely empty message; treating that as the final answer
+/// would report the task `Succeeded` with no output at all, so the run is nudged to keep going
+/// instead. A model that keeps answering blank is still bounded: every blank turn fingerprints
+/// identically, so the stall detector ends the run as `Stalled` rather than looping forever.
+const EMPTY_REPLY_NUDGE: &str = "Your last reply was empty -- it contained no text and no tool \
+    calls. Continue the task: call a tool if you still need information, or reply with your \
+    final answer as plain text.";
 
 /// Drives the turn loop for exactly one [`crate::assignment::Assignment`]: call the inference
 /// gateway a turn at a time -- invoking any tool calls it requests via [`ToolExecutor`] and
@@ -121,6 +141,11 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
                     break HarnessOutcome::Succeeded { output };
                 }
                 Ok(TurnOutcome::Continuing) => {}
+                Ok(TurnOutcome::CutOff) => {
+                    break HarnessOutcome::Failed {
+                        reason: OUTPUT_CAP_FAILURE_REASON.to_string(),
+                    };
+                }
                 Err(error) => {
                     log::error!("assignment {assignment_id:?}: turn failed: {error}");
                     break HarnessOutcome::Failed {
@@ -157,8 +182,11 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         self.stall_detector.record(fingerprint_of(&turn));
         self.heartbeat(assignment_id).await;
 
-        let outcome = if turn.tool_calls.is_empty() {
-            TurnOutcome::Finished(turn.content.unwrap_or_default())
+        let outcome = if turn.was_cut_off() {
+            log::warn!("assignment {assignment_id:?}: reply was cut off at the output token cap");
+            TurnOutcome::CutOff
+        } else if turn.tool_calls.is_empty() {
+            final_answer_or_nudge(assignment_id, messages, turn.content)
         } else {
             log::debug!(
                 "assignment {assignment_id:?}: model requested {} tool call(s)",
@@ -213,6 +241,23 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             .await;
         if let Err(error) = heartbeat {
             log::warn!("assignment {assignment_id:?}: heartbeat failed (continuing): {error}");
+        }
+    }
+}
+
+/// A turn with no tool calls is the model's final answer -- unless it is blank, in which case the
+/// model is nudged to continue instead (see [`EMPTY_REPLY_NUDGE`]).
+fn final_answer_or_nudge(
+    assignment_id: AssignmentId,
+    messages: &mut Vec<ConversationMessage>,
+    content: Option<String>,
+) -> TurnOutcome {
+    match content.filter(|content| !content.trim().is_empty()) {
+        Some(answer) => TurnOutcome::Finished(answer),
+        None => {
+            log::warn!("assignment {assignment_id:?}: model returned an empty reply, nudging it");
+            messages.push(ConversationMessage::user(EMPTY_REPLY_NUDGE));
+            TurnOutcome::Continuing
         }
     }
 }
@@ -369,6 +414,7 @@ mod tests {
             content: Some(content.to_string()),
             tool_calls: Vec::new(),
             tokens_spent: 10,
+            finish_reason: Some("stop".to_string()),
         }
     }
 
@@ -381,7 +427,52 @@ mod tests {
                 arguments_json: arguments_json.to_string(),
             }],
             tokens_spent: 5,
+            finish_reason: Some("stop".to_string()),
         }
+    }
+
+    #[test]
+    fn model_facing_messages_have_no_runs_of_spaces_from_line_wrapping() {
+        [
+            TASK_INSTRUCTIONS,
+            EMPTY_REPLY_NUDGE,
+            OUTPUT_CAP_FAILURE_REASON,
+        ]
+        .iter()
+        .for_each(|message| assert!(!message.contains("  "), "{message:?}"));
+    }
+
+    fn cut_off_turn() -> InferenceTurn {
+        InferenceTurn {
+            content: Some("<tool_call>{\"name\": \"run_python_code\", \"argu".to_string()),
+            tool_calls: Vec::new(),
+            tokens_spent: 2048,
+            finish_reason: Some("length".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn run_fails_with_a_clear_reason_when_a_reply_is_cut_off_at_the_output_cap() {
+        let control_plane = StubControlPlane::new();
+        let inference_gateway = ScriptedInferenceGateway::succeeding(vec![cut_off_turn()]);
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+        );
+
+        let outcome = runner.run(assignment()).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            HarnessOutcome::Failed {
+                reason: OUTPUT_CAP_FAILURE_REASON.to_string()
+            }
+        );
+        assert_eq!(*runner.control_plane.submitted.borrow(), Some(outcome));
     }
 
     #[tokio::test]
@@ -472,6 +563,62 @@ mod tests {
                 .any(|message| message.content.as_deref()
                     == Some("\"result for get_object_content\""))
         );
+    }
+
+    fn empty_turn() -> InferenceTurn {
+        InferenceTurn {
+            content: Some("  ".to_string()),
+            tool_calls: Vec::new(),
+            tokens_spent: 1,
+            finish_reason: Some("stop".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn run_nudges_past_an_empty_reply_instead_of_succeeding_with_no_output() {
+        let control_plane = StubControlPlane::new();
+        let inference_gateway =
+            ScriptedInferenceGateway::succeeding(vec![empty_turn(), final_turn("the answer")]);
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+        );
+
+        let outcome = runner.run(assignment()).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            HarnessOutcome::Succeeded {
+                output: "the answer".to_string()
+            }
+        );
+        let second_call_messages = &runner.inference_gateway.messages_seen.borrow()[1];
+        let last_message = second_call_messages.last().expect("a message");
+        assert_eq!(last_message.role, ConversationRole::User);
+        assert_eq!(last_message.content.as_deref(), Some(EMPTY_REPLY_NUDGE));
+    }
+
+    #[tokio::test]
+    async fn run_stalls_rather_than_succeeding_when_every_reply_is_empty() {
+        let control_plane = StubControlPlane::new();
+        let inference_gateway =
+            ScriptedInferenceGateway::succeeding((0..3).map(|_| empty_turn()).collect());
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+        );
+
+        let outcome = runner.run(assignment()).await.unwrap();
+
+        assert_eq!(outcome, HarnessOutcome::Stalled);
     }
 
     #[tokio::test]

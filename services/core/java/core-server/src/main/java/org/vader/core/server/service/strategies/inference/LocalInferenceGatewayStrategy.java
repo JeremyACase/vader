@@ -38,7 +38,10 @@ public class LocalInferenceGatewayStrategy implements InterfaceInferenceGatewayS
             return this.requestQueue.submitInferenceTurn(messages);
         } catch (RuntimeException e) {
             logger.warn("Local LLM inference call failed: {}", e.getMessage());
-            throw new OrchestratorUnavailableException("Could not reach the local LLM.", e);
+            // Carries the underlying reason: "unreachable" alone hid that a call can also fail
+            // because the model ran past the request timeout, not because Ollama was down.
+            throw new OrchestratorUnavailableException(
+                "The local LLM call failed: " + e.getMessage(), e);
         }
     }
 }

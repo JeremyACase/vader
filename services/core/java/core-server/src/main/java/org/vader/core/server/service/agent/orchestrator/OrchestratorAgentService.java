@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
+import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
@@ -27,6 +28,8 @@ import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.exceptions.OrchestratorResponseException;
 import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.TaskPlanRefinementRequest;
+import org.vader.core.server.models.TaskPlanRefinementVerdict;
 import org.vader.core.server.models.WorkflowDecomposedEvent;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.TaskAttemptRepository;
@@ -35,6 +38,7 @@ import org.vader.core.server.repository.WorkflowRepository;
 import org.vader.core.server.service.agent.TaskUpdateService;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceTaskPlanRefinementStrategy;
 
 /**
  * Turns an already-persisted client prompt into a persisted problem decomposition.
@@ -45,9 +49,12 @@ import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.In
  *
  * <p>The orchestrator LLM is asked to decompose the prompt; its response is parsed and validated
  * against the {@link TaskPlan} schema (jakarta bean validation) <em>before</em> a workflow is
- * written, so a malformed response leaves no workflow behind. On success the task plan, its task
- * graph and every task are persisted as a single graph hanging off a new {@link WorkflowEntity},
- * with the plan associated back to that workflow.</p>
+ * written, so a malformed response leaves no workflow behind. Once schema-valid, the plan is
+ * checked structurally ({@link TaskPlanStructuralValidator}) and critiqued
+ * ({@link #taskPlanRefinementStrategy}) -- see {@link #decomposeWithRefinement} -- before it is
+ * ever persisted. On success the task plan, its task graph and every task are persisted as a
+ * single graph hanging off a new {@link WorkflowEntity}, with the plan associated back to that
+ * workflow.</p>
  */
 @Service
 public class OrchestratorAgentService {
@@ -93,8 +100,14 @@ public class OrchestratorAgentService {
     @Autowired
     private TaskGraphScheduler taskGraphScheduler;
 
+    @Autowired
+    private InterfaceTaskPlanRefinementStrategy taskPlanRefinementStrategy;
+
     @Value("${vader.agent-harness.max-attempts-per-task:3}")
     private int maxAttemptsPerTask;
+
+    @Value("${vader.orchestrator.max-task-plan-revisions:1}")
+    private int maxTaskPlanRevisions;
 
     /**
      * Decomposes a persisted client prompt into a persisted task plan under a new workflow.
@@ -109,8 +122,7 @@ public class OrchestratorAgentService {
 
         var clientPrompt = this.clientPromptRepository.findById(clientPromptId).orElseThrow();
         var promptDto = this.clientPromptDtoMapper.map(clientPrompt);
-        var rawResponse = this.orchestrator.orchestrate(promptDto);
-        var taskPlanDto = this.parseAndValidate(rawResponse);
+        var taskPlanDto = this.decomposeWithRefinement(promptDto);
 
         var workflow = new WorkflowEntity();
         workflow.setClientPrompt(clientPrompt);
@@ -129,6 +141,73 @@ public class OrchestratorAgentService {
         this.eventPublisher.publishEvent(new WorkflowDecomposedEvent(saved.getId()));
         return saved;
     }
+
+    /**
+     * Decomposes {@code promptDto}, then critiques the result -- structurally first (cheap,
+     * deterministic, no LLM call), and via {@link #taskPlanRefinementStrategy} once that passes.
+     * Dependencies the critique finds missing are added to the plan directly; any other problem
+     * it finds is handled by re-decomposing with the critique fed back as guidance, for up to
+     * {@link #maxTaskPlanRevisions} revisions. If the plan is still flagged once that budget is
+     * spent, the last plan is used anyway (logged, not thrown) rather than leaving the prompt
+     * stuck. This is not a canned fallback: the plan itself was produced successfully by the
+     * LLM for this very request, it just still looks questionable -- unlike an unreachable LLM,
+     * which always fails loudly rather than substituting anything.
+     *
+     * @param promptDto the original client prompt
+     * @return the task plan to persist
+     */
+    private TaskPlan decomposeWithRefinement(final ClientPrompt promptDto) {
+        var taskPlanDto = this.parseAndValidate(this.orchestrator.orchestrate(promptDto, null));
+        var revision = 0;
+        var problem = this.reviewAndPatch(promptDto, taskPlanDto);
+        while (Objects.nonNull(problem) && revision < this.maxTaskPlanRevisions) {
+            revision++;
+            taskPlanDto = this.parseAndValidate(this.orchestrator.orchestrate(promptDto, problem));
+            problem = this.reviewAndPatch(promptDto, taskPlanDto);
+        }
+        if (Objects.nonNull(problem)) {
+            logger.warn(
+                "TaskPlan refinement exhausted ({} revision(s)); proceeding with the last plan "
+                    + "anyway: {}",
+                this.maxTaskPlanRevisions, problem);
+        }
+        return taskPlanDto;
+    }
+
+    /**
+     * Reviews a plan and returns the problem that still needs re-planning, if any -- patching
+     * {@code taskPlanDto} in place with any dependencies the critique found missing along the
+     * way.
+     *
+     * <p>The plan's structural problem, if it has one, comes first: there is no reason to spend
+     * an LLM call finding a problem a deterministic check already found for free. Otherwise the
+     * refinement strategy critiques it; missing dependencies it names are added directly (see
+     * {@link TaskPlanDependencyPatcher} for why re-planning can't be trusted to add them), and
+     * only a problem that needs the plan redone is returned.</p>
+     */
+    private String reviewAndPatch(final ClientPrompt promptDto, final TaskPlan taskPlanDto) {
+        var structural = TaskPlanStructuralValidator.validate(taskPlanDto);
+        String problem;
+        if (!structural.valid()) {
+            problem = structural.problem();
+        } else {
+            var verdict = this.taskPlanRefinementStrategy.critique(
+                new TaskPlanRefinementRequest(promptDto.getText(), taskPlanDto));
+            this.addMissingDependencies(taskPlanDto, verdict);
+            problem = verdict.needsRevision() ? verdict.reasoning() : null;
+        }
+        return problem;
+    }
+
+    private void addMissingDependencies(
+            final TaskPlan taskPlanDto, final TaskPlanRefinementVerdict verdict) {
+        var added = TaskPlanDependencyPatcher.apply(taskPlanDto, verdict.missingDependencies());
+        if (!added.isEmpty()) {
+            logger.info("Added {} dependency(ies) the plan critique found missing: {}",
+                added.size(), added);
+        }
+    }
+
 
     /**
      * Records a {@link TaskUpdateType#CREATED} update for every task in the graph, including
@@ -179,7 +258,7 @@ public class OrchestratorAgentService {
         var request = new ReattemptDecisionRequest(
             task.getTitle(), task.getDescription(), attempt.getAttemptNumber(),
             this.maxAttemptsPerTask, latestFailureReasoning,
-            this.priorUpdateDescriptions(task.getId()));
+            this.priorAttemptUpdateDescriptions(task.getId(), attempt.getId()));
 
         var decision = this.reattemptDecisionStrategy.decide(request);
         this.taskUpdateService.record(task, attempt, TaskUpdateType.UPDATE, decision.reasoning(),
@@ -197,10 +276,26 @@ public class OrchestratorAgentService {
             .orElse("(no failure reasoning recorded)");
     }
 
-    private List<String> priorUpdateDescriptions(final String taskId) {
+    /**
+     * Describes only the updates recorded against <em>earlier</em> attempts of this task. The
+     * attempt being judged is excluded -- its failure verdict already goes in as
+     * {@code latestFailureReasoning} -- and so are task-level updates tied to no attempt at all.
+     * Including the current attempt's own verdict here showed a small model the same failure
+     * twice, which it read as "the same failure repeating" and declined to retry on attempt 1.
+     */
+    private List<String> priorAttemptUpdateDescriptions(
+            final String taskId, final String currentAttemptId) {
         return this.taskUpdateRepository.findByTaskIdOrderByCreatedAtAsc(taskId).stream()
-            .map(update -> update.getType() + ": " + update.getDescription())
+            .filter(update -> isFromAnEarlierAttempt(update, currentAttemptId))
+            .map(update -> "Attempt " + update.getTaskAttempt().getAttemptNumber() + " "
+                + update.getType() + ": " + update.getDescription())
             .toList();
+    }
+
+    private static boolean isFromAnEarlierAttempt(
+            final TaskUpdateEntity update, final String currentAttemptId) {
+        return Objects.nonNull(update.getTaskAttempt())
+            && !currentAttemptId.equals(update.getTaskAttempt().getId());
     }
 
     private TaskPlan parseAndValidate(final String rawResponse) {

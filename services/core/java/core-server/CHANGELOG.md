@@ -3,6 +3,82 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0]
+### Changed
+- Every inference turn now records the model's finish reason in its transcript and relays it to
+  the harness, so a reply cut off at the output token cap can be failed with a clear reason
+  instead of surfacing as an empty or garbled turn. The Helm chart's default local model is now
+  `qwen2.5:7b`: `qwen2.5:3b` proved too unreliable at tool calling for task agents.
+- A turn in which the model called tools now shows those tool calls in its transcript; Ollama
+  reports such turns with empty-string rather than missing content, and they were being
+  recorded as blank responses.
+- The task agent's `run_python_code` now takes only the code to run. Its optional file-map
+  parameter made Ollama silently discard the model's otherwise valid tool calls, leaving every
+  turn empty, and the model also misused it in a way that would have overwritten attached files.
+- Ollama now gets an explicit context window (Helm `vader.orchestrator.local.contextTokens`,
+  default 16384) instead of its 4096 default, which after reserving the output cap left only ~2k
+  tokens of prompt and silently cut longer prompts -- decomposition among them -- from the front.
+
+## [0.25.1]
+### Fixed
+- The re-attempt decision now sees only updates from earlier attempts. It had also been shown the
+  failed attempt's own verdict as a "prior update", which a small model read as the same failure
+  repeating and so declined to retry tasks that had failed only once.
+
+## [0.25.0]
+### Changed
+- Task plans now come out with real dependencies. The planner names the earlier tasks a task
+  depends on by title instead of by array index, which a small model had been leaving empty for
+  every task even in obviously sequential plans. The plan critique, now shown a readable titled
+  task list rather than raw JSON, reports the dependencies it finds missing as structured data,
+  and they are added to the plan directly -- only edges between real tasks that would not create a
+  cycle -- instead of sending the whole plan back to be regenerated with the same omission.
+  Re-planning is now reserved for problems that actually need it.
+
+## [0.24.0]
+### Changed
+- A workflow no longer hangs in `RUNNING` when reviewing a finished attempt can't reach the LLM.
+  The review is retried at a configurable interval
+  (`vader.inbox.task-attempt-review.llm-retry-interval-ms`, default 30s) for as long as the outage
+  lasts, and the workflow reads the new `AWAITING_LLM` status meanwhile -- with one task update
+  recording why -- returning to `RUNNING` on its own once the LLM answers. Only genuine outages
+  (unreachable, or the LLM queue timing out) are retried; a review that fails for any other
+  reason still fails as before rather than retrying a deterministic failure forever.
+
+## [0.23.0]
+### Fixed
+- Every Ollama response is now capped at a Helm-configurable number of tokens
+  (`vader.orchestrator.local.maxOutputTokens`, default 2048), so a small model stuck in a
+  repetition loop stops instead of generating forever and holding Ollama's only slot. A request
+  queued right after a long-running LLM call no longer fails instantly as "stalled": the stall
+  window now starts no earlier than the caller's own wait. A task-plan revision now passes the
+  reviewer's critique to the model as separate instructions rather than appending it to the
+  user's request, which had led the model to copy the critique into its new plan's reasoning.
+  Agents are no longer offered `get_object_content` for attached files, only `run_python_code`,
+  and a failed inference call now reports its underlying cause instead of always claiming the LLM
+  was unreachable.
+
+## [0.22.0]
+### Changed
+- Canned results are now permitted only in a devops test pipeline. A new `vader.mode` value,
+  `TEST`, is the only mode in which `vader.orchestrator.type=static` may run -- the Helm chart
+  refuses to render and core-server refuses to start with it in `DEV` or `PROD` -- and the test
+  configuration now sets it. The `DEV`-mode fallbacks that silently answered with the static
+  "birthday party" plan, a trusting evaluation, a default retry, or a default plan approval
+  whenever Ollama was unreachable are gone: an unreachable LLM now fails loudly in every mode.
+
+## [0.21.0]
+### Changed
+- Each task attempt now owns one Python sandbox that the server manages end to end: it is created
+  lazily on the attempt's first `run_python_code` call, every file attached to the request is
+  staged into it (re-staged if missing) before each run, and it is deleted when the attempt
+  settles. Task agents now get a `run_python_code(code)` that takes no sandbox name, and are told
+  attached files are already in their working directory, instead of having to create, name and
+  stage into a sandbox themselves -- which small models reliably got wrong by inventing sandbox
+  names. The ad-hoc sandbox tools stay available over MCP for ops use, with their code-running tool
+  renamed to `run_python_code_in_sandbox`. Sandbox workspaces now survive container restarts, and a
+  failed sandbox call names its root cause instead of ending in `null`.
+
 ## [0.20.0]
 ### Added
 - Tasks now get a `CREATED` update the moment a workflow is decomposed (author: system), and a

@@ -87,6 +87,12 @@ button:disabled {
   color: #f08080;
 }
 
+/* Paused, not failed: the workflow resumes on its own once the LLM answers again. */
+.status-badge[data-status="AWAITING_LLM"] {
+  background: #4a3a14;
+  color: #f2c94c;
+}
+
 .status-badge[data-status="UPDATE"] {
   background: #1f2f4f;
   color: #7fa8ff;

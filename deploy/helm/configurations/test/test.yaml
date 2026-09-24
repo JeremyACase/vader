@@ -1,5 +1,8 @@
 # Helm values for the "test" Vader deployment configuration.
 vader:
+  # The only mode in which static, canned results are permitted -- required by orchestrator.type
+  # "static" below.
+  mode: TEST
   orchestrator:
     # Static, canned decomposition: no Ollama deployment, no model download, deterministic
     # Helm test. Swap to "local" to exercise the real LLM path. Also drives the inference

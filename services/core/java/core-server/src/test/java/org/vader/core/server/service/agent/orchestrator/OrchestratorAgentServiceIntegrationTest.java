@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,12 +16,14 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.server.exceptions.OrchestratorResponseException;
+import org.vader.core.server.models.TaskPlanRefinementVerdict;
 import org.vader.core.server.repository.ClientPromptRepository;
 import org.vader.core.server.repository.TaskPlanRepository;
 import org.vader.core.server.repository.WorkflowRepository;
 import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceTaskPlanRefinementStrategy;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
@@ -68,6 +71,9 @@ class OrchestratorAgentServiceIntegrationTest {
     @MockitoBean
     private InterfaceReattemptDecisionStrategy reattemptDecisionStrategy;
 
+    @MockitoBean
+    private InterfaceTaskPlanRefinementStrategy taskPlanRefinementStrategy;
+
     @Autowired
     private OrchestratorAgentService orchestratorAgentService;
 
@@ -80,6 +86,14 @@ class OrchestratorAgentServiceIntegrationTest {
     @Autowired
     private ClientPromptRepository clientPromptRepository;
 
+    @BeforeEach
+    void stubRefinementApproval() {
+        // Not the focus of these tests -- always approve so decompose() behaves exactly as it
+        // did before refinement existed, unless a test overrides this stub itself.
+        when(this.taskPlanRefinementStrategy.critique(any()))
+            .thenReturn(new TaskPlanRefinementVerdict(false, "approved"));
+    }
+
     private ClientPromptEntity persistedPrompt(final String text) {
         var prompt = new ClientPromptEntity();
         prompt.setText(text);
@@ -88,7 +102,7 @@ class OrchestratorAgentServiceIntegrationTest {
 
     @Test
     void decompose_persistsTheDecompositionUnderWorkflowAndLinksThePlanBackToIt() {
-        when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(VALID_PLAN);
+        when(this.orchestrator.orchestrate(any(ClientPrompt.class), any())).thenReturn(VALID_PLAN);
 
         var saved = this.orchestratorAgentService.decompose(
             persistedPrompt("Help me ship onboarding").getId());
@@ -122,7 +136,7 @@ class OrchestratorAgentServiceIntegrationTest {
 
     @Test
     void decompose_whenResponseFailsSchema_throwsAndPersistsNoWorkflow() {
-        when(this.orchestrator.orchestrate(any(ClientPrompt.class)))
+        when(this.orchestrator.orchestrate(any(ClientPrompt.class), any()))
             .thenReturn("{\"objective\":\"no task graph here\"}");
 
         var promptId = persistedPrompt("whatever").getId();

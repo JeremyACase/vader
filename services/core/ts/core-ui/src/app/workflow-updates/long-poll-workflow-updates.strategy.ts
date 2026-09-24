@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, timer } from 'rxjs';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { EMPTY, Observable, timer } from 'rxjs';
+import { catchError, map, shareReplay, switchMap } from 'rxjs/operators';
 import { ClientPrompt, Workflow } from '../client-prompt.model';
 import { DaoPage } from '../dao-page.model';
 import { TaskAttempt, TaskAttemptTranscript } from '../task-attempt.model';
@@ -130,9 +130,18 @@ export class LongPollWorkflowUpdatesStrategy implements InterfaceWorkflowUpdates
     return existing;
   }
 
+  /**
+   * A failed tick must not kill the poll: this observable is cached in {@link #cached} and
+   * reused for the rest of the app's lifetime, so an unhandled error here would permanently
+   * freeze that resource's stream (`shareReplay` replays a terminal error to every future
+   * subscriber too) until a full page reload recreated this service from scratch -- exactly the
+   * "only updates after a refresh" symptom this fixes. Swallowing a failed tick (via `EMPTY`,
+   * which completes without emitting) just leaves whatever value is already buffered in place
+   * until the next tick succeeds, rather than ending the stream.
+   */
   private poll<T>(request: () => Observable<T>): Observable<T> {
     return timer(0, POLL_INTERVAL_MS).pipe(
-      switchMap(request),
+      switchMap(() => request().pipe(catchError(() => EMPTY))),
       shareReplay({ bufferSize: 1, refCount: true })
     );
   }

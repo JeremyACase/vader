@@ -13,6 +13,11 @@ logging:
   vader: INFO
 
 vader:
+  # Allowable values are: DEV, PROD, TEST. Canned results are permitted ONLY in TEST: the chart
+  # refuses to render, and core-server refuses to start, with orchestrator.type "static" in any
+  # other mode. In DEV and PROD an unreachable LLM always fails loudly -- nothing ever substitutes
+  # a canned result for a real request. This chart's out-of-the-box default is DEV; a real
+  # deployment should set PROD, and only the devops test pipeline (configurations/test) sets TEST.
   mode: DEV
   swagger:
     # When true, core-server serves the OpenAPI spec at /v3/api-docs and Swagger UI at
@@ -36,22 +41,45 @@ vader:
   orchestrator:
     # Allowable values are:
     #   local  - route prompts through an in-cluster Ollama instance
-    #   static - return a fixed, canned decomposition (no LLM; used for deterministic tests)
+    #   static - return a fixed, canned decomposition (no LLM). Requires mode TEST: for the
+    #            devops test pipeline only, never a dev or prod deployment.
     # (Remote/cloud-hosted LLM backends can be added here later, following the same pattern.)
     type: local
+    # How many times a task plan may be sent back for revision (structural problem, or the
+    # refinement critique flags it) before the last plan is used anyway rather than blocking the
+    # prompt indefinitely. 0 disables refinement's re-decomposition (the plan is still checked and
+    # logged, just never revised).
+    maxTaskPlanRevisions: 1
     local:
       # The Ollama model to download and run. Only used when orchestrator.type is "local".
       # Must support tool-calling and structured output for the orchestrator to work: qwen2.5
       # does both. Reasoning models (e.g. deepseek-r1) and sub-2B models tend to return
-      # malformed plans and rarely call tools.
-      model: qwen2.5:3b
-      # When the in-cluster LLM is unreachable, fall back to the canned static task plan rather
-      # than returning a 503. Keeps `helm test` / CI green without an Ollama deployment.
-      fallbackToStatic: true
+      # malformed plans and rarely call tools. qwen2.5:3b also runs, but its tool calls are
+      # unreliable enough that task agents regularly fail on them; the 7b model needs roughly
+      # 5-6 GB of memory on the node running Ollama.
+      model: qwen2.5:7b
       # Bounds every individual Ollama HTTP call. Raise this if your hardware is slow enough that
       # legitimate (if verbose) generations routinely exceed it -- but keep it well under
       # agentHarness.deadlineSeconds, since a call this long already eats most of a task's budget.
       requestTimeoutSeconds: 300
+      # Hard cap on how many tokens the model may generate in any single response (Ollama's
+      # num_predict), applied to every call: decomposition, agent inference turns, evaluation,
+      # reattempt decisions, refinement, synthesis. Without it a small model at temperature 0 can
+      # fall into a repetition loop and generate forever -- past requestTimeoutSeconds, and even
+      # after core-server gives up, holding Ollama's only slot so every later call queues behind
+      # it. A response that genuinely needs more than this is cut off and fails loudly (e.g. an
+      # unparseable plan) rather than hanging. Tune per model: larger or more verbose models may
+      # need more.
+      maxOutputTokens: 2048
+      # Ollama's context window (num_ctx) for every call, prompt and reply together. Ollama
+      # reserves maxOutputTokens of it for the reply, so the prompt budget is contextTokens minus
+      # maxOutputTokens -- and a prompt over that budget is silently cut from the front, dropping
+      # the system instructions first. Ollama's own default (4096) left only ~2k tokens of prompt,
+      # which task-plan decomposition and any agent turn carrying a tool result easily exceed.
+      # Must be larger than maxOutputTokens (the chart refuses to render otherwise). Costs KV-cache
+      # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
+      # on 32k, so there is no benefit going above 32768.
+      contextTokens: 16384
   storage:
     # Allowable values are:
     #   database - store uploaded file contents as BLOBs in the relational database (default;
@@ -97,6 +125,10 @@ vader:
       # through the single-worker requestQueue below -- raising this would only mean more callers
       # queued up waiting for that same worker, not more actual parallelism.
       maxConcurrency: 1
+      # When a review can't reach the LLM (unreachable, or the LLM queue timed out), it is retried
+      # at this interval for as long as the outage lasts, and its workflow reads AWAITING_LLM
+      # meanwhile -- never a fabricated verdict, and never a silent hang in RUNNING.
+      llmRetryIntervalMs: 30000
   llm:
     requestQueue:
       # How often LlmRequestInbox polls for pending LLM requests. Much shorter than the other
@@ -172,6 +204,12 @@ vader:
         # Ceiling on how long a single run_python_code call may run inside the sandbox, in
         # seconds -- enforced by the sandbox server itself regardless of what a caller requests.
         execTimeoutSeconds: 30
+        # create_sandbox waits for the pod to actually become ready before returning, retrying up
+        # to this many times (readyPollMaxAttempts * readyPollIntervalMs = the total wait budget)
+        # -- otherwise a caller that immediately stages a file or runs code right after
+        # create_sandbox returns can race the pod's own startup and get a connection error.
+        readyPollMaxAttempts: 30
+        readyPollIntervalMs: 500
         resources:
           requests:
             cpu: 100m

@@ -61,6 +61,25 @@ describe('LongPollWorkflowUpdatesStrategy', () => {
     sub.unsubscribe();
   }));
 
+  it('keeps polling on the next tick after a failed request, instead of dying permanently', fakeAsync(() => {
+    const matchWorkflowRequests = () =>
+      httpMock.match((r) => r.url === '/vader/core-server/data/workflow/query/params');
+
+    let lastValue: DaoPage<Workflow> | undefined;
+    const sub = strategy.recentWorkflows(0, 10).subscribe((page) => (lastValue = page));
+    tick(0);
+    matchWorkflowRequests()[0].flush('boom', { status: 500, statusText: 'Server Error' });
+    expect(lastValue).toBeUndefined();
+
+    tick(POLL_INTERVAL_MS);
+    const secondPoll = matchWorkflowRequests();
+    expect(secondPoll.length).toBe(1);
+    secondPoll[0].flush(workflowPage([]));
+    expect(lastValue).toEqual(workflowPage([]));
+
+    sub.unsubscribe();
+  }));
+
   it('queries a different page independently of page 0', fakeAsync(() => {
     const subA = strategy.recentWorkflows(0, 10).subscribe();
     const subB = strategy.recentWorkflows(1, 10).subscribe();

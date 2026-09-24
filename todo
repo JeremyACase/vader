@@ -1,6 +1,12 @@
-- Add an "Evaluator" Agent that evaluates a task plan prior to divvying off work
 - Ensure tasks can be decomposed
 - Show it all in the UI: DAGs, flows, etc.
 - allow ollama operator to be able to create new, specialized LLM's
 - compaction-as-a-service
 - evaluation testing as a part of the devops pipeline
+- clean up the tunable knobs
+- Clean up the code; especially final classes in the service folder
+- Undo the event publishing stuff that the Application is doing; or add a strategy to make it publish either locally or across replicas
+
+Code Quality
+- Data classes and records; I dont want too many arguments for methods
+- Rust code is very C++ like, with enums and all kinds of stuff in the same file. Is this idiomatic? 

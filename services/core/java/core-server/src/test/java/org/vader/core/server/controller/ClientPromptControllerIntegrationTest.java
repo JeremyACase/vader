@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -18,11 +19,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.core.server.models.TaskPlanRefinementVerdict;
 import org.vader.core.server.repository.ClientPromptOutboxMessageRepository;
 import org.vader.core.server.repository.WorkflowRepository;
 import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceTaskPlanRefinementStrategy;
 import org.vader.core.server.service.io.ClientPromptInbox;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
@@ -60,6 +63,9 @@ class ClientPromptControllerIntegrationTest {
     @MockitoBean
     private InterfaceReattemptDecisionStrategy reattemptDecisionStrategy;
 
+    @MockitoBean
+    private InterfaceTaskPlanRefinementStrategy taskPlanRefinementStrategy;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -75,6 +81,14 @@ class ClientPromptControllerIntegrationTest {
     @Autowired
     private WorkflowRepository workflowRepository;
 
+    @BeforeEach
+    void stubRefinementApproval() {
+        // Not the focus of these tests -- always approve so decomposition behaves exactly as it
+        // did before refinement existed.
+        when(this.taskPlanRefinementStrategy.critique(any()))
+            .thenReturn(new TaskPlanRefinementVerdict(false, "approved"));
+    }
+
     private String postPrompt(final String text) throws Exception {
         var body = this.mockMvc.perform(multipart("/vader/core-server/client-prompt")
                 .param("text", text))
@@ -88,7 +102,7 @@ class ClientPromptControllerIntegrationTest {
 
     @Test
     void postClientPrompt_enqueuesPendingMessageThatInboxDecomposes() throws Exception {
-        when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(VALID_PLAN);
+        when(this.orchestrator.orchestrate(any(ClientPrompt.class), any())).thenReturn(VALID_PLAN);
 
         var promptId = postPrompt("Help me ship onboarding");
 
@@ -113,7 +127,7 @@ class ClientPromptControllerIntegrationTest {
     @Test
     void postClientPrompt_whenLlmResponseFailsSchema_marksTheMessageFailedAndBuildsNoWorkflow()
         throws Exception {
-        when(this.orchestrator.orchestrate(any(ClientPrompt.class)))
+        when(this.orchestrator.orchestrate(any(ClientPrompt.class), any()))
             .thenReturn("{\"objective\":\"no task graph\"}");
 
         var promptId = postPrompt("whatever");

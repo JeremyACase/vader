@@ -7,6 +7,8 @@ import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +39,7 @@ import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.repository.TaskAttemptToolCallRepository;
 import org.vader.core.server.repository.TaskAttemptTranscriptRepository;
 import org.vader.core.server.service.agent.TaskUpdateService;
+import org.vader.core.server.service.operators.pythonsandbox.TaskAttemptSandboxService;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
 
@@ -85,6 +88,11 @@ public class TaskAgentService {
 
     @Autowired
     private TaskUpdateService taskUpdateService;
+
+    // Absent when the Python sandbox operator is disabled; attached files are then described as
+    // readable via get_object_content only, rather than as already in a working directory.
+    @Autowired(required = false)
+    private TaskAttemptSandboxService taskAttemptSandboxService;
 
     @Value("${vader.agent-harness.max-turns:20}")
     private int maxTurns;
@@ -183,7 +191,7 @@ public class TaskAgentService {
             task.getTaskGraph().getTaskPlan().getWorkflow().getClientPrompt();
         var sections = Stream.of(
                 requestSection(clientPrompt),
-                attachedFilesSection(clientPrompt),
+                this.attachedFilesSection(clientPrompt),
                 this.dependencySection(task))
             .filter(section -> section != null)
             .toList();
@@ -194,20 +202,41 @@ public class TaskAgentService {
         return "Original request from the user:\n" + clientPrompt.getText();
     }
 
-    private static String attachedFilesSection(final ClientPromptEntity clientPrompt) {
+    /**
+     * Lists the request's attached files. With the sandbox enabled, each is named exactly as
+     * {@link TaskAttemptSandboxService} stages it -- the model is told a file is already in its
+     * working directory under that name, never asked to stage anything itself.
+     */
+    private String attachedFilesSection(final ClientPromptEntity clientPrompt) {
         String result = null;
         if (!clientPrompt.getFiles().isEmpty()) {
-            var lines = clientPrompt.getFiles().stream()
-                .map(file -> "- \"" + file.getOriginalFilename() + "\" (id: " + file.getId()
-                    + ", type: " + file.getContentType()
-                    + ") -- to analyze it with code (spreadsheets, images, or any other binary "
-                    + "format), use stage_object with this id to load it directly into a Python "
-                    + "sandbox's working directory; only use get_object_content if you need to "
-                    + "read small text content directly in this conversation.")
-                .toList();
+            var lines = this.taskAttemptSandboxService == null
+                ? objectStorageFileLines(clientPrompt)
+                : workspaceFileLines(clientPrompt);
             result = "Files attached to the original request:\n" + String.join("\n", lines);
         }
         return result;
+    }
+
+    /**
+     * Deliberately offers exactly one way in -- {@code run_python_code} -- even for text files: a
+     * second option ("or read it with get_object_content") was taken by a small model for a
+     * spreadsheet on its very first turn, costing a refused call and a wasted turn.
+     */
+    private static List<String> workspaceFileLines(final ClientPromptEntity clientPrompt) {
+        return TaskAttemptSandboxService.workspaceFilesFor(clientPrompt).stream()
+            .map(file -> "- \"" + file.filename() + "\" (type: " + file.contentType()
+                + ") -- already in your Python working directory; open it by exactly this "
+                + "filename with run_python_code.")
+            .toList();
+    }
+
+    private static List<String> objectStorageFileLines(final ClientPromptEntity clientPrompt) {
+        return clientPrompt.getFiles().stream()
+            .map(file -> "- \"" + file.getOriginalFilename() + "\" (id: " + file.getId()
+                + ", type: " + file.getContentType() + ") -- read small text content directly "
+                + "with get_object_content and this id.")
+            .toList();
     }
 
     private String dependencySection(final TaskEntity task) {
@@ -320,7 +349,7 @@ public class TaskAgentService {
         var scopedArgumentsJson = this.scopedToOwnTask(toolName, argumentsJson, attempt);
         var toolCallback = this.toolCallbackRegistry.findByName(toolName);
         var resultJson = toolCallback.isPresent()
-            ? this.invoke(toolCallback.get(), scopedArgumentsJson)
+            ? this.invoke(toolCallback.get(), scopedArgumentsJson, attempt.getId())
             : this.toJson(Map.of("error", unknownToolMessage(toolName)));
         this.recordToolCall(attempt, toolCallId, toolName, scopedArgumentsJson, resultJson);
 
@@ -369,10 +398,13 @@ public class TaskAgentService {
         return this.toJson(scoped);
     }
 
-    private String invoke(final ToolCallback toolCallback, final String argumentsJson) {
+    private String invoke(
+            final ToolCallback toolCallback, final String argumentsJson,
+            final String taskAttemptId) {
         String resultJson;
         try {
-            resultJson = this.toolCallInvocationBoundary.invoke(toolCallback, argumentsJson);
+            resultJson = this.toolCallInvocationBoundary.invoke(
+                toolCallback, argumentsJson, TaskAttemptToolContext.of(taskAttemptId));
         } catch (RuntimeException e) {
             resultJson = this.toJson(Map.of("error", "Tool call failed: " + e.getMessage()));
         }
@@ -419,11 +451,23 @@ public class TaskAgentService {
         transcript.setMessageCount(messages.size());
         transcript.setResponse(this.responseTextFor(turn));
         transcript.setTokensSpent(turn.tokensSpent());
+        transcript.setFinishReason(turn.finishReason());
         this.transcriptRepository.save(transcript);
     }
 
+    /**
+     * What the transcript shows as the model's reply: its text, its tool calls, or both. Tool
+     * calls are recorded whenever there are any, not only when {@code content} is {@code null} --
+     * Ollama returns an empty string, not {@code null}, as the content of a tool-call turn, and
+     * testing for {@code null} alone recorded every such turn as a blank response.
+     */
     private String responseTextFor(final InferenceTurn turn) {
-        return turn.content() == null ? this.toJson(turn.toolCalls()) : turn.content();
+        var text = Objects.requireNonNullElse(turn.content(), "").strip();
+        var toolCalls = Objects.requireNonNullElse(turn.toolCalls(), List.of());
+        var toolCallsJson = toolCalls.isEmpty() ? "" : this.toJson(toolCalls);
+        return Stream.of(text, toolCallsJson)
+            .filter(part -> !part.isEmpty())
+            .collect(Collectors.joining("\n\n"));
     }
 
     private String toJson(final Object value) {

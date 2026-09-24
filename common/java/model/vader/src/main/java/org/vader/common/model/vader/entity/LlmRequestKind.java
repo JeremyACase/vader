@@ -23,4 +23,10 @@ public enum LlmRequestKind {
      * {@code ReattemptDecisionRequest}.
      */
     REATTEMPT_DECISION,
+
+    /**
+     * One critique of a freshly-decomposed task plan, before it is ever persisted:
+     * {@code requestJson} is a JSON {@code TaskPlanRefinementRequest}.
+     */
+    TASK_PLAN_REFINEMENT,
 }

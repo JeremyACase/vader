@@ -183,6 +183,7 @@ impl InferenceGateway for CoreServerAdapter {
                 .map(from_tool_call_body)
                 .collect(),
             tokens_spent: parsed.tokens_spent,
+            finish_reason: parsed.finish_reason,
         })
     }
 }

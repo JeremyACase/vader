@@ -17,10 +17,12 @@ import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.core.server.models.ConversationMessage;
+import org.vader.core.server.models.DecompositionRequest;
 import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.InferenceTurn;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.TaskPlanRefinementRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 
 /**
@@ -116,11 +118,11 @@ public class LlmRequestQueue {
     /**
      * Submits one prompt decomposition and blocks until it completes.
      *
-     * @param clientPromptText the original client-submitted request text
+     * @param request the original request text, verbatim, plus any revision guidance
      * @return the model's plan, or an unreachable outcome the caller decides how to handle
      */
-    public DecompositionOutcome submitDecomposition(final String clientPromptText) {
-        var responseJson = this.submit(LlmRequestKind.DECOMPOSITION, clientPromptText);
+    public DecompositionOutcome submitDecomposition(final DecompositionRequest request) {
+        var responseJson = this.submit(LlmRequestKind.DECOMPOSITION, this.toJson(request));
         return this.fromJson(responseJson, DecompositionOutcome.class);
     }
 
@@ -145,6 +147,18 @@ public class LlmRequestQueue {
             final ReattemptDecisionRequest request) {
         var responseJson = this.submit(LlmRequestKind.REATTEMPT_DECISION, this.toJson(request));
         return this.fromJson(responseJson, ReattemptDecisionOutcome.class);
+    }
+
+    /**
+     * Submits one task-plan refinement critique and blocks until it completes.
+     *
+     * @param request the plan (and the original request it should serve) to critique
+     * @return the critique, or an unreachable outcome the caller decides how to handle
+     */
+    public TaskPlanRefinementOutcome submitTaskPlanRefinement(
+            final TaskPlanRefinementRequest request) {
+        var responseJson = this.submit(LlmRequestKind.TASK_PLAN_REFINEMENT, this.toJson(request));
+        return this.fromJson(responseJson, TaskPlanRefinementOutcome.class);
     }
 
     private String submit(final LlmRequestKind kind, final String requestJson) {
@@ -185,15 +199,23 @@ public class LlmRequestQueue {
     }
 
     /**
-     * Whether the queue has gone quiet for too long -- nothing claimed anywhere, for
-     * {@code stallTimeoutSeconds}, since either the last known activity or (if nothing has ever
-     * been claimed at all) since this particular wait began.
+     * Whether the queue has gone quiet for too long -- nothing claimed anywhere for
+     * {@code stallTimeoutSeconds}, counted from the later of the last claim and when this
+     * particular wait began.
+     *
+     * <p>Never from a claim older than the wait itself: the queue's last claim is routinely
+     * minutes old for a perfectly healthy reason -- one long request (a slow generation) holding
+     * the single worker the whole time. A caller that enqueues right as that request finishes
+     * must get the full stall window to be claimed, not be judged stalled on its very first poll
+     * because the previous claim happened before it ever arrived.</p>
      *
      * <p>Only meaningful while the awaited message is still {@code PENDING}; see the class-level
      * Javadoc for why a {@code CLAIMED} message must never be judged by this check.</p>
      */
     private boolean isStalled(final Instant waitStarted, final Instant now) {
-        var lastActivity = this.fetchLastClaimedAt().orElse(waitStarted);
+        var lastActivity = this.fetchLastClaimedAt()
+            .filter(lastClaimedAt -> lastClaimedAt.isAfter(waitStarted))
+            .orElse(waitStarted);
         return now.isAfter(lastActivity.plusSeconds(this.stallTimeoutSeconds));
     }
 
@@ -212,7 +234,7 @@ public class LlmRequestQueue {
             final Instant waitStarted) {
         String result;
         if (isStillOpen(message)) {
-            throw new LlmRequestQueueException(
+            throw new LlmRequestTimeoutException(
                 "Timed out waiting for LLM request " + messageId + " to be processed: "
                     + this.timeoutReasonFor(message, waitStarted));
         } else if (message.getStatus() == OutboxMessageStatus.FAILED) {

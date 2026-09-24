@@ -8,6 +8,8 @@ import { TaskUpdate } from '../task-update.model';
 import { AttemptRowComponent } from './attempt-row.component';
 
 class FakeActiveWorkflowsService {
+  readonly transcriptsSubject = new Subject<TaskAttemptTranscript[]>();
+
   recentWorkflows(): Observable<DaoPage<Workflow>> {
     return new Subject<DaoPage<Workflow>>().asObservable();
   }
@@ -21,7 +23,7 @@ class FakeActiveWorkflowsService {
   }
 
   transcripts(): Observable<TaskAttemptTranscript[]> {
-    return new Subject<TaskAttemptTranscript[]>().asObservable();
+    return this.transcriptsSubject.asObservable();
   }
 
   taskUpdates(): Observable<TaskUpdate[]> {
@@ -45,15 +47,59 @@ function attempt(overrides: Partial<TaskAttempt>): TaskAttempt {
   };
 }
 
+function transcript(overrides: Partial<TaskAttemptTranscript>): TaskAttemptTranscript {
+  return {
+    id: 'turn-1',
+    taskAttemptId: 'attempt-1',
+    turnIndex: 0,
+    prompt: '[]',
+    response: '',
+    tokensSpent: 10,
+    ...overrides
+  };
+}
+
 describe('AttemptRowComponent', () => {
   let fixture: ComponentFixture<AttemptRowComponent>;
+  let service: FakeActiveWorkflowsService;
 
   beforeEach(() => {
+    service = new FakeActiveWorkflowsService();
     TestBed.configureTestingModule({
       imports: [AttemptRowComponent],
-      providers: [{ provide: ActiveWorkflowsService, useClass: FakeActiveWorkflowsService }]
+      providers: [{ provide: ActiveWorkflowsService, useValue: service }]
     });
     fixture = TestBed.createComponent(AttemptRowComponent);
+  });
+
+  function renderTurns(turns: TaskAttemptTranscript[]): HTMLElement {
+    fixture.componentRef.setInput('attempt', attempt({}));
+    fixture.detectChanges();
+    service.transcriptsSubject.next(turns);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('flags a turn cut off at the output token cap', () => {
+    const element = renderTurns([transcript({ finishReason: 'length' })]);
+
+    const finish = element.querySelector('.turn-finish');
+    expect(finish?.textContent).toContain('cut off at the output token cap');
+    expect(finish?.classList).toContain('cut-off');
+  });
+
+  it('shows an ordinary finish reason without flagging it', () => {
+    const element = renderTurns([transcript({ finishReason: 'stop' })]);
+
+    const finish = element.querySelector('.turn-finish');
+    expect(finish?.textContent).toContain('finished: stop');
+    expect(finish?.classList).not.toContain('cut-off');
+  });
+
+  it('omits the finish reason for turns recorded without one', () => {
+    const element = renderTurns([transcript({ finishReason: null })]);
+
+    expect(element.querySelector('.turn-finish')).toBeNull();
   });
 
   it('shows the result when the attempt reported one', () => {

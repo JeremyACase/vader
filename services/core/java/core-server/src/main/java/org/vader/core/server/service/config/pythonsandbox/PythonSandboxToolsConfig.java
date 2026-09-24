@@ -35,16 +35,17 @@ public class PythonSandboxToolsConfig {
     }
 
     /**
-     * Sandbox code execution is offered only to a per-task {@code core-agent-harness} run --
-     * never to a higher-level orchestration agent.
+     * Deliberately offered to no internal agent: these ad-hoc tools (create, name, stage into,
+     * run in, delete an arbitrary sandbox) remain for ops/MCP use only. A task agent gets
+     * {@code TaskAttemptSandboxTools} instead, which needs no sandbox name at all -- having a
+     * model carry a server-generated name between calls is exactly what it kept getting wrong.
      *
      * @param pythonSandboxToolCallbacks this config's own provider bean
-     * @return the audience tag
+     * @return the audience tag, with no audiences
      */
     @Bean
     public ToolAudienceTag pythonSandboxToolAudience(
         final ToolCallbackProvider pythonSandboxToolCallbacks) {
-        return new ToolAudienceTag(
-            pythonSandboxToolCallbacks, Set.of(AgentToolAudience.TASK_EXECUTION));
+        return new ToolAudienceTag(pythonSandboxToolCallbacks, Set.<AgentToolAudience>of());
     }
 }

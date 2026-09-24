@@ -13,8 +13,10 @@ public interface InterfaceLlmOrchestrationStrategy {
     /**
      * Asks the backing LLM to decompose a client prompt into a task plan.
      *
-     * @param clientPrompt the prompt to decompose
+     * @param clientPrompt the prompt to decompose, whose text is passed to the model verbatim
+     * @param revisionGuidance why the previous plan for this same prompt was rejected, for the
+     *     model to correct; {@code null} on the first attempt
      * @return the LLM's raw response, expected to be a JSON task plan
      */
-    String orchestrate(ClientPrompt clientPrompt);
+    String orchestrate(ClientPrompt clientPrompt, String revisionGuidance);
 }

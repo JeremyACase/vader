@@ -30,6 +30,7 @@ public class TaskAttemptTranscriptDtoMapper
             to.setMessageCount(from.getMessageCount());
             to.setResponse(from.getResponse());
             to.setTokensSpent(from.getTokensSpent());
+            to.setFinishReason(from.getFinishReason());
         }
         return to;
     }

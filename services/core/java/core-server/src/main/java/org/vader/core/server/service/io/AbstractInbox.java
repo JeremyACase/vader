@@ -104,13 +104,33 @@ public abstract class AbstractInbox<M extends AbstractOutboxMessageEntity>
         }
     }
 
+    /**
+     * Settles a message whose {@link #handle} threw. By default, marks it {@code FAILED}; an inbox
+     * whose failures can be transient overrides this to put the message back on its queue
+     * instead.
+     *
+     * @param message the claimed message
+     * @param failure what {@link #handle} threw
+     */
+    protected void onHandleFailure(final M message, final RuntimeException failure) {
+        this.processor.markFailed(this.repository(), message.getId(), failure.toString());
+    }
+
+    /**
+     * Returns the processor that runs this inbox's claim and mark transactions.
+     *
+     * @return the queue message processor
+     */
+    protected QueueMessageProcessor processor() {
+        return this.processor;
+    }
+
     private void processClaimed(final M message) {
-        var messageId = message.getId();
         try {
             this.handle(message);
-            this.processor.markProcessed(this.repository(), messageId);
+            this.processor.markProcessed(this.repository(), message.getId());
         } catch (RuntimeException e) {
-            this.processor.markFailed(this.repository(), messageId, e.toString());
+            this.onHandleFailure(message, e);
         }
     }
 }

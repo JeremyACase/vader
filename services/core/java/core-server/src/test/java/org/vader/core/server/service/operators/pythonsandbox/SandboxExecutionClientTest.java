@@ -6,12 +6,15 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.net.ConnectException;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -156,5 +159,49 @@ class SandboxExecutionClientTest {
             .hasMessageContaining("not a valid sandbox name")
             .satisfies(e -> assertThat(e.getMessage().length())
                 .isLessThan(hugeInvalidName.length()));
+    }
+
+    @Test
+    void isStaged_whenTheSandboxAnswers200_isTrue() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andExpect(method(HttpMethod.HEAD))
+            .andRespond(withSuccess());
+
+        assertThat(this.client.isStaged("vader-sandbox-a", "report.xlsx")).isTrue();
+        this.mockServer.verify();
+    }
+
+    @Test
+    void isStaged_whenTheSandboxAnswers404_isFalseRatherThanThrowing() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andExpect(method(HttpMethod.HEAD))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThat(this.client.isStaged("vader-sandbox-a", "report.xlsx")).isFalse();
+    }
+
+    @Test
+    void stageFile_whenTheHostCannotBeReached_namesTheRootCauseInsteadOfNull() {
+        // The JDK HTTP client reports an unresolvable host (a sandbox that doesn't exist) as a
+        // ConnectException with no message at all -- previously rendered as a bare "null".
+        ClientHttpRequestFactory factory = (uri, httpMethod) -> {
+            throw new ConnectException();
+        };
+        var client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(
+            client, "sandboxExecutionRestClient",
+            RestClient.builder().requestFactory(factory).build());
+        ReflectionTestUtils.setField(client, "namespace", "vader");
+
+        assertThatThrownBy(() -> client.stageFile(
+            "new-sandbox-127", "EP_Tactics.xlsx", "raw bytes".getBytes()))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("new-sandbox-127")
+            .hasMessageContaining("ConnectException")
+            .hasMessageNotContaining(": null");
     }
 }

@@ -6,10 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.stream.IntStream;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.vader.common.model.vader.dto.ClientPrompt;
@@ -18,6 +16,8 @@ import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.exceptions.OrchestratorResponseException;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
+import org.vader.core.server.models.DecompositionRequest;
+import org.vader.core.server.service.agent.orchestrator.TaskTitleMatcher;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 
@@ -39,26 +39,24 @@ import org.vader.core.server.service.llm.LlmRequestQueue;
  * {@link TaskPlan} from it and re-serializes to JSON to satisfy the
  * {@link InterfaceLlmOrchestrationStrategy} contract.</p>
  *
- * <p>{@link LlmTaskPlan.LlmTask#dependsOnIndices} lets the model declare real dependencies
- * between tasks -- indices into its own {@code tasks} array, constrained to reference only
- * earlier positions (validated by {@link #validateDependencies}, making the resulting graph
- * acyclic by construction). Each task is assigned a fresh id here so those indices can be
- * resolved into {@link Task#getDependsOnTaskIds()} before the plan ever reaches
+ * <p>{@link LlmTaskPlan.LlmTask#dependsOn} lets the model declare real dependencies between
+ * tasks -- the titles of earlier tasks in its own {@code tasks} array, matched by
+ * {@link TaskTitleMatcher} and constrained to reference only earlier positions (making the
+ * resulting graph acyclic by construction). Each task is assigned a fresh id here so those titles
+ * can be resolved into {@link Task#getDependsOnTaskIds()} before the plan ever reaches
  * {@code TaskGraphDtoToEntityMapper}, which already knows how to wire arbitrary DTO-id-based
  * dependency edges into the persisted {@code TaskEntity} graph -- this strategy's only job is to
  * hand it real edges instead of none.</p>
  *
- * <p>When the LLM is unreachable and {@code vader.orchestrator.local.fallback-to-static} is
- * {@code true} (the default), this returns the canned {@link StaticTaskPlan} instead of failing,
- * so {@code helm test} and CI pass with no Ollama in the cluster. A reachable LLM that returns
- * an unusable response still fails with {@link OrchestratorResponseException}.</p>
+ * <p>An unreachable LLM always fails loudly with {@link OrchestratorUnavailableException}, in
+ * every {@code vader.mode}: a user must never be handed a canned plan for their actual request.
+ * The canned plan exists only behind {@link StaticLlmOrchestrationStrategy}, which is itself
+ * permitted only in {@code vader.mode=TEST} (see {@code StaticStrategyModeGuard}). A reachable LLM
+ * that returns an unusable response fails with {@link OrchestratorResponseException}.</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "vader.orchestrator", name = "type", havingValue = "local")
 public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationStrategy {
-
-    private static final Logger logger =
-        LoggerFactory.getLogger(LocalLlmOrchestrationStrategy.class);
 
     @Autowired
     private LlmRequestQueue requestQueue;
@@ -66,31 +64,23 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${vader.orchestrator.local.fallback-to-static:true}")
-    private boolean fallbackToStatic;
-
     @Override
-    public String orchestrate(final ClientPrompt clientPrompt) {
+    public String orchestrate(final ClientPrompt clientPrompt, final String revisionGuidance) {
         try {
-            var outcome = this.requestQueue.submitDecomposition(clientPrompt.getText());
-            return outcome.isUnreachable()
-                ? this.handleUnreachable(outcome.unreachableReason())
-                : this.toTaskPlanJson(outcome.plan());
+            var outcome = this.requestQueue.submitDecomposition(
+                new DecompositionRequest(clientPrompt.getText(), revisionGuidance));
+            if (outcome.isUnreachable()) {
+                throw new OrchestratorUnavailableException(
+                    "Could not reach the local LLM.",
+                    new IllegalStateException(outcome.unreachableReason()));
+            }
+            return this.toTaskPlanJson(outcome.plan());
         } catch (OrchestratorResponseException | OrchestratorUnavailableException e) {
             throw e;
         } catch (JsonProcessingException | RuntimeException e) {
             throw new OrchestratorResponseException(
                 "The local LLM's response was not a usable task plan: " + e.getMessage(), e);
         }
-    }
-
-    private String handleUnreachable(final String reason) {
-        if (this.fallbackToStatic) {
-            logger.warn("Local LLM unreachable ({}); returning the static fallback plan.", reason);
-            return StaticTaskPlan.JSON;
-        }
-        throw new OrchestratorUnavailableException(
-            "Could not reach the local LLM.", new IllegalStateException(reason));
     }
 
     private String toTaskPlanJson(final LlmTaskPlan llmPlan) throws JsonProcessingException {
@@ -101,36 +91,36 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
             throw new OrchestratorResponseException(
                 "The local LLM did not return a usable task plan.");
         }
-        validateDependencies(llmPlan.tasks());
         return this.objectMapper.writeValueAsString(toTaskPlan(llmPlan));
     }
 
     /**
-     * Rejects any task whose {@code dependsOnIndices} is out of range or references itself or a
-     * later task -- the one rule that keeps the resulting dependency graph acyclic without any
-     * cycle-detection downstream.
+     * Resolves a task's {@code dependsOn} titles to positions of earlier tasks, rejecting any
+     * that names no earlier task -- itself, a later task, or nothing at all. Only-earlier is the
+     * one rule that keeps the resulting graph acyclic without any cycle detection downstream.
      *
      * @param tasks the model-produced tasks, in the order the model listed them
+     * @param taskIndex the task whose dependencies to resolve
+     * @return the positions of the tasks it depends on, without duplicates
      */
-    private static void validateDependencies(final List<LlmTaskPlan.LlmTask> tasks) {
-        for (var index = 0; index < tasks.size(); index++) {
-            validateTaskDependencies(tasks, index);
-        }
+    private static List<Integer> dependencyIndicesOf(
+            final List<LlmTaskPlan.LlmTask> tasks, final int taskIndex) {
+        return Objects.requireNonNullElse(tasks.get(taskIndex).dependsOn(), List.<String>of())
+            .stream()
+            .map(title -> earlierIndexOf(tasks, taskIndex, title))
+            .distinct()
+            .toList();
     }
 
-    private static void validateTaskDependencies(
-            final List<LlmTaskPlan.LlmTask> tasks, final int taskIndex) {
-        var dependsOn = Objects.requireNonNullElse(
-            tasks.get(taskIndex).dependsOnIndices(), List.<Integer>of());
-        for (var dependencyIndex : dependsOn) {
-            if (Objects.isNull(dependencyIndex) || dependencyIndex < 0
-                    || dependencyIndex >= taskIndex) {
-                throw new OrchestratorResponseException(
-                    "The local LLM's task plan has an invalid dependency: task " + taskIndex
-                        + " ('" + tasks.get(taskIndex).title() + "') depends on index "
-                        + dependencyIndex + ", which must refer to an earlier task.");
-            }
-        }
+    private static int earlierIndexOf(
+            final List<LlmTaskPlan.LlmTask> tasks, final int taskIndex, final String title) {
+        return IntStream.range(0, taskIndex)
+            .filter(index -> TaskTitleMatcher.matches(tasks.get(index).title(), title))
+            .findFirst()
+            .orElseThrow(() -> new OrchestratorResponseException(
+                "The local LLM's task plan has an invalid dependency: task '"
+                    + tasks.get(taskIndex).title() + "' depends on '" + title
+                    + "', which is not the title of any task listed before it."));
     }
 
     private static TaskPlan toTaskPlan(final LlmTaskPlan llmPlan) {
@@ -139,7 +129,9 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
 
         var tasks = new ArrayList<Task>(sourceTasks.size());
         for (var index = 0; index < sourceTasks.size(); index++) {
-            tasks.add(toTask(sourceTasks.get(index), ids, index));
+            tasks.add(toTask(
+                sourceTasks.get(index), ids.get(index), dependencyIndicesOf(sourceTasks, index),
+                ids));
         }
 
         var taskGraph = new TaskGraph();
@@ -153,13 +145,13 @@ public class LocalLlmOrchestrationStrategy implements InterfaceLlmOrchestrationS
     }
 
     private static Task toTask(
-            final LlmTaskPlan.LlmTask source, final List<String> ids, final int index) {
+            final LlmTaskPlan.LlmTask source, final String id,
+            final List<Integer> dependencyIndices, final List<String> ids) {
         var task = new Task();
-        task.setId(ids.get(index));
+        task.setId(id);
         task.setTitle(source.title());
         task.setDescription(source.description());
-        var dependsOn = Objects.requireNonNullElse(source.dependsOnIndices(), List.<Integer>of());
-        task.setDependsOnTaskIds(dependsOn.stream().map(ids::get).toList());
+        task.setDependsOnTaskIds(dependencyIndices.stream().map(ids::get).toList());
         return task;
     }
 }

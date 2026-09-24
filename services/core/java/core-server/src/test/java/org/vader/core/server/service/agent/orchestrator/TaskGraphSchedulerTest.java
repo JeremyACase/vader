@@ -135,6 +135,38 @@ class TaskGraphSchedulerTest {
     }
 
     @Test
+    void evaluate_whileAwaitingTheLlm_keepsDrivingTheRestOfTheWorkflow() {
+        // AWAITING_LLM is not terminal: one task's review waiting out an outage must not stop
+        // everything else in the workflow from being dispatched.
+        var task = task("t1");
+        var workflow = runningWorkflowWithOneTask(task);
+        workflow.setStatus(WorkflowStatus.AWAITING_LLM);
+        when(this.workflowRepository.findById(WORKFLOW_ID)).thenReturn(Optional.of(workflow));
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("t1"))
+            .thenReturn(Optional.empty());
+        when(this.taskAttemptRepository.save(any())).thenAnswer(
+            invocation -> invocation.getArgument(0));
+
+        this.scheduler.evaluate(WORKFLOW_ID);
+
+        verify(this.taskAssignmentOutbox).enqueue(any());
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.AWAITING_LLM);
+    }
+
+    @Test
+    void evaluate_forTerminalWorkflow_doesNothing() {
+        var task = task("t1");
+        var workflow = runningWorkflowWithOneTask(task);
+        workflow.setStatus(WorkflowStatus.FAILED);
+        when(this.workflowRepository.findById(WORKFLOW_ID)).thenReturn(Optional.of(workflow));
+
+        this.scheduler.evaluate(WORKFLOW_ID);
+
+        verify(this.taskAssignmentOutbox, never()).enqueue(any());
+        verify(this.taskAttemptReviewOutbox, never()).enqueue(any());
+    }
+
+    @Test
     void evaluate_whenAttemptIsStillOpen_doesNotCompleteDispatchOrEnqueueReview() {
         var task = task("t1");
         var workflow = runningWorkflowWithOneTask(task);

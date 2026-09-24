@@ -1,12 +1,8 @@
 package org.vader.core.server.service.agent.evaluator.strategies;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
 import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.EvaluationVerdict;
@@ -22,41 +18,26 @@ import org.vader.core.server.service.llm.LlmRequestQueue;
  * writes a response back. It never talks to Ollama directly -- that's
  * {@code EvaluationLlmExecutor}, called only from inside the inbox.</p>
  *
- * <p>When the LLM is unreachable and {@code vader.orchestrator.local.fallback-to-static} is
- * {@code true} (the default), this falls back to trusting the self-reported status verbatim,
- * same as {@link StaticEvaluatorStrategy} -- so {@code helm test} and CI pass with no Ollama in
- * the cluster. A reachable LLM that returns nothing usable still fails loudly.</p>
+ * <p>An unreachable LLM always fails loudly, in every {@code vader.mode}: trusting a
+ * self-reported status without independent evaluation is exactly the failure mode evaluation
+ * exists to prevent. That trusting answer exists only behind {@link StaticEvaluatorStrategy},
+ * permitted only in {@code vader.mode=TEST}.</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "vader.orchestrator", name = "type", havingValue = "local")
 public class LocalEvaluatorStrategy implements InterfaceEvaluatorStrategy {
 
-    private static final Logger logger = LoggerFactory.getLogger(LocalEvaluatorStrategy.class);
-
     @Autowired
     private LlmRequestQueue requestQueue;
-
-    @Value("${vader.orchestrator.local.fallback-to-static:true}")
-    private boolean fallbackToStatic;
 
     @Override
     public EvaluationVerdict evaluate(final EvaluationRequest request) {
         var outcome = this.requestQueue.submitEvaluation(request);
-        return outcome.isUnreachable()
-            ? this.handleUnreachable(request, outcome.unreachableReason())
-            : outcome.verdict();
-    }
-
-    private EvaluationVerdict handleUnreachable(
-            final EvaluationRequest request, final String reason) {
-        if (this.fallbackToStatic) {
-            logger.warn("Local LLM unreachable ({}); trusting the self-reported status.", reason);
-            var passed = request.attemptStatus() == TaskAttemptStatus.SUCCEEDED;
-            return new EvaluationVerdict(
-                passed, "Local LLM unreachable; trusting the self-reported status verbatim.");
+        if (outcome.isUnreachable()) {
+            throw new OrchestratorUnavailableException(
+                "Could not reach the local LLM to evaluate this attempt.",
+                new IllegalStateException(outcome.unreachableReason()));
         }
-        throw new OrchestratorUnavailableException(
-            "Could not reach the local LLM to evaluate this attempt.",
-            new IllegalStateException(reason));
+        return outcome.verdict();
     }
 }

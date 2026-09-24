@@ -36,5 +36,36 @@ tasks.register('ngBuild', com.github.gradle.node.npm.task.NpmTask) {
     outputs.dir('dist')
 }
 
+// The Karma/Jasmine specs run inside Docker, never against a host browser -- mirrors the
+// Rust harness's and Python sandbox server's dockerized builds. The image (ops/karma.Dockerfile)
+// holds Node, Chromium, and the npm dependencies; its build context is only the lockfile pair, so
+// Docker's layer cache rebuilds it only when dependencies change. The sources and configs are
+// bind-mounted in at run time rather than copied, and host node_modules is never mounted: it
+// holds Windows/macOS native binaries (esbuild) that can't run in the Linux container.
+def ngTestImage = 'vader-core-ui-karma'
+def ngTestImageContext = layout.buildDirectory.dir('ng-test-image')
+def ngTestMounts = ['src', 'public', 'angular.json', 'tsconfig.json', 'tsconfig.app.json',
+                    'tsconfig.spec.json', 'karma.conf.js']
+
+tasks.register('prepareNgTestImageContext', Sync) {
+    from('package.json', 'package-lock.json', 'ops/karma.Dockerfile')
+    into ngTestImageContext
+}
+
+tasks.register('buildNgTestImage', Exec) {
+    dependsOn 'prepareNgTestImageContext'
+    def contextDir = ngTestImageContext.get().asFile
+    commandLine 'docker', 'build', '--quiet', '-t', ngTestImage,
+        '-f', new File(contextDir, 'karma.Dockerfile').path, contextDir.path
+}
+
+tasks.register('ngTest', Exec) {
+    dependsOn 'buildNgTestImage'
+    def mountArgs = ngTestMounts.collectMany { path -> ['-v', "${file(path)}:/app/${path}:ro"] }
+    commandLine(['docker', 'run', '--rm'] + mountArgs + [ngTestImage,
+        'npx', 'ng', 'test', '--watch=false', '--no-progress', '--browsers=ChromeHeadlessCI'])
+}
+
+tasks.named('check').configure    { dependsOn 'ngTest' }
 tasks.named('assemble').configure { dependsOn 'ngBuild' }
-tasks.named('build').configure    { dependsOn 'ngBuild' }
+tasks.named('build').configure    { dependsOn 'ngBuild', 'check' }

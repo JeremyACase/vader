@@ -12,6 +12,9 @@ from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult
 
 SUBMITTED_CODE_FILENAME = "_submitted_code.py"
 
+# The subprocess entry point: runs the submitted script and echoes a bare last expression's value.
+ECHO_RUNNER = Path(__file__).with_name("last_expression_echo_runner.py")
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +25,9 @@ class WorkspaceCodeExecutor:
     agent typically stages a file once (e.g. an uploaded spreadsheet) and then runs several
     analysis snippets against it without re-uploading each time. Code runs as a separate
     subprocess -- not via in-process exec()/eval() -- so a crash or infinite loop in submitted
-    code can't take the server down with it, and a timeout can actually be enforced.
+    code can't take the server down with it, and a timeout can actually be enforced. That
+    subprocess runs the code through ``LastExpressionEchoRunner``, so a bare expression on its last
+    line is echoed to stdout just as a notebook would show it.
     """
 
     def __init__(self, workspace: Path, max_timeout_seconds: float) -> None:
@@ -42,7 +47,7 @@ class WorkspaceCodeExecutor:
 
         try:
             completed = subprocess.run(
-                [sys.executable, str(script)],
+                [sys.executable, str(ECHO_RUNNER), str(script)],
                 cwd=self._workspace,
                 capture_output=True,
                 text=True,
@@ -85,6 +90,14 @@ class WorkspaceCodeExecutor:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         return len(content)
+
+    def has_file(self, filename: str) -> bool:
+        """Whether ``filename`` is already staged in the workspace.
+
+        Lets core-server stage an object only when it's actually missing -- e.g. after a container
+        restart -- instead of re-sending the same bytes on every call.
+        """
+        return self._safe_path(filename).is_file()
 
     def _stage_files(self, files: dict[str, str]) -> None:
         for filename, encoded_content in files.items():

@@ -112,3 +112,76 @@ def test_stage_file_rejects_path_traversal(tmp_path):
 
     with pytest.raises(ValueError, match="escapes the workspace"):
         executor.stage_file("../evil.bin", b"x")
+
+
+def test_has_file_is_false_until_the_file_is_staged(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    assert not executor.has_file("report.xlsx")
+    executor.stage_file("report.xlsx", b"bytes")
+    assert executor.has_file("report.xlsx")
+
+
+def test_has_file_is_false_for_a_directory(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    (tmp_path / "subdir").mkdir()
+
+    assert not executor.has_file("subdir")
+
+
+def test_has_file_rejects_path_traversal(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    with pytest.raises(ValueError, match="escapes the workspace"):
+        executor.has_file("../evil.bin")
+
+
+def test_execute_echoes_a_bare_last_expression_like_a_notebook(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    code = "sheet_names = ['Tactics', 'Notes']\nsheet_names"
+
+    result = executor.execute(ExecutionRequest(code=code))
+
+    assert result.stdout == "['Tactics', 'Notes']\n"
+    assert result.exit_code == 0
+
+
+def test_execute_does_not_echo_a_last_expression_that_evaluates_to_none(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    result = executor.execute(ExecutionRequest(code="print('printed once')"))
+
+    assert result.stdout == "printed once\n"
+
+
+def test_execute_only_echoes_the_last_statement(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    result = executor.execute(ExecutionRequest(code="'not echoed'\nvalue = 2"))
+
+    assert result.stdout == ""
+
+
+def test_execute_reports_errors_at_the_submitted_codes_own_line_numbers(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    result = executor.execute(ExecutionRequest(code="x = 1\n\nraise ValueError('boom')"))
+
+    assert "line 3" in result.stderr
+    assert "_submitted_code.py" in result.stderr
+    assert result.exit_code != 0
+
+
+def test_execute_runs_code_as_main_with_workspace_modules_importable(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    helper = base64.b64encode(b"VALUE = 42\n").decode()
+
+    result = executor.execute(
+        ExecutionRequest(
+            code="import helper\nif __name__ == '__main__':\n    print(helper.VALUE)",
+            files={"helper.py": helper},
+        )
+    )
+
+    assert result.stdout == "42\n"

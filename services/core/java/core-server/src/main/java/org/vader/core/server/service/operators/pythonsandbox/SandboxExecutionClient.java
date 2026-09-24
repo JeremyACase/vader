@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -64,7 +65,7 @@ public class SandboxExecutionClient {
             throw invalidSandboxName(sandboxName, e);
         } catch (RestClientException e) {
             throw new SandboxExecutionException(
-                "Could not run code in sandbox '" + sandboxName + "': " + e.getMessage(), e);
+                "Could not run code in sandbox '" + sandboxName + "': " + describe(e), e);
         }
         return result;
     }
@@ -93,8 +94,48 @@ public class SandboxExecutionClient {
         } catch (RestClientException e) {
             throw new SandboxExecutionException(
                 "Could not stage '" + filename + "' into sandbox '" + sandboxName + "': "
-                    + e.getMessage(), e);
+                    + describe(e), e);
         }
+    }
+
+    /**
+     * Checks whether a file is already staged in a sandbox's workspace, so a caller can skip
+     * re-sending bytes that are already there -- and re-send them when they aren't, e.g. after
+     * the sandbox's container restarted.
+     *
+     * @param sandboxName the exact sandbox name
+     * @param filename the name the file would be staged under
+     * @return {@code true} if the sandbox answered 2xx, {@code false} on any other status
+     * @throws SandboxExecutionException if the sandbox is unreachable
+     */
+    public boolean isStaged(final String sandboxName, final String filename) {
+        boolean staged;
+        try {
+            staged = Boolean.TRUE.equals(this.sandboxExecutionRestClient.head()
+                .uri(STAGE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
+                .exchange((request, response) -> response.getStatusCode().is2xxSuccessful()));
+        } catch (IllegalArgumentException e) {
+            throw invalidSandboxName(sandboxName, e);
+        } catch (RestClientException e) {
+            throw new SandboxExecutionException(
+                "Could not check for '" + filename + "' in sandbox '" + sandboxName + "': "
+                    + describe(e), e);
+        }
+        return staged;
+    }
+
+    /**
+     * Describes a failed request by its most specific cause rather than the wrapper's own
+     * message. The JDK HTTP client reports an unresolvable host -- e.g. a sandbox that does not
+     * exist -- as a {@code ConnectException} with no message at all, which the wrapper would
+     * otherwise render as a bare, useless {@code "null"}.
+     */
+    private static String describe(final RestClientException e) {
+        var cause = NestedExceptionUtils.getMostSpecificCause(e);
+        var message = cause.getMessage();
+        return message == null
+            ? cause.getClass().getSimpleName() + " (the sandbox may not exist or not be ready)"
+            : message;
     }
 
     /**

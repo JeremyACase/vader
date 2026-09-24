@@ -5,6 +5,25 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3]
+### Fixed
+- An empty reply from the model (no text and no tool calls) no longer ends the run as a success
+  with no output. The model is nudged to continue instead; one that keeps answering blank trips
+  the stall detector and is reported as stalled. A reply cut off at the output token cap now
+  fails the attempt with a reason saying so, rather than being treated as a finished answer.
+
+## [0.3.2]
+### Changed
+- A failed call to core-server is now reported as a failed call carrying the underlying cause
+  (e.g. the HTTP status and message), rather than always as "unreachable" -- core-server answering
+  with an error is not the same as it being down.
+
+## [0.3.1]
+### Changed
+- The task instructions no longer ask the model to create a sandbox or stage files: attached files
+  are already in its working directory and `run_python_code` needs no sandbox name. It is also told
+  to wait for a tool's result before depending on it in a later call.
+
 ## [0.3.0]
 ### Added
 - **The harness now runs a real, multi-turn agent action loop with tool use.** A run seeds the

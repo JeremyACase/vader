@@ -12,7 +12,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 
 from core_python_sandbox_server.logging_config import configure_logging
 from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult, StageFileResult
@@ -71,3 +71,11 @@ async def stage_file(filename: str, request: Request) -> StageFileResult:
     size = executor.stage_file(filename, content)
     logger.info("staged file %s: %d bytes", filename, size)
     return StageFileResult(filename=filename, size=size)
+
+
+@app.head("/workspace/files/{filename:path}")
+def file_exists(filename: str) -> Response:
+    """200 if ``filename`` is already staged in the workspace, 404 if not -- lets core-server
+    skip re-staging a file that's already there."""
+    status_code = 200 if executor.has_file(filename) else 404
+    return Response(status_code=status_code)

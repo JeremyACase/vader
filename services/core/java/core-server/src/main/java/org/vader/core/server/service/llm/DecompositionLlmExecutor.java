@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
+import org.vader.core.server.models.DecompositionRequest;
 import org.vader.core.server.service.agent.orchestrator.strategies.LlmTaskPlan;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
@@ -40,23 +41,36 @@ public class DecompositionLlmExecutor {
         available tools would materially help, and sketch your overall approach. Write this
         reasoning before filling in `objective` and `tasks` — it will be shown to the user.
 
-        List tasks in the order they would naturally happen. Most plans have real dependencies —
-        a task that needs another task's output cannot run in parallel with it. Use
-        `dependsOnIndices` to say so: it holds the 0-based positions, in this same tasks array, of
-        every task that must finish first. Only reference earlier positions (a task can never
+        Give every task a short, unique title. List tasks in the order they would naturally
+        happen. Most plans have real dependencies — a task that needs another task's output
+        cannot run in parallel with it. Use `dependsOn` to say so: it holds the exact titles of
+        the tasks listed earlier that must finish first. Only name earlier tasks (a task can never
         depend on itself or on something listed after it); leave it empty for a task that can
         start immediately. Do not default every task to an empty list just because it is easier —
-        think about which tasks actually need another one's result.
+        for each task, ask what it needs from the others.
 
-        For example, "research competitors, then write a positioning doc, then get it reviewed"
-        is three tasks where task 1 (write) has `dependsOnIndices: [0]` and task 2 (review) has
-        `dependsOnIndices: [1]` — each waits only on the one task immediately before it, not on
-        every prior task. A plan whose tasks are all independent (e.g. "fetch three unrelated
-        reports") correctly leaves every `dependsOnIndices` empty.
+        For example, "research competitors, then write a positioning doc, then get it reviewed":
+          - "Research competitors" with `dependsOn: []`
+          - "Write positioning doc" with `dependsOn: ["Research competitors"]`
+          - "Review positioning doc" with `dependsOn: ["Write positioning doc"]`
+        Each waits only on the task it actually needs, not on every prior task. A plan whose tasks
+        are all independent (e.g. "fetch three unrelated reports") correctly leaves every
+        `dependsOn` empty.
 
         You have been given a set of tools. Call a tool only when doing so materially helps you
         plan or gather information the plan needs; otherwise just plan. Do not call tools
         speculatively.
+        """;
+
+    private static final String REVISION_INSTRUCTIONS = """
+
+        A reviewer rejected your previous plan for this same request, for this reason:
+        %s
+
+        Produce a new plan that fixes that problem. Your `reasoning` must explain the new plan on
+        its own terms -- do not quote, restate, or respond to this feedback, and do not mention
+        any previous plan or its tasks. The user will read your reasoning and has never seen the
+        previous plan.
         """;
 
     @Autowired
@@ -70,21 +84,20 @@ public class DecompositionLlmExecutor {
      *
      * <p>A connectivity failure ({@link ResourceAccessException} or {@link TransientAiException})
      * is caught here and returned as an {@link DecompositionOutcome#isUnreachable() unreachable}
-     * outcome rather than left to propagate -- it is an everyday condition
-     * {@code LocalLlmOrchestrationStrategy} has its own fallback policy for, not a bug in this
-     * request's processing. Any other exception still propagates, settling the underlying queue
-     * message {@code FAILED}.</p>
+     * outcome rather than left to propagate -- {@code LocalLlmOrchestrationStrategy} turns it into
+     * a loud {@code OrchestratorUnavailableException}, not a bug in this request's processing. Any
+     * other exception still propagates, settling the underlying queue message {@code FAILED}.</p>
      *
-     * @param clientPromptText the original client-submitted request text
+     * @param request the user's original request text, verbatim, plus any revision guidance
      * @return the model's plan, in the lean shape it was asked to produce, or an unreachable
      *     outcome
      */
-    public DecompositionOutcome execute(final String clientPromptText) {
+    public DecompositionOutcome execute(final DecompositionRequest request) {
         var toolCallbacks = this.toolCallbackRegistry.forAudience(AgentToolAudience.ORCHESTRATION);
         try {
             var plan = this.chatClientBuilder.build().prompt()
-                .system(DECOMPOSITION_INSTRUCTIONS)
-                .user(clientPromptText)
+                .system(instructionsFor(request.revisionGuidance()))
+                .user(request.clientPromptText())
                 .toolCallbacks(toolCallbacks)
                 .call()
                 .entity(LlmTaskPlan.class);
@@ -92,5 +105,17 @@ public class DecompositionLlmExecutor {
         } catch (ResourceAccessException | TransientAiException e) {
             return new DecompositionOutcome(null, e.getMessage());
         }
+    }
+
+    /**
+     * The system instructions for one decomposition: the standing planning instructions, plus --
+     * only on a revision -- why the previous plan was rejected. The guidance goes here, as a
+     * system-level instruction, rather than into the user message, so the user's request is
+     * always passed through exactly as written.
+     */
+    private static String instructionsFor(final String revisionGuidance) {
+        return revisionGuidance == null
+            ? DECOMPOSITION_INSTRUCTIONS
+            : DECOMPOSITION_INSTRUCTIONS + REVISION_INSTRUCTIONS.formatted(revisionGuidance);
     }
 }

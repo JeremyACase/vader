@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -77,6 +78,18 @@ class InferenceTurnLlmExecutorTest {
         assertThat(turn.content()).isEqualTo("hello there");
         assertThat(turn.toolCalls()).isEmpty();
         assertThat(turn.tokensSpent()).isEqualTo(7L);
+    }
+
+    @Test
+    void execute_reportsWhyTheModelStoppedGenerating() {
+        var generation = new Generation(new AssistantMessage("cut off mid-sent"),
+            ChatGenerationMetadata.builder().finishReason("length").build());
+        when(this.chatModel.call(any(Prompt.class)))
+            .thenReturn(new ChatResponse(List.of(generation)));
+
+        var turn = this.executor(ChatClient.builder(this.chatModel)).execute(userTurn("hi"));
+
+        assertThat(turn.finishReason()).isEqualTo("length");
     }
 
     @Test

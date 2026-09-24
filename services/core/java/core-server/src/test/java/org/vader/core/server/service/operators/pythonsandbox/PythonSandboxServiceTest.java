@@ -2,6 +2,8 @@ package org.vader.core.server.service.operators.pythonsandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,19 +44,23 @@ class PythonSandboxServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(this.service, "namespace", "vader");
+        // Zeroed so awaitReady's retry loop, when it runs, does not actually sleep in tests.
+        ReflectionTestUtils.setField(this.service, "readyPollIntervalMs", 0L);
+        ReflectionTestUtils.setField(this.service, "readyPollMaxAttempts", 3);
     }
 
     @Test
-    void create_resolvesTheNameAndReturnsClusterAddress() {
+    void create_resolvesTheNameAndReturnsClusterAddressOnceAlreadyReady() {
         when(this.operator.reconcile(any(PythonSandboxSpec.class))).thenAnswer(invocation -> {
             PythonSandboxSpec spec = invocation.getArgument(0);
-            return new ManagedResource(spec.name(), "vader", "Pending", Map.of());
+            return new ManagedResource(spec.name(), "vader", "Running", Map.of());
         });
 
         var info = this.service.create("My Box");
 
         assertThat(info.name()).isEqualTo("vader-sandbox-my-box");
         assertThat(info.namespace()).isEqualTo("vader");
+        assertThat(info.phase()).isEqualTo("Running");
         assertThat(info.clusterAddress())
             .isEqualTo("vader-sandbox-my-box.vader.svc.cluster.local");
 
@@ -62,6 +68,31 @@ class PythonSandboxServiceTest {
             ArgumentCaptor.forClass(PythonSandboxSpec.class);
         verify(this.operator).reconcile(specCaptor.capture());
         assertThat(specCaptor.getValue().name()).isEqualTo("vader-sandbox-my-box");
+    }
+
+    @Test
+    void create_pollsUntilTheSandboxBecomesReady() {
+        when(this.operator.reconcile(any(PythonSandboxSpec.class)))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Pending", Map.of()))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Pending", Map.of()))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Running", Map.of()));
+
+        var info = this.service.create("My Box");
+
+        assertThat(info.phase()).isEqualTo("Running");
+        verify(this.operator, times(3)).reconcile(any(PythonSandboxSpec.class));
+    }
+
+    @Test
+    void create_givesUpAfterTheMaxAttemptsAndReturnsWhateverPhaseItLastSaw() {
+        when(this.operator.reconcile(any(PythonSandboxSpec.class)))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Pending", Map.of()));
+
+        var info = this.service.create("My Box");
+
+        assertThat(info.phase()).isEqualTo("Pending");
+        // The initial reconcile, plus one retry per configured attempt (readyPollMaxAttempts=3).
+        verify(this.operator, times(4)).reconcile(any(PythonSandboxSpec.class));
     }
 
     @Test
@@ -123,5 +154,40 @@ class PythonSandboxServiceTest {
 
         assertThat(info.filename()).isEqualTo("renamed.bin");
         verify(this.executionClient).stageFile("vader-sandbox-a", "renamed.bin", bytes);
+    }
+
+    @Test
+    void ensureReady_usesTheNameVerbatimRatherThanResolvingIt() {
+        when(this.operator.reconcile(any(PythonSandboxSpec.class))).thenAnswer(invocation -> {
+            PythonSandboxSpec spec = invocation.getArgument(0);
+            return new ManagedResource(spec.name(), "vader", "Running", Map.of());
+        });
+
+        var info = this.service.ensureReady("vader-sandbox-attempt-abc");
+
+        assertThat(info.name()).isEqualTo("vader-sandbox-attempt-abc");
+        assertThat(info.phase()).isEqualTo("Running");
+    }
+
+    @Test
+    void stageObjectIfAbsent_whenAlreadyStaged_neverFetchesOrSendsTheObject() {
+        when(this.executionClient.isStaged("vader-sandbox-a", "sales.csv")).thenReturn(true);
+
+        this.service.stageObjectIfAbsent("vader-sandbox-a", "obj-1", "sales.csv");
+
+        verify(this.objectStorageService, never()).retrieve(any());
+        verify(this.executionClient, never()).stageFile(any(), any(), any());
+    }
+
+    @Test
+    void stageObjectIfAbsent_whenMissing_stagesItUnderTheGivenName() {
+        var bytes = "a,b\n1,2\n".getBytes();
+        when(this.executionClient.isStaged("vader-sandbox-a", "sales.csv")).thenReturn(false);
+        when(this.objectStorageService.retrieve("obj-1")).thenReturn(new ObjectContent(
+            new ByteArrayResource(bytes), "original.csv", "text/csv", bytes.length));
+
+        this.service.stageObjectIfAbsent("vader-sandbox-a", "obj-1", "sales.csv");
+
+        verify(this.executionClient).stageFile("vader-sandbox-a", "sales.csv", bytes);
     }
 }

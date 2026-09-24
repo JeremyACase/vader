@@ -1,5 +1,6 @@
 package org.vader.core.server.service.agent.task;
 
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -30,10 +31,15 @@ public class ToolCallInvocationBoundary {
      *
      * @param toolCallback the tool to invoke
      * @param argumentsJson the tool's arguments, as a JSON object string
+     * @param toolContext server-supplied context the model never sees (see
+     *     {@link TaskAttemptToolContext}); a tool that doesn't declare a {@link ToolContext}
+     *     parameter simply ignores it
      * @return the tool's raw result
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public String invoke(final ToolCallback toolCallback, final String argumentsJson) {
-        return toolCallback.call(argumentsJson);
+    public String invoke(
+            final ToolCallback toolCallback, final String argumentsJson,
+            final ToolContext toolContext) {
+        return toolCallback.call(argumentsJson, toolContext);
     }
 }

@@ -35,32 +35,31 @@ public record LlmTaskPlan(
     /**
      * One task within an {@link LlmTaskPlan}.
      *
-     * <p>{@code dependsOnIndices} is deliberately index-based rather than referencing other
-     * tasks by title or an invented key: a small integer position is far less for a small local
-     * model to get wrong than matching free-text strings back up exactly. Indices are
-     * additionally constrained to reference only <em>earlier</em> positions in {@code tasks} --
-     * enforced by {@code LocalLlmOrchestrationStrategy}, which rejects any plan violating it --
-     * so the resulting dependency graph is acyclic by construction; no cycle detection is needed
-     * anywhere downstream.</p>
+     * <p>{@code dependsOn} names earlier tasks by <em>title</em>. It was once 0-based indices,
+     * on the theory that a small integer is less for a small model to get wrong -- in practice
+     * qwen2.5:3b left every index list empty, even for an obviously sequential plan and even
+     * when told exactly which dependency was missing. Repeating a title it just wrote is a far
+     * easier ask. References must still name tasks listed <em>earlier</em> -- enforced by
+     * {@code LocalLlmOrchestrationStrategy}, which rejects any plan violating it -- so the
+     * resulting graph is acyclic by construction.</p>
      *
      * @param title a short imperative title
      * @param description what to do, in one or two sentences
-     * @param dependsOnIndices the 0-based positions, in {@code tasks}, of every task this one
-     *     cannot start until the model produced results for -- empty when nothing must finish
-     *     first
+     * @param dependsOn the titles of every earlier task this one cannot start until it finishes
+     *     -- empty when nothing must finish first
      */
     public record LlmTask(
-        @JsonPropertyDescription("A short imperative title")
+        @JsonPropertyDescription("A short imperative title, unique within this plan")
         String title,
 
         @JsonPropertyDescription("What to do, in one or two sentences")
         String description,
 
         @JsonPropertyDescription(
-            "0-based indices, into this same tasks array, of every task that must complete "
-                + "before this one can start. Every index must be strictly less than this "
-                + "task's own position -- only reference tasks listed earlier. Leave empty if "
-                + "this task can start immediately, in parallel with everything else.")
-        List<Integer> dependsOnIndices) {
+            "The exact titles of the tasks listed earlier in this plan that must finish before "
+                + "this one can start -- e.g. a task that analyzes data depends on the task "
+                + "that reads it. Only name tasks listed before this one. Leave empty only if "
+                + "this task truly needs nothing from any other task.")
+        List<String> dependsOn) {
     }
 }

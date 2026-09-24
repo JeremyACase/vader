@@ -85,12 +85,26 @@ impl ConversationMessage {
 
 /// One model turn's result: either a final answer (`tool_calls` empty) or a request to call one
 /// or more tools before the model can continue (`tool_calls` populated, `content` possibly
-/// absent), plus how many tokens the turn cost against the assignment's budget.
+/// absent), plus how many tokens the turn cost against the assignment's budget and why the model
+/// stopped generating (`finish_reason`, as the provider reported it -- absent if it reported none).
 #[derive(Debug, Clone)]
 pub struct InferenceTurn {
     pub content: Option<String>,
     pub tool_calls: Vec<ToolCall>,
     pub tokens_spent: u64,
+    pub finish_reason: Option<String>,
+}
+
+/// The finish reason a provider reports when generation stopped at the output token cap rather
+/// than ending naturally (Ollama's `done_reason`, relayed by core-server).
+const OUTPUT_CAP_FINISH_REASON: &str = "length";
+
+impl InferenceTurn {
+    /// Whether the model was cut off at the output token cap. Whatever such a turn contains -- a
+    /// half-written tool call, a truncated answer -- is incomplete, however plausible it looks.
+    pub fn was_cut_off(&self) -> bool {
+        self.finish_reason.as_deref() == Some(OUTPUT_CAP_FINISH_REASON)
+    }
 }
 
 /// The **only** path a harness has to any LLM, internal or external to the cluster.

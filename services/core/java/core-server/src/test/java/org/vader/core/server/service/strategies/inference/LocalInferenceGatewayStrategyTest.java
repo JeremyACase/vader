@@ -30,7 +30,7 @@ class LocalInferenceGatewayStrategyTest {
     void complete_delegatesToTheRequestQueueAndReturnsItsResult() {
         var requestQueue = mock(LlmRequestQueue.class);
         var messages = userTurn("hi");
-        var turn = new InferenceTurn("hello there", List.of(), 7L);
+        var turn = new InferenceTurn("hello there", List.of(), 7L, "stop");
         when(requestQueue.submitInferenceTurn(messages)).thenReturn(turn);
 
         var result = strategyWith(requestQueue).complete(messages);

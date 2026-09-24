@@ -58,9 +58,9 @@ public class ObjectStorageTools {
             + "directly into this conversation, identified by the id returned from "
             + "query_object_metadata / get_object_metadata_by_id. This tool refuses anything "
             + "whose recorded content type isn't text -- spreadsheets, images, and every other "
-            + "binary format are rejected outright, not merely discouraged. Use stage_object for "
-            + "those instead, which writes the object straight into a sandbox's workspace "
-            + "without inlining it here; run_python_code can then read it by filename. Works the "
+            + "binary format are rejected outright, not merely discouraged. A file attached to "
+            + "the request you are working on is already in your Python working directory: open "
+            + "it by filename with run_python_code instead. Works the "
             + "same way regardless of whether the server is backed by MinIO or the database. "
             + "Objects larger than the configured inline limit are also rejected, with the REST "
             + "download URL to use instead.")
@@ -85,9 +85,10 @@ public class ObjectStorageTools {
             result = Map.of(
                 "error", "'" + descriptor.filename() + "' has content type '"
                     + descriptor.contentType() + "', which get_object_content refuses to inline "
-                    + "into this conversation. Create a sandbox (if you don't already have one) "
-                    + "and stage this object into it with stage_object, then inspect it with "
-                    + "run_python_code instead.");
+                    + "into this conversation. If it is attached to the request you are working "
+                    + "on, it is already in your Python working directory as '"
+                    + descriptor.filename() + "' (or the name your task context gives) -- "
+                    + "open it with run_python_code instead.");
         } else if (descriptor.size() > this.maxInlineBytes) {
             result = Map.of(
                 "error", "Object is " + descriptor.size() + " bytes, over the "

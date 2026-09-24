@@ -1,11 +1,12 @@
 package org.vader.core.server.service.agent.orchestrator.strategies;
 
 /**
- * The canned, schema-valid task plan used both by {@link StaticLlmOrchestrationStrategy} and as
- * the fallback {@link LocalLlmOrchestrationStrategy} returns when the local LLM is unreachable.
+ * The canned, schema-valid task plan {@link StaticLlmOrchestrationStrategy} returns for every
+ * prompt, regardless of what was asked.
  *
- * <p>Kept as a shared constant because the two strategies have opposite
- * {@code @ConditionalOnProperty} values and so are never beans at the same time.</p>
+ * <p>For the devops test pipeline only: static mode is refused outside {@code vader.mode=TEST}
+ * (see {@code StaticStrategyModeGuard}), and nothing else ever returns this plan -- in particular,
+ * {@link LocalLlmOrchestrationStrategy} fails loudly rather than falling back to it.</p>
  */
 public final class StaticTaskPlan {
 

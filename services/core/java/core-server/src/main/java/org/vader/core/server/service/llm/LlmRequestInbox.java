@@ -14,9 +14,11 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.core.server.models.ConversationMessage;
+import org.vader.core.server.models.DecompositionRequest;
 import org.vader.core.server.models.EvaluationRequest;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.TaskPlanRefinementRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 import org.vader.core.server.repository.OutboxMessageRepository;
 import org.vader.core.server.service.io.AbstractInbox;
@@ -73,6 +75,10 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
     private ReattemptDecisionLlmExecutor reattemptDecisionExecutor;
 
     @Autowired
+    @Lazy
+    private TaskPlanRefinementLlmExecutor taskPlanRefinementExecutor;
+
+    @Autowired
     @Qualifier("llmRequestInboxExecutor")
     private TaskExecutor executor;
 
@@ -96,12 +102,14 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
         var responseJson = switch (message.getKind()) {
             case INFERENCE_TURN -> this.toJson(
                 this.inferenceTurnExecutor.execute(this.readMessages(message.getRequestJson())));
-            case DECOMPOSITION -> this.toJson(
-                this.decompositionExecutor.execute(message.getRequestJson()));
+            case DECOMPOSITION -> this.toJson(this.decompositionExecutor.execute(
+                this.readValue(message.getRequestJson(), DecompositionRequest.class)));
             case EVALUATION -> this.toJson(this.evaluationExecutor.execute(
                 this.readValue(message.getRequestJson(), EvaluationRequest.class)));
             case REATTEMPT_DECISION -> this.toJson(this.reattemptDecisionExecutor.execute(
                 this.readValue(message.getRequestJson(), ReattemptDecisionRequest.class)));
+            case TASK_PLAN_REFINEMENT -> this.toJson(this.taskPlanRefinementExecutor.execute(
+                this.readValue(message.getRequestJson(), TaskPlanRefinementRequest.class)));
         };
         message.setResponseJson(responseJson);
         this.messageRepository.save(message);

@@ -11,6 +11,16 @@ public class SandboxExecutionException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     /**
+     * Creates the exception with a message only, for a failure with no underlying exception --
+     * e.g. a sandbox that never became ready within its wait budget.
+     *
+     * @param message the detail message
+     */
+    public SandboxExecutionException(final String message) {
+        super(message);
+    }
+
+    /**
      * Creates the exception with a message and underlying cause.
      *
      * @param message the detail message

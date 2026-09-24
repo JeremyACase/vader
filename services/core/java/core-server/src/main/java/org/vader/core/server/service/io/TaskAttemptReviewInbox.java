@@ -1,19 +1,25 @@
 package org.vader.core.server.service.io;
 
+import java.time.OffsetDateTime;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.common.model.vader.entity.TaskAttemptReviewOutboxMessageEntity;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.repository.OutboxMessageRepository;
 import org.vader.core.server.repository.TaskAttemptReviewOutboxMessageRepository;
+import org.vader.core.server.service.agent.TaskAttemptReviewRetryService;
 import org.vader.core.server.service.agent.TaskAttemptReviewService;
+import org.vader.core.server.service.llm.LlmOutageClassifier;
 
 /**
  * Inbox for attempt review: pops pending review messages and runs
@@ -25,6 +31,12 @@ import org.vader.core.server.service.agent.TaskAttemptReviewService;
  * same as every other lazy-proxy field access in this package's inboxes) -- the actual review
  * happens inside {@link TaskAttemptReviewService}'s own transactional method, which re-fetches
  * fresh by id.</p>
+ *
+ * <p>A review that fails because the LLM is unavailable is not marked {@code FAILED} -- that
+ * would leave its task with no verdict and its workflow stuck in {@code RUNNING} forever. It is
+ * handed to {@link TaskAttemptReviewRetryService}, which puts it back on the queue for a later
+ * retry and marks the workflow {@code AWAITING_LLM}; {@link #pop} then only claims reviews whose
+ * retry time has come. Any other failure is still marked {@code FAILED} as before.</p>
  */
 @Service
 public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutboxMessageEntity> {
@@ -41,6 +53,9 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
     @Autowired
     @Lazy
     private TaskAttemptReviewService reviewService;
+
+    @Autowired
+    private TaskAttemptReviewRetryService retryService;
 
     @Autowired
     @Qualifier("taskAttemptReviewInboxExecutor")
@@ -64,9 +79,33 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
         return this.messageRepository;
     }
 
+    /**
+     * Claims the oldest pending review that is due -- skipping any deferred during an LLM outage
+     * whose retry time has not yet come.
+     *
+     * @return the claimed message, or empty if nothing is due
+     */
+    @Override
+    public Optional<TaskAttemptReviewOutboxMessageEntity> pop() {
+        return this.processor().claim(this.messageRepository, () -> this.messageRepository
+            .findDue(OutboxMessageStatus.PENDING, OffsetDateTime.now(), PageRequest.of(0, 1))
+            .stream()
+            .findFirst());
+    }
+
     @Override
     protected void handle(final TaskAttemptReviewOutboxMessageEntity message) {
         this.reviewService.review(message.getTaskAttempt().getId());
+    }
+
+    @Override
+    protected void onHandleFailure(
+            final TaskAttemptReviewOutboxMessageEntity message, final RuntimeException failure) {
+        if (LlmOutageClassifier.isOutage(failure)) {
+            this.retryService.deferForLlmOutage(message.getId(), failure.getMessage());
+        } else {
+            super.onHandleFailure(message, failure);
+        }
     }
 
     /**

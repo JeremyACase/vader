@@ -63,11 +63,13 @@ class LlmRequestQueueTest {
 
     @Test
     void submitInferenceTurn_enqueuesAndPublishesBeforeAwaitingTheResult() {
-        var turn = new InferenceTurn("hello", List.of(), 5L);
+        var turn = new InferenceTurn("hello", List.of(), 5L, "stop");
         when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
             var message = new LlmRequestOutboxMessageEntity();
             message.setStatus(OutboxMessageStatus.PROCESSED);
-            message.setResponseJson("{\"content\":\"hello\",\"toolCalls\":[],\"tokensSpent\":5}");
+            message.setResponseJson(
+                "{\"content\":\"hello\",\"toolCalls\":[],\"tokensSpent\":5,"
+                    + "\"finishReason\":\"stop\"}");
             return Optional.of(message);
         });
 
@@ -139,8 +141,10 @@ class LlmRequestQueueTest {
             return Optional.of(message);
         });
 
+        // Processed-and-failed is not a timeout: retrying it would likely fail the same way.
         assertThatThrownBy(() -> this.queue.submitInferenceTurn(userTurn("hi")))
             .isInstanceOf(LlmRequestQueueException.class)
+            .isNotInstanceOf(LlmRequestTimeoutException.class)
             .hasMessageContaining("boom");
     }
 
@@ -154,7 +158,7 @@ class LlmRequestQueueTest {
         });
 
         assertThatThrownBy(() -> this.queue.submitInferenceTurn(userTurn("hi")))
-            .isInstanceOf(LlmRequestQueueException.class)
+            .isInstanceOf(LlmRequestTimeoutException.class)
             .hasMessageContaining("Timed out")
             .hasMessageContaining("wait elapsed");
     }
@@ -170,9 +174,37 @@ class LlmRequestQueueTest {
         when(this.messageRepository.findMostRecentClaimedAt()).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> this.queue.submitInferenceTurn(userTurn("hi")))
-            .isInstanceOf(LlmRequestQueueException.class)
+            .isInstanceOf(LlmRequestTimeoutException.class)
             .hasMessageContaining("Timed out")
             .hasMessageContaining("looks stuck");
+    }
+
+    @Test
+    void submitInferenceTurn_whenTheLastClaimPredatesThisWait_givesTheFullStallWindow() {
+        // The last claim was minutes ago because one long request held the single worker the
+        // whole time, and this request was queued just as it finished. It must get the full
+        // stall window from when it started waiting -- not be judged stalled on its first poll.
+        ReflectionTestUtils.setField(this.queue, "stallTimeoutSeconds", 30L);
+        ReflectionTestUtils.setField(this.queue, "maxWaitSeconds", 60L);
+        var pollCount = new java.util.concurrent.atomic.AtomicInteger();
+        when(this.messageRepository.findById(any())).thenAnswer(invocation -> {
+            var message = new LlmRequestOutboxMessageEntity();
+            if (pollCount.incrementAndGet() < 3) {
+                message.setStatus(OutboxMessageStatus.PENDING);
+            } else {
+                message.setStatus(OutboxMessageStatus.PROCESSED);
+                message.setResponseJson(
+                    "{\"content\":\"done\",\"toolCalls\":[],\"tokensSpent\":1}");
+            }
+            return Optional.of(message);
+        });
+        when(this.messageRepository.findMostRecentClaimedAt())
+            .thenReturn(Optional.of(java.time.OffsetDateTime.now().minusMinutes(5)));
+
+        var result = this.queue.submitInferenceTurn(userTurn("hi"));
+
+        assertThat(result.content()).isEqualTo("done");
+        assertThat(pollCount.get()).isEqualTo(3);
     }
 
     @Test

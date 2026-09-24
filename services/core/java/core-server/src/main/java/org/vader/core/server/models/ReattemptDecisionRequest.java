@@ -13,7 +13,8 @@ import java.util.List;
  * @param maxAttempts the configured cap on attempts per task
  * @param latestFailureReasoning the evaluator's (or the deterministic timeout/stall) reasoning for
  *     why the latest attempt failed
- * @param priorUpdateDescriptions every prior update recorded against this task, oldest first
+ * @param priorUpdateDescriptions every update recorded against an earlier attempt of this task,
+ *     oldest first -- never the failed attempt's own updates
  */
 public record ReattemptDecisionRequest(
     String taskTitle,

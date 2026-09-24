@@ -24,6 +24,7 @@ import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
+import org.vader.core.server.models.DecompositionRequest;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 import org.vader.core.server.service.registries.ToolAudienceTag;
@@ -60,6 +61,16 @@ class DecompositionLlmExecutorTest {
         return registry;
     }
 
+    private static DecompositionRequest request(final String clientPromptText) {
+        return new DecompositionRequest(clientPromptText, null);
+    }
+
+    private static Prompt capturedPrompt(final ChatModel chatModel) {
+        var promptCaptor = org.mockito.ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        return promptCaptor.getValue();
+    }
+
     private static DecompositionLlmExecutor executor(
         final ChatClient.Builder builder, final ToolCallbackProvider... providers) {
 
@@ -75,7 +86,7 @@ class DecompositionLlmExecutorTest {
         when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
-        var outcome = executor(ChatClient.builder(chatModel)).execute("Ship onboarding");
+        var outcome = executor(ChatClient.builder(chatModel)).execute(request("Ship onboarding"));
 
         assertThat(outcome.isUnreachable()).isFalse();
         assertThat(outcome.plan().objective()).isEqualTo("ship it");
@@ -91,7 +102,7 @@ class DecompositionLlmExecutorTest {
             .toolObjects(new DummyTools())
             .build();
 
-        executor(ChatClient.builder(chatModel), provider).execute("anything");
+        executor(ChatClient.builder(chatModel), provider).execute(request("anything"));
 
         var promptCaptor = org.mockito.ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(promptCaptor.capture());
@@ -107,11 +118,43 @@ class DecompositionLlmExecutorTest {
         when(chatModel.call(any(Prompt.class)))
             .thenThrow(new ResourceAccessException("connection refused"));
 
-        var outcome = executor(ChatClient.builder(chatModel)).execute("plan a thing");
+        var outcome = executor(ChatClient.builder(chatModel)).execute(request("plan a thing"));
 
         assertThat(outcome.isUnreachable()).isTrue();
         assertThat(outcome.unreachableReason()).contains("connection refused");
         assertThat(outcome.plan()).isNull();
+    }
+
+    @Test
+    void execute_onRevision_keepsUserTextIntactAndSendsGuidanceAsInstructions() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+
+        executor(ChatClient.builder(chatModel)).execute(new DecompositionRequest(
+            "Analyze this spreadsheet", "the tasks are redundant"));
+
+        var prompt = capturedPrompt(chatModel);
+        // Spring AI's entity() appends its own JSON-format instructions after the user's text;
+        // what matters is that the user's words come through first and the critique does not.
+        assertThat(prompt.getUserMessage().getText())
+            .startsWith("Analyze this spreadsheet")
+            .doesNotContain("the tasks are redundant");
+        assertThat(prompt.getSystemMessage().getText())
+            .contains("the tasks are redundant")
+            .contains("do not quote, restate, or respond to this feedback");
+    }
+
+    @Test
+    void execute_onFirstAttempt_sendsNoRevisionInstructions() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+
+        executor(ChatClient.builder(chatModel)).execute(request("Analyze this spreadsheet"));
+
+        assertThat(capturedPrompt(chatModel).getSystemMessage().getText())
+            .doesNotContain("A reviewer rejected your previous plan");
     }
 
     /**
@@ -127,8 +170,8 @@ class DecompositionLlmExecutorTest {
         var builder = spy(ChatClient.builder(chatModel));
         var executor = executor(builder);
 
-        executor.execute("first");
-        executor.execute("second");
+        executor.execute(request("first"));
+        executor.execute(request("second"));
 
         verify(builder, times(2)).build();
     }

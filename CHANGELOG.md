@@ -3,6 +3,36 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0]
+### Added
+- **Task agents can analyze attached files with Python.** Each task attempt gets its own managed
+  sandbox, created on first use with the prompt's attachments already in it and cleaned up when
+  the attempt settles; a bare expression on the last line is echoed back the way a notebook shows
+  it.
+- **Every finished attempt is independently judged, and failures can be retried.** An evaluator
+  decides whether an attempt actually did its task, and a failed one is re-attempted, up to a
+  configurable cap, when the orchestrator judges another try worthwhile. Each task keeps a full
+  authored history of these verdicts and of agents' own progress notes.
+- **Better task plans.** A decomposed plan is checked for structural problems and critiqued, with
+  missing dependencies added directly, before any task runs.
+- **A reworked UI**: an interactive task-graph view of the selected workflow, a navigation rail,
+  per-task update history, and full agent transcripts showing why each turn ended.
+### Changed
+- **The local LLM defaults to `qwen2.5:7b` with a 16k context window.** The 3b model's tool calls
+  were too unreliable for task agents, and Ollama's own default context silently cut longer
+  prompts. Output length, context size, and per-call timeouts are all configurable in the chart.
+- **An LLM outage pauses a workflow instead of hanging it.** Affected workflows show
+  `AWAITING_LLM` and resume on their own once the LLM answers again.
+- **Canned (static) results are refused outside `vader.mode=TEST`**, by the chart at render time
+  and by core-server at startup.
+### Fixed
+- **Agent runs that reported success with nothing done, or stalled for no visible reason.** Empty
+  replies, replies cut off at the output cap, and tool calls Ollama silently dropped are now all
+  handled explicitly, and transcripts show the model's tool calls instead of blank responses. A
+  task that failed once is no longer mistaken for a repeating failure and left without a retry.
+- **`./gradlew build` now runs the Angular unit tests**, in a container, so a failing spec fails
+  the build.
+
 ## [0.14.0]
 ### Added
 - **Object storage retrieval.** A file attached to a prompt can now be read back, not just

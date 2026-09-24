@@ -69,6 +69,8 @@ pub struct InferenceResponseBody {
     #[serde(default)]
     pub tool_calls: Vec<ToolCallBody>,
     pub tokens_spent: u64,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
 }
 
 /// Body of `POST /agent/tool-calls`. Like `/agent/inference`, the assignment id travels in the

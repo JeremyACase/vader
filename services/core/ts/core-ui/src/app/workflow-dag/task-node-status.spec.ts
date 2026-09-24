@@ -10,10 +10,13 @@ describe('deriveNodeStatus', () => {
     expect(deriveNodeStatus([])).toBe('inactive');
   });
 
-  it('returns active for the open statuses', () => {
-    expect(deriveNodeStatus([attempt({ status: 'PENDING' })])).toBe('active');
-    expect(deriveNodeStatus([attempt({ status: 'DISPATCHED' })])).toBe('active');
+  it('returns active only once the latest attempt is actually running', () => {
     expect(deriveNodeStatus([attempt({ status: 'RUNNING' })])).toBe('active');
+  });
+
+  it('returns inactive for a merely queued attempt, not yet running', () => {
+    expect(deriveNodeStatus([attempt({ status: 'PENDING' })])).toBe('inactive');
+    expect(deriveNodeStatus([attempt({ status: 'DISPATCHED' })])).toBe('inactive');
   });
 
   it('returns succeeded when the latest attempt succeeded', () => {

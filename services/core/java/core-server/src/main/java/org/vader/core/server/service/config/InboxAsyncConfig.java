@@ -134,4 +134,26 @@ public class InboxAsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         return executor;
     }
+
+    /**
+     * The dedicated executor {@code TaskAttemptSandboxCleanupListener} hands sandbox deletion off
+     * to.
+     *
+     * <p>Unlike {@code agentHarnessJobCleanupExecutor}, a full queue runs the delete on the
+     * caller's thread rather than discarding it: a sandbox has no {@code ttlSecondsAfterFinished}
+     * backstop, so a dropped delete would leak its pod indefinitely. Briefly slowing the thread
+     * that committed a settlement is the cheaper failure.</p>
+     *
+     * @return the executor
+     */
+    @Bean("taskAttemptSandboxCleanupExecutor")
+    public TaskExecutor taskAttemptSandboxCleanupExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("task-attempt-sandbox-cleanup-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        return executor;
+    }
 }

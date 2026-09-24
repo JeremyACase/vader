@@ -18,7 +18,7 @@ class StaticLlmOrchestrationStrategyTest {
         var prompt = new ClientPrompt();
         prompt.setText("anything at all");
 
-        var response = this.strategy.orchestrate(prompt);
+        var response = this.strategy.orchestrate(prompt, null);
 
         var taskPlan = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)

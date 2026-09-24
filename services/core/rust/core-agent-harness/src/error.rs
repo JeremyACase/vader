@@ -17,12 +17,12 @@ pub enum HarnessError {
         source: uuid::Error,
     },
 
-    #[error("core-server control plane is unreachable: {0}")]
+    #[error("core-server control plane call failed: {0}")]
     ControlPlaneUnavailable(String),
 
-    #[error("core-server inference gateway is unreachable: {0}")]
+    #[error("core-server inference gateway call failed: {0}")]
     InferenceUnavailable(String),
 
-    #[error("core-server tool-call invocation is unreachable: {0}")]
+    #[error("core-server tool-call invocation failed: {0}")]
     ToolInvocationUnavailable(String),
 }

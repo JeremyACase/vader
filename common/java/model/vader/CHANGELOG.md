@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0]
+### Added
+- Transcript turns record why the model stopped generating (the provider's finish reason), so a
+  reply cut off at the output token cap is distinguishable from one that ended naturally.
+
+## [0.18.0]
+### Added
+- `WorkflowStatus.AWAITING_LLM`: a non-terminal status for a workflow paused while the LLM is
+  unavailable, which resumes to `RUNNING` on its own. Attempt-review queue messages can now be
+  deferred until a later retry time.
+
 ## [0.17.0]
 ### Added
 - `TaskUpdate` now records who authored it (system, task agent, orchestrator, or evaluator) and

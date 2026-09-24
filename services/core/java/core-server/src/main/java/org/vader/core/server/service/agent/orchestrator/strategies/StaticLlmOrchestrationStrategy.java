@@ -23,7 +23,7 @@ public class StaticLlmOrchestrationStrategy implements InterfaceLlmOrchestration
         LoggerFactory.getLogger(StaticLlmOrchestrationStrategy.class);
 
     @Override
-    public String orchestrate(final ClientPrompt clientPrompt) {
+    public String orchestrate(final ClientPrompt clientPrompt, final String revisionGuidance) {
         logger.info("Returning the static task plan for prompt: '{}'", clientPrompt.getText());
         return StaticTaskPlan.JSON;
     }

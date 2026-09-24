@@ -80,6 +80,16 @@ describe('WorkflowPanelComponent', () => {
     expect(component.sortedWorkflows().map((w) => w.id)).toEqual(['wf-new', 'wf-old']);
   });
 
+  it('badges a workflow that is waiting out an LLM outage as AWAITING_LLM', () => {
+    fixture.detectChanges();
+    fakeService.workflowsPage$.next(page([workflow({ id: 'wf-1', status: 'AWAITING_LLM' })]));
+    fixture.detectChanges();
+
+    const badge: HTMLElement | null = fixture.nativeElement.querySelector('.status-badge');
+    expect(badge?.getAttribute('data-status')).toBe('AWAITING_LLM');
+    expect(badge?.textContent?.trim()).toBe('AWAITING_LLM');
+  });
+
   it('selects a real workflow row and emits its id', () => {
     fixture.detectChanges();
     let emitted: string | undefined;

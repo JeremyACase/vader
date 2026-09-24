@@ -83,30 +83,40 @@
   cursor: pointer;
 }
 
+/* Default/inactive: created but never attempted, or only queued (PENDING/DISPATCHED) rather than
+   actually running -- deliberately translucent so it reads as "not yet doing anything", distinct
+   from the fully-opaque colors below. */
 .dag-node-rect {
   fill: #2a2e38;
+  fill-opacity: 0.35;
   stroke: #3a3f4b;
   stroke-width: 1.5;
 }
 
-.dag-node.selected .dag-node-rect {
-  stroke: #e7e9ee;
-  stroke-width: 2.5;
-}
-
 .dag-node[data-status='active'] .dag-node-rect {
   fill: #1f2f4f;
+  fill-opacity: 1;
   stroke: #7fa8ff;
 }
 
 .dag-node[data-status='succeeded'] .dag-node-rect {
   fill: #163b2c;
+  fill-opacity: 1;
   stroke: #6fcf97;
 }
 
 .dag-node[data-status='failed'] .dag-node-rect {
   fill: #4a1f22;
+  fill-opacity: 1;
   stroke: #f08080;
+}
+
+/* Placed after every [data-status] rule above: same specificity, so source order is what
+   guarantees the selection outline always wins the tie, regardless of the node's status color
+   (previously active/succeeded/failed nodes could silently lose their white outline). */
+.dag-node.selected .dag-node-rect {
+  stroke: #e7e9ee;
+  stroke-width: 2.5;
 }
 
 .dag-node-fo {

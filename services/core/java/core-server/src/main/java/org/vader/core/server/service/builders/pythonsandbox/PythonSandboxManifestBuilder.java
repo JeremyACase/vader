@@ -24,6 +24,12 @@ import org.vader.core.server.service.operators.AbstractOperator;
  * readiness and liveness probes hit that server's {@code /health} endpoint on the same
  * {@code exec} port the Service exposes, so {@link AbstractOperator}'s "Running" phase means the
  * server can actually accept requests, not just that the container process started.</p>
+ *
+ * <p>The workspace directory is an {@code emptyDir} volume rather than the container's own
+ * writable layer, so staged files survive a container restart -- e.g. the server being OOM-killed
+ * at its memory limit while loading a large file -- for as long as the pod itself lives. Staged
+ * files are still lost if the pod is replaced; core-server re-stages anything missing before each
+ * run of an attempt-owned sandbox.</p>
  */
 @Component
 public class PythonSandboxManifestBuilder {
@@ -32,6 +38,9 @@ public class PythonSandboxManifestBuilder {
     private static final String PORT_NAME = "exec";
     private static final int EXEC_PORT = 8888;
     private static final String HEALTH_PATH = "/health";
+    private static final String WORKSPACE_VOLUME_NAME = "workspace";
+    // Must match SANDBOX_WORKSPACE_DIR in core-python-sandbox-server's Dockerfile.
+    private static final String WORKSPACE_MOUNT_PATH = "/workspace";
     private static final long RUN_AS_USER = 1000L;
     private static final String DEFAULT_IMAGE =
         "jeremyacase/vader-core-python-sandbox-server:latest";
@@ -103,6 +112,11 @@ public class PythonSandboxManifestBuilder {
                     .withNewSpec()
                         .withAutomountServiceAccountToken(false)
                         .withContainers(this.buildContainer())
+                        .addNewVolume()
+                            .withName(WORKSPACE_VOLUME_NAME)
+                            .withNewEmptyDir()
+                            .endEmptyDir()
+                        .endVolume()
                     .endSpec()
                 .endTemplate()
             .endSpec()
@@ -142,6 +156,10 @@ public class PythonSandboxManifestBuilder {
                 .withName(PORT_NAME)
                 .withContainerPort(EXEC_PORT)
             .endPort()
+            .addNewVolumeMount()
+                .withName(WORKSPACE_VOLUME_NAME)
+                .withMountPath(WORKSPACE_MOUNT_PATH)
+            .endVolumeMount()
             .addNewEnv()
                 .withName("SANDBOX_EXEC_MAX_TIMEOUT_SECONDS")
                 .withValue(this.execTimeoutSeconds)

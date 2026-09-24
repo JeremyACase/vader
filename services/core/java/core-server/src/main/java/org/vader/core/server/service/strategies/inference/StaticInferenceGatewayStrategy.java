@@ -45,6 +45,8 @@ public class StaticInferenceGatewayStrategy implements InterfaceInferenceGateway
 
     private static final long CANNED_TOKEN_COST = 10L;
 
+    private static final String CANNED_FINISH_REASON = "stop";
+
     @Autowired
     private McpToolCallbackRegistry toolCallbackRegistry;
 
@@ -61,11 +63,13 @@ public class StaticInferenceGatewayStrategy implements InterfaceInferenceGateway
     }
 
     private static InferenceTurn finalTurn() {
-        return new InferenceTurn(CANNED_RESPONSE, List.of(), CANNED_TOKEN_COST);
+        return new InferenceTurn(
+            CANNED_RESPONSE, List.of(), CANNED_TOKEN_COST, CANNED_FINISH_REASON);
     }
 
     private static InferenceTurn scriptedToolCallTurn() {
         var toolCall = new InferenceToolCall(SCRIPTED_TOOL_CALL_ID, SCRIPTED_TOOL_NAME, "{}");
-        return new InferenceTurn(null, List.of(toolCall), CANNED_TOKEN_COST);
+        return new InferenceTurn(
+            null, List.of(toolCall), CANNED_TOKEN_COST, CANNED_FINISH_REASON);
     }
 }

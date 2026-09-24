@@ -84,7 +84,14 @@ public class InferenceTurnLlmExecutor {
         var output = outputOf(chatResponse);
         var content = Objects.isNull(output) ? null : output.getText();
         var toolCalls = Objects.isNull(output) ? List.<InferenceToolCall>of() : toToolCalls(output);
-        return new InferenceTurn(content, toolCalls, tokensSpent(chatResponse));
+        return new InferenceTurn(
+            content, toolCalls, tokensSpent(chatResponse), finishReasonOf(chatResponse));
+    }
+
+    private static String finishReasonOf(final ChatResponse chatResponse) {
+        return Objects.isNull(chatResponse) || Objects.isNull(chatResponse.getResult())
+            ? null
+            : chatResponse.getResult().getMetadata().getFinishReason();
     }
 
     private static AssistantMessage outputOf(final ChatResponse chatResponse) {

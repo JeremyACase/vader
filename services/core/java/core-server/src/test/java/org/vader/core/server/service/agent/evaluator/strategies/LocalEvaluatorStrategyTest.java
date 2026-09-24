@@ -20,11 +20,9 @@ class LocalEvaluatorStrategyTest {
     private static final EvaluationRequest REQUEST = new EvaluationRequest(
         "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of());
 
-    private LocalEvaluatorStrategy strategy(
-            final LlmRequestQueue requestQueue, final boolean fallbackToStatic) {
+    private LocalEvaluatorStrategy strategy(final LlmRequestQueue requestQueue) {
         var strategy = new LocalEvaluatorStrategy();
         ReflectionTestUtils.setField(strategy, "requestQueue", requestQueue);
-        ReflectionTestUtils.setField(strategy, "fallbackToStatic", fallbackToStatic);
         return strategy;
     }
 
@@ -35,29 +33,18 @@ class LocalEvaluatorStrategyTest {
         when(requestQueue.submitEvaluation(REQUEST))
             .thenReturn(new EvaluationOutcome(verdict, null));
 
-        var result = this.strategy(requestQueue, true).evaluate(REQUEST);
+        var result = this.strategy(requestQueue).evaluate(REQUEST);
 
         assertThat(result).isSameAs(verdict);
     }
 
     @Test
-    void evaluate_whenUnreachableAndFallbackEnabled_trustsSelfReportedStatus() {
+    void evaluate_whenUnreachable_throwsOrchestratorUnavailable() {
         var requestQueue = mock(LlmRequestQueue.class);
         when(requestQueue.submitEvaluation(REQUEST))
             .thenReturn(new EvaluationOutcome(null, "connection refused"));
 
-        var result = this.strategy(requestQueue, true).evaluate(REQUEST);
-
-        assertThat(result.passed()).isTrue();
-    }
-
-    @Test
-    void evaluate_whenUnreachableAndFallbackDisabled_throwsOrchestratorUnavailable() {
-        var requestQueue = mock(LlmRequestQueue.class);
-        when(requestQueue.submitEvaluation(REQUEST))
-            .thenReturn(new EvaluationOutcome(null, "connection refused"));
-
-        assertThatThrownBy(() -> this.strategy(requestQueue, false).evaluate(REQUEST))
+        assertThatThrownBy(() -> this.strategy(requestQueue).evaluate(REQUEST))
             .isInstanceOf(OrchestratorUnavailableException.class)
             .hasMessageContaining("local LLM");
     }

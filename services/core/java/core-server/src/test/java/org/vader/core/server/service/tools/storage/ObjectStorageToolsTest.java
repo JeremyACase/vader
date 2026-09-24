@@ -88,7 +88,8 @@ class ObjectStorageToolsTest {
         var map = (Map<String, String>) result;
         assertThat(map.get("error"))
             .contains("EP_Tactics.xlsx")
-            .contains("stage_object");
+            .contains("run_python_code")
+            .doesNotContain("stage_object");
     }
 
     @Test

@@ -32,6 +32,13 @@ public class TaskAttemptTranscript extends AbstractModel {
     @NotNull
     private Long tokensSpent;
 
+    /**
+     * Why the model stopped generating this turn, as the provider reported it -- e.g. Ollama's
+     * {@code stop} or {@code length} (cut off at the output token cap). {@code null} for turns
+     * recorded before this was captured, or when the provider reports none.
+     */
+    private String finishReason;
+
     @Override
     public String getModelType() {
         return "TaskAttemptTranscript";
@@ -83,5 +90,13 @@ public class TaskAttemptTranscript extends AbstractModel {
 
     public void setTokensSpent(Long tokensSpent) {
         this.tokensSpent = tokensSpent;
+    }
+
+    public String getFinishReason() {
+        return this.finishReason;
+    }
+
+    public void setFinishReason(String finishReason) {
+        this.finishReason = finishReason;
     }
 }

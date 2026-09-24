@@ -36,8 +36,11 @@ export interface TaskPlan {
   taskGraph: TaskGraph;
 }
 
-/** Equivalent of org.vader.common.model.vader.entity.WorkflowStatus. */
-export type WorkflowStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+/**
+ * Equivalent of org.vader.common.model.vader.entity.WorkflowStatus. `AWAITING_LLM` is not
+ * terminal: the workflow is paused until the LLM answers again, then returns to `RUNNING`.
+ */
+export type WorkflowStatus = 'RUNNING' | 'AWAITING_LLM' | 'SUCCEEDED' | 'FAILED';
 
 /**
  * Equivalent of org.vader.common.model.vader.dto.Workflow: the decomposition the server

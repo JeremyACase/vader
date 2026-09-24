@@ -37,7 +37,9 @@ spec:
           [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200, got $STATUS"; exit 1; }
           NAME=$(echo "$BODY" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
           [ -n "$NAME" ] || { echo "❌ no sandbox name in response"; exit 1; }
-          echo "✅ created sandbox $NAME"
+          ADDR=$(echo "$BODY" | sed -n 's/.*"clusterAddress":"\([^"]*\)".*/\1/p')
+          [ -n "$ADDR" ] || { echo "❌ no cluster address in response"; exit 1; }
+          echo "✅ created sandbox $NAME at $ADDR"
 
           echo "== List includes the new sandbox =="
           BODY=$(curl -s --max-time 15 "$BASE" || true)
@@ -76,6 +78,16 @@ spec:
           [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading staged file, got $STATUS"; exit 1; }
           echo "$BODY" | grep -q '"stdout":"hello' || { echo "❌ staged file not readable: $BODY"; exit 1; }
           echo "✅ a file staged in one call was readable in a later call"
+
+          echo "== The sandbox reports which files are already staged =="
+          # core-server checks this before every attempt-owned run, staging only what's missing.
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -I \
+            "http://$ADDR:8888/workspace/files/greeting.txt" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 for a staged file, got $STATUS"; exit 1; }
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -I \
+            "http://$ADDR:8888/workspace/files/never-staged.xlsx" || true)
+          [ "$STATUS" = "404" ] || { echo "❌ expected HTTP 404 for a missing file, got $STATUS"; exit 1; }
+          echo "✅ HEAD reports staged files as present and missing ones as absent"
 
           echo "== Delete the sandbox =="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \

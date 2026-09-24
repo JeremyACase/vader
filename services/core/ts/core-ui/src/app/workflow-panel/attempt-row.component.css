@@ -17,6 +17,11 @@
   color: #9aa3b2;
 }
 
+.turn-finish.cut-off {
+  color: #e0a458;
+  font-weight: 600;
+}
+
 .turn-prompt,
 .turn-response {
   white-space: pre-wrap;
