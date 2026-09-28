@@ -2,7 +2,9 @@ package org.vader.core.server.service.io;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,22 +34,45 @@ class QueueMessageProcessorTest {
     }
 
     @Test
-    void claim_flipsPendingToClaimedAndStampsTheAttempt() {
+    void claim_winningTheConditionalUpdate_returnsTheFreshlyReReadMessage() {
+        when(this.repository.claimIfStillPending(
+            eq(this.message.getId()), any(), eq(OutboxMessageStatus.PENDING),
+            eq(OutboxMessageStatus.CLAIMED)))
+            .thenReturn(1);
+
         var claimed = this.processor.claim(this.repository, () -> Optional.of(this.message));
 
         assertThat(claimed).containsSame(this.message);
-        assertThat(this.message.getStatus()).isEqualTo(OutboxMessageStatus.CLAIMED);
-        assertThat(this.message.getClaimedAt()).isNotNull();
-        assertThat(this.message.getAttempts()).isEqualTo(1);
-        verify(this.repository).save(this.message);
+        verify(this.repository).claimIfStillPending(
+            eq(this.message.getId()), any(), eq(OutboxMessageStatus.PENDING),
+            eq(OutboxMessageStatus.CLAIMED));
     }
 
     @Test
-    void claim_whenNothingPending_returnsEmptyAndSavesNothing() {
+    void claim_whenAnotherReplicaWinsTheRace_triesTheNextCandidateTheFinderReports() {
+        var lostRace = new ClientPromptOutboxMessageEntity();
+        var wonRace = new ClientPromptOutboxMessageEntity();
+        when(this.repository.claimIfStillPending(
+            eq(lostRace.getId()), any(), any(), any())).thenReturn(0);
+        when(this.repository.claimIfStillPending(
+            eq(wonRace.getId()), any(), any(), any())).thenReturn(1);
+        when(this.repository.findById(wonRace.getId())).thenReturn(Optional.of(wonRace));
+        when(this.repository.findFirstByStatusOrderByCreatedAtAsc(OutboxMessageStatus.PENDING))
+            .thenReturn(Optional.of(lostRace), Optional.of(wonRace));
+
+        var claimed = this.processor.claim(this.repository,
+            () -> this.repository.findFirstByStatusOrderByCreatedAtAsc(
+                OutboxMessageStatus.PENDING));
+
+        assertThat(claimed).containsSame(wonRace);
+    }
+
+    @Test
+    void claim_whenNothingPending_returnsEmptyAndNeverAttemptsAnUpdate() {
         var claimed = this.processor.claim(this.repository, Optional::empty);
 
         assertThat(claimed).isEmpty();
-        verify(this.repository, org.mockito.Mockito.never()).save(any());
+        verify(this.repository, never()).claimIfStillPending(any(), any(), any(), any());
     }
 
     @Test

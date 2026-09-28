@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -22,9 +23,14 @@ import org.vader.common.library.dao.model.QueryFilterParameter;
 import org.vader.common.library.dao.model.QueryOperatorType;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.core.server.models.EntityDescription;
+import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
+import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceTaskPlanRefinementStrategy;
 import org.vader.core.server.service.io.ClientPromptInbox;
 import org.vader.core.server.service.strategies.inference.InterfaceInferenceGatewayStrategy;
-import org.vader.core.server.service.strategies.orchestration.interfaces.InterfaceLlmOrchestrationStrategy;
+import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -45,6 +51,18 @@ class DatabaseQueryIntegrationTest {
     @MockitoBean
     private InterfaceInferenceGatewayStrategy inferenceGateway;
 
+    @MockitoBean
+    private InterfaceWorkflowSynthesisStrategy synthesisStrategy;
+
+    @MockitoBean
+    private InterfaceEvaluatorStrategy evaluatorStrategy;
+
+    @MockitoBean
+    private InterfaceReattemptDecisionStrategy reattemptDecisionStrategy;
+
+    @MockitoBean
+    private InterfaceTaskPlanRefinementStrategy taskPlanRefinementStrategy;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -54,8 +72,16 @@ class DatabaseQueryIntegrationTest {
     @Autowired
     private ClientPromptInbox clientPromptInbox;
 
+    @BeforeEach
+    void stubRefinementApproval() {
+        // Not the focus of these tests -- always approve so decomposition behaves exactly as it
+        // did before refinement existed.
+        when(this.taskPlanRefinementStrategy.critique(any()))
+            .thenReturn(new TaskPlanRefinementVerdict(false, "approved"));
+    }
+
     private void submitPrompt() throws Exception {
-        when(this.orchestrator.orchestrate(any(ClientPrompt.class))).thenReturn(PLAN);
+        when(this.orchestrator.orchestrate(any(ClientPrompt.class), any())).thenReturn(PLAN);
         this.mockMvc.perform(multipart("/vader/core-server/client-prompt")
                 .param("text", "Plan a birthday party"))
             .andExpect(status().isAccepted());
@@ -92,12 +118,12 @@ class DatabaseQueryIntegrationTest {
     }
 
     @Test
-    void describe_listsTheEightEntitiesAndNotFileContent() {
+    void describe_listsTheTenEntitiesAndNotFileContent() {
         assertThat(this.databaseQueryService.describe())
             .extracting(EntityDescription::name)
             .containsExactlyInAnyOrder(
                 "Workflow", "ClientPrompt", "TaskPlan", "TaskGraph", "Task", "ObjectMetadata",
-                "TaskAttempt", "TaskAttemptTranscript");
+                "TaskAttempt", "TaskAttemptTranscript", "TaskAttemptToolCall", "TaskUpdate");
     }
 
     private static QueryFilterParameter parameter(

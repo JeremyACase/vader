@@ -1,14 +1,19 @@
 use crate::assignment::{Assignment, AssignmentId};
 use crate::control_plane::ControlPlane;
 use crate::error::HarnessError;
-use crate::inference_gateway::{InferenceGateway, InferenceTurn};
+use crate::inference_gateway::{
+    ConversationMessage, ConversationRole, InferenceGateway, InferenceTurn, ToolCall,
+};
 use crate::runner::HarnessOutcome;
+use crate::tool_executor::{ToolExecutor, ToolResult};
 use crate::wire::{
-    HeartbeatRequestBody, InferenceRequestBody, InferenceResponseBody, ResultRequestBody,
+    ConversationMessageBody, ConversationRoleBody, HeartbeatRequestBody, InferenceRequestBody,
+    InferenceResponseBody, ResultRequestBody, ToolCallBody, ToolCallInvocationRequestBody,
+    ToolCallInvocationResultBody,
 };
 
-/// The harness's single external dependency: `core-server`. Adapts both the
-/// [`ControlPlane`] and [`InferenceGateway`] traits onto `core-server`'s REST surface, since a
+/// The harness's single external dependency: `core-server`. Adapts the [`ControlPlane`],
+/// [`InferenceGateway`], and [`ToolExecutor`] traits onto `core-server`'s REST surface, since a
 /// harness only ever needs to reach one host.
 #[derive(Clone)]
 pub struct CoreServerAdapter {
@@ -26,13 +31,12 @@ impl CoreServerAdapter {
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, HarnessError> {
         let url = format!("{}{path}", self.base_url);
-        let response = self
-            .http_client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|source| HarnessError::ControlPlaneUnavailable(source.to_string()))?;
-        Self::body_on_success(response, HarnessError::ControlPlaneUnavailable).await
+        log::debug!("GET {url}");
+        let response = self.http_client.get(&url).send().await.map_err(|source| {
+            log::warn!("GET {url} failed: {source}");
+            HarnessError::ControlPlaneUnavailable(source.to_string())
+        })?;
+        Self::body_on_success(&url, response, HarnessError::ControlPlaneUnavailable).await
     }
 
     async fn post_no_content(
@@ -41,19 +45,45 @@ impl CoreServerAdapter {
         body: &impl serde::Serialize,
     ) -> Result<(), HarnessError> {
         let url = format!("{}{path}", self.base_url);
+        log::debug!("POST {url}");
         let response = self
             .http_client
             .post(&url)
             .json(body)
             .send()
             .await
-            .map_err(|source| HarnessError::ControlPlaneUnavailable(source.to_string()))?;
-        Self::ensure_success(response, HarnessError::ControlPlaneUnavailable)
+            .map_err(|source| {
+                log::warn!("POST {url} failed: {source}");
+                HarnessError::ControlPlaneUnavailable(source.to_string())
+            })?;
+        Self::ensure_success(&url, response, HarnessError::ControlPlaneUnavailable)
             .await
             .map(|_| ())
     }
 
+    async fn post_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &impl serde::Serialize,
+        to_error: impl Fn(String) -> HarnessError,
+    ) -> Result<T, HarnessError> {
+        let url = format!("{}{path}", self.base_url);
+        log::debug!("POST {url}");
+        let response = self
+            .http_client
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|source| {
+                log::warn!("POST {url} failed: {source}");
+                to_error(source.to_string())
+            })?;
+        Self::body_on_success(&url, response, to_error).await
+    }
+
     async fn ensure_success(
+        url: &str,
         response: reqwest::Response,
         to_error: impl Fn(String) -> HarnessError,
     ) -> Result<reqwest::Response, HarnessError> {
@@ -62,18 +92,20 @@ impl CoreServerAdapter {
         }
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
+        log::warn!("{url} returned HTTP {status}: {body}");
         Err(to_error(format!("HTTP {status}: {body}")))
     }
 
     async fn body_on_success<T: serde::de::DeserializeOwned>(
+        url: &str,
         response: reqwest::Response,
         to_error: impl Fn(String) -> HarnessError,
     ) -> Result<T, HarnessError> {
-        let response = Self::ensure_success(response, &to_error).await?;
-        response
-            .json::<T>()
-            .await
-            .map_err(|source| to_error(source.to_string()))
+        let response = Self::ensure_success(url, response, &to_error).await?;
+        response.json::<T>().await.map_err(|source| {
+            log::warn!("{url} returned a body that could not be parsed: {source}");
+            to_error(source.to_string())
+        })
     }
 }
 
@@ -130,26 +162,90 @@ impl InferenceGateway for CoreServerAdapter {
     async fn complete_turn(
         &self,
         assignment_id: AssignmentId,
-        prompt: &str,
+        messages: &[ConversationMessage],
     ) -> Result<InferenceTurn, HarnessError> {
-        let url = format!("{}/vader/core-server/agent/inference", self.base_url);
         let body = InferenceRequestBody {
             assignment_id: assignment_id.0.to_string(),
-            prompt: prompt.to_string(),
+            messages: messages.iter().map(to_message_body).collect(),
         };
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|source| HarnessError::InferenceUnavailable(source.to_string()))?;
-        let parsed: InferenceResponseBody =
-            Self::body_on_success(response, HarnessError::InferenceUnavailable).await?;
+        let parsed: InferenceResponseBody = self
+            .post_json(
+                "/vader/core-server/agent/inference",
+                &body,
+                HarnessError::InferenceUnavailable,
+            )
+            .await?;
         Ok(InferenceTurn {
             content: parsed.content,
+            tool_calls: parsed
+                .tool_calls
+                .into_iter()
+                .map(from_tool_call_body)
+                .collect(),
             tokens_spent: parsed.tokens_spent,
+            finish_reason: parsed.finish_reason,
         })
+    }
+}
+
+impl ToolExecutor for CoreServerAdapter {
+    async fn invoke_tool(
+        &self,
+        assignment_id: AssignmentId,
+        tool_call: &ToolCall,
+    ) -> Result<ToolResult, HarnessError> {
+        let body = ToolCallInvocationRequestBody {
+            assignment_id: assignment_id.0.to_string(),
+            tool_call_id: tool_call.id.clone(),
+            tool_name: tool_call.name.clone(),
+            arguments_json: tool_call.arguments_json.clone(),
+        };
+        let parsed: ToolCallInvocationResultBody = self
+            .post_json(
+                "/vader/core-server/agent/tool-calls",
+                &body,
+                HarnessError::ToolInvocationUnavailable,
+            )
+            .await?;
+        Ok(ToolResult {
+            tool_call_id: parsed.tool_call_id,
+            result_json: parsed.result_json,
+        })
+    }
+}
+
+fn to_message_body(message: &ConversationMessage) -> ConversationMessageBody {
+    ConversationMessageBody {
+        role: to_role_body(message.role),
+        content: message.content.clone(),
+        tool_calls: message.tool_calls.iter().map(to_tool_call_body).collect(),
+        tool_call_id: message.tool_call_id.clone(),
+        tool_name: message.tool_name.clone(),
+    }
+}
+
+fn to_role_body(role: ConversationRole) -> ConversationRoleBody {
+    match role {
+        ConversationRole::System => ConversationRoleBody::System,
+        ConversationRole::User => ConversationRoleBody::User,
+        ConversationRole::Assistant => ConversationRoleBody::Assistant,
+        ConversationRole::Tool => ConversationRoleBody::Tool,
+    }
+}
+
+fn to_tool_call_body(tool_call: &ToolCall) -> ToolCallBody {
+    ToolCallBody {
+        id: tool_call.id.clone(),
+        name: tool_call.name.clone(),
+        arguments_json: tool_call.arguments_json.clone(),
+    }
+}
+
+fn from_tool_call_body(body: ToolCallBody) -> ToolCall {
+    ToolCall {
+        id: body.id,
+        name: body.name,
+        arguments_json: body.arguments_json,
     }
 }
 
@@ -211,5 +307,33 @@ mod tests {
             "TIMED_OUT"
         );
         assert_eq!(result_body_for(&HarnessOutcome::Stalled).status, "STALLED");
+    }
+
+    #[test]
+    fn to_message_body_roundtrips_a_tool_result_message() {
+        let message = ConversationMessage::tool_result("call-1", "get_object_content", "{}");
+
+        let body = to_message_body(&message);
+
+        assert_eq!(body.role, ConversationRoleBody::Tool);
+        assert_eq!(body.tool_call_id.as_deref(), Some("call-1"));
+        assert_eq!(body.tool_name.as_deref(), Some("get_object_content"));
+        assert_eq!(body.content.as_deref(), Some("{}"));
+    }
+
+    #[test]
+    fn to_message_body_carries_assistant_tool_calls() {
+        let tool_call = ToolCall {
+            id: "call-1".to_string(),
+            name: "get_object_content".to_string(),
+            arguments_json: "{\"id\":\"abc\"}".to_string(),
+        };
+        let message = ConversationMessage::assistant_tool_calls(vec![tool_call]);
+
+        let body = to_message_body(&message);
+
+        assert_eq!(body.role, ConversationRoleBody::Assistant);
+        assert_eq!(body.tool_calls.len(), 1);
+        assert_eq!(body.tool_calls[0].name, "get_object_content");
     }
 }

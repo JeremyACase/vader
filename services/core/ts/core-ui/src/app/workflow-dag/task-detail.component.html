@@ -1,0 +1,10 @@
+<div class="card detail-card">
+  <h3 class="task-title">{{task().title}}</h3>
+  <p class="task-desc">{{task().description}}</p>
+
+  <h4>Attempts</h4>
+  <app-task-row [taskId]="task().id!" />
+
+  <h4>Update history</h4>
+  <app-task-update-history [taskId]="task().id!" />
+</div>

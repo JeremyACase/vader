@@ -1,0 +1,42 @@
+plugins {
+    id 'base'
+}
+
+// Every pip/ruff/pytest invocation below runs inside Docker, never against a host Python
+// install -- some machines running this build don't have Python 3.12 available. Mirrors
+// services/core/rust/core-agent-harness's dockerized-cargo approach.
+def pythonImage = 'python:3.12-slim'
+def pipCacheVolume = 'vader-core-python-sandbox-server-pip-cache'
+
+def dockerRunPython = { String shellCommand ->
+    [
+        'docker', 'run', '--rm',
+        '-v', "${projectDir}:/app",
+        '-v', "${pipCacheVolume}:/root/.cache/pip",
+        '-w', '/app',
+        pythonImage,
+        'sh', '-c', "pip install --quiet -r requirements-dev.txt && ${shellCommand}"
+    ]
+}
+
+tasks.register('ruffCheck', Exec) {
+    commandLine dockerRunPython('ruff check .')
+}
+
+tasks.register('ruffFormatCheck', Exec) {
+    commandLine dockerRunPython('ruff format --check .')
+}
+
+tasks.register('mypyCheck', Exec) {
+    commandLine dockerRunPython('mypy core_python_sandbox_server')
+}
+
+tasks.register('pytestCorePythonSandboxServer', Exec) {
+    dependsOn 'ruffCheck', 'ruffFormatCheck', 'mypyCheck'
+    commandLine dockerRunPython('pytest')
+}
+
+tasks.named('check').configure {
+    dependsOn 'ruffCheck', 'ruffFormatCheck', 'mypyCheck', 'pytestCorePythonSandboxServer'
+}
+tasks.named('build').configure { dependsOn 'assemble', 'check' }

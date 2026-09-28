@@ -3,6 +3,29 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0]
+### Changed
+- The transcript mapper carries each turn's finish reason.
+
+## [0.16.0]
+### Changed
+- The `TaskUpdate` mapper now also carries the new author field.
+
+## [0.15.0]
+### Changed
+- The `TaskUpdate` mapper now also carries the specific attempt an update is about.
+
+## [0.14.0]
+### Added
+- Mapper for the new `TaskUpdate` model.
+### Changed
+- `Task` mapping carries a shallow reference to its updates, following the existing convention
+  of ids-only for the "many" side of a relationship.
+
+## [0.13.0]
+### Added
+- Mapper for the new `TaskAttemptToolCall` model.
+
 ## [0.12.0]
 ### Added
 - Mappers for the new `TaskAttempt` and `TaskAttemptTranscript` models.

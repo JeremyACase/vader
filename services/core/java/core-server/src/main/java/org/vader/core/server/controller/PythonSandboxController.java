@@ -1,22 +1,18 @@
 package org.vader.core.server.controller;
 
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import java.util.List;
-import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.vader.core.server.models.SandboxExecutionRequest;
+import org.vader.core.server.models.SandboxExecutionResult;
 import org.vader.core.server.models.SandboxInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
@@ -33,8 +29,6 @@ import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxServic
     havingValue = "true",
     matchIfMissing = false)
 public class PythonSandboxController {
-
-    private static final Logger logger = LoggerFactory.getLogger(PythonSandboxController.class);
 
     @Autowired
     private PythonSandboxService service;
@@ -75,18 +69,16 @@ public class PythonSandboxController {
     }
 
     /**
-     * Maps a Kubernetes API failure to a 502, since the failure originates upstream of this
-     * service rather than in the caller's request.
+     * Runs code inside a sandbox and returns its output.
      *
-     * @param exception the Kubernetes client failure
-     * @return a 502 response describing the failure
+     * @param name the exact sandbox name
+     * @param request the code (and any files) to run
+     * @return the run's stdout/stderr/exit code
      */
-    @ExceptionHandler(KubernetesClientException.class)
-    public ResponseEntity<Map<String, String>> handleKubernetes(
-        final KubernetesClientException exception) {
-        logger.warn("Kubernetes call failed: {}", exception.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(Map.of("error", "kubernetes_error", "message", exception.getMessage()));
+    @PostMapping("/{name}/execute")
+    public ResponseEntity<SandboxExecutionResult> execute(
+        @PathVariable final String name, @RequestBody final SandboxExecutionRequest request) {
+        return ResponseEntity.ok(this.service.runCode(name, request));
     }
 
     /**

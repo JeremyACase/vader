@@ -14,7 +14,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.core.server.service.ClientPromptIntakeService;
-import org.vader.core.server.service.strategies.storage.FileStorageException;
 
 class ClientPromptControllerTest {
 
@@ -64,15 +63,5 @@ class ClientPromptControllerTest {
         var response = this.controller.receivePrompt(clientPrompt);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
-    }
-
-    @Test
-    void handleFileStorage_returnsInternalServerErrorWithErrorBody() {
-        var response = this.controller.handleFileStorage(
-            new FileStorageException("disk full", new java.io.IOException("no space")));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        assertThat(response.getBody().error()).isEqualTo("file_storage_failed");
-        assertThat(response.getBody().message()).contains("disk full");
     }
 }

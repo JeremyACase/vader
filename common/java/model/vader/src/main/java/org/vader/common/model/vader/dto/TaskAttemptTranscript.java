@@ -7,7 +7,10 @@ import jakarta.validation.constraints.NotNull;
  * returned, while a {@link TaskAttempt} was running.
  *
  * <p>{@code taskAttemptId} is a shallow reference, same convention as every other cross-model
- * reference in this package.</p>
+ * reference in this package. {@code prompt} holds only the messages newly appended since the
+ * previous turn -- concatenate every turn's {@code prompt} in {@code turnIndex} order to
+ * reconstruct the full conversation; {@code messageCount} is the cumulative running total as of
+ * this turn.</p>
  */
 public class TaskAttemptTranscript extends AbstractModel {
 
@@ -21,10 +24,20 @@ public class TaskAttemptTranscript extends AbstractModel {
     private String prompt;
 
     @NotNull
+    private Integer messageCount;
+
+    @NotNull
     private String response;
 
     @NotNull
     private Long tokensSpent;
+
+    /**
+     * Why the model stopped generating this turn, as the provider reported it -- e.g. Ollama's
+     * {@code stop} or {@code length} (cut off at the output token cap). {@code null} for turns
+     * recorded before this was captured, or when the provider reports none.
+     */
+    private String finishReason;
 
     @Override
     public String getModelType() {
@@ -55,6 +68,14 @@ public class TaskAttemptTranscript extends AbstractModel {
         this.prompt = prompt;
     }
 
+    public Integer getMessageCount() {
+        return this.messageCount;
+    }
+
+    public void setMessageCount(Integer messageCount) {
+        this.messageCount = messageCount;
+    }
+
     public String getResponse() {
         return this.response;
     }
@@ -69,5 +90,13 @@ public class TaskAttemptTranscript extends AbstractModel {
 
     public void setTokensSpent(Long tokensSpent) {
         this.tokensSpent = tokensSpent;
+    }
+
+    public String getFinishReason() {
+        return this.finishReason;
+    }
+
+    public void setFinishReason(String finishReason) {
+        this.finishReason = finishReason;
     }
 }

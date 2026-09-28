@@ -27,7 +27,11 @@ public class QueueMessageProcessor {
     private static final Logger logger = LoggerFactory.getLogger(QueueMessageProcessor.class);
 
     /**
-     * Claims the oldest pending message the finder returns, in its own transaction.
+     * Claims the oldest pending message the finder returns, in its own transaction -- safely
+     * across multiple replicas polling the same table, via
+     * {@link OutboxMessageRepository#claimIfStillPending}. If another replica's claim of the same
+     * candidate wins the race, this retries against whatever the finder now reports as oldest
+     * pending, rather than giving up.
      *
      * @param repository the message repository
      * @param pendingFinder supplies the oldest pending message, if any
@@ -39,16 +43,23 @@ public class QueueMessageProcessor {
         final OutboxMessageRepository<M> repository,
         final Supplier<Optional<M>> pendingFinder) {
 
-        var found = pendingFinder.get();
-        found.ifPresent(message -> {
-            message.setStatus(OutboxMessageStatus.CLAIMED);
-            message.setClaimedAt(OffsetDateTime.now());
-            message.setAttempts(message.getAttempts() + 1);
-            repository.save(message);
-            logger.debug("Claimed queue message {} (attempt {})",
-                message.getId(), message.getAttempts());
-        });
-        return found;
+        var candidate = pendingFinder.get();
+        while (candidate.isPresent()) {
+            var id = candidate.get().getId();
+            var won = repository.claimIfStillPending(
+                id, OffsetDateTime.now(), OutboxMessageStatus.PENDING, OutboxMessageStatus.CLAIMED);
+            if (won == 1) {
+                var claimed = repository.findById(id);
+                claimed.ifPresent(message -> logger.debug(
+                    "Claimed queue message {} (attempt {})", message.getId(),
+                    message.getAttempts()));
+                return claimed;
+            }
+            logger.debug(
+                "Lost the race to claim queue message {}; trying the next pending one", id);
+            candidate = pendingFinder.get();
+        }
+        return Optional.empty();
     }
 
     /**

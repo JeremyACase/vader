@@ -6,15 +6,24 @@
   <ul class="workflow-list">
     @for (workflow of sortedWorkflows(); track workflow.id) {
       <li class="workflow-row">
-        <button type="button" class="workflow-summary" (click)="toggle(workflow.clientPromptId)">
-          <span class="chevron">{{isExpanded(workflow.clientPromptId) ? '▾' : '▸'}}</span>
+        <button
+          type="button"
+          class="workflow-summary"
+          [class.selected]="isSelected(workflow.id)"
+          [disabled]="isPlaceholder(workflow)"
+          (click)="select(workflow)">
           <span class="status-badge" [attr.data-status]="workflow.status">{{workflow.status}}</span>
           <span class="workflow-objective">{{workflow.taskPlan?.objective ?? 'Decomposing…'}}</span>
         </button>
-        @if (isExpanded(workflow.clientPromptId)) {
-          <app-workflow-detail [workflow]="workflow" />
-        }
       </li>
     }
   </ul>
+
+  @if (workflowsPage().totalElements > pageSize) {
+    <div class="pagination">
+      <button type="button" (click)="previousPage()" [disabled]="!canGoPrevious()">◂ Prev</button>
+      <span class="hint">Page {{page() + 1}} of {{totalPages()}}</span>
+      <button type="button" (click)="nextPage()" [disabled]="!canGoNext()">Next ▸</button>
+    </div>
+  }
 </section>

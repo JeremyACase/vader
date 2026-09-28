@@ -11,22 +11,23 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ClientPromptOutboxMessageEntity;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
-import org.vader.core.server.service.WorkflowService;
+import org.vader.core.server.service.agent.orchestrator.OrchestratorAgentService;
 
 class ClientPromptInboxTest {
 
     private static final String PROMPT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 
-    private WorkflowService workflowService;
+    private OrchestratorAgentService orchestratorAgentService;
     private TaskExecutor executor;
     private ClientPromptInbox inbox;
 
     @BeforeEach
     void setUp() {
-        this.workflowService = mock(WorkflowService.class);
+        this.orchestratorAgentService = mock(OrchestratorAgentService.class);
         this.executor = mock(TaskExecutor.class);
         this.inbox = new ClientPromptInbox();
-        ReflectionTestUtils.setField(this.inbox, "workflowService", this.workflowService);
+        ReflectionTestUtils.setField(
+            this.inbox, "orchestratorAgentService", this.orchestratorAgentService);
         ReflectionTestUtils.setField(this.inbox, "executor", this.executor);
     }
 
@@ -42,7 +43,7 @@ class ClientPromptInboxTest {
     void handle_decomposesThePromptCarriedByTheMessage() {
         this.inbox.handle(messageForPrompt());
 
-        verify(this.workflowService).decompose(PROMPT_ID);
+        verify(this.orchestratorAgentService).decompose(PROMPT_ID);
     }
 
     @Test

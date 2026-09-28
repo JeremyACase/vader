@@ -1,0 +1,24 @@
+.detail-card {
+  margin-top: 1rem;
+}
+
+.task-title {
+  margin: 0 0 0.4rem;
+}
+
+.task-desc {
+  color: #9aa3b2;
+  margin: 0 0 1rem;
+}
+
+h4 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 0.9rem;
+  color: #9aa3b2;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+h4:first-of-type {
+  margin-top: 0;
+}

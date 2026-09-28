@@ -43,14 +43,17 @@ exposed.
 
 `vader.orchestrator.type` picks the strategy (`@ConditionalOnProperty`):
 
-- `static` — returns a fixed `StaticTaskPlan`, no LLM. Used by the Helm/CI tests.
+- `static` — returns a fixed `StaticTaskPlan`, no LLM, whatever the prompt. For the devops test
+  pipeline only: it requires `vader.mode: TEST`, and both the Helm chart and core-server refuse
+  to run it in any other mode.
 - `local` — Spring AI `ChatClient` against an in-cluster Ollama. The client prompt is sent
   **with every registered tool** (each `ToolCallbackProvider` bean — currently the MCP operator
   tools) and the model may call them while decomposing; the final message is
   structured-output-converted to a `TaskPlan`. Needs a tool-capable model
-  (`vader.orchestrator.local.model`, e.g. `qwen2.5:3b`) for tool calls to actually happen.
-  - `vader.orchestrator.local.fallback-to-static` (default `true`): if the LLM is unreachable,
-    return the `StaticTaskPlan` (logged `warn`) rather than a 503, so tests pass with no Ollama.
+  (`vader.orchestrator.local.model`, e.g. `qwen2.5:7b`) for tool calls to actually happen.
+  - When the LLM is unreachable it always fails loudly with a 502, in every `vader.mode` — it
+    never substitutes a canned plan (or a canned evaluation, reattempt decision, or refinement
+    verdict) for a real request.
 
 ## Kubernetes operators
 
@@ -61,15 +64,31 @@ LLMs as MCP tools.
 `vader.operators.enabled=true` is the master switch — it builds the shared Kubernetes client and
 the RBAC Role/RoleBinding. Each operator then has its own flag; the first is the **Python sandbox
 operator** (`vader.operators.python-sandbox.enabled=true`), which manages the lifecycle of
-isolated `python:3.12-slim` sandbox pods. Both are off by default.
+isolated sandbox pods running `core-python-sandbox-server`
+(`services/core/python/core-python-sandbox-server`) -- a small HTTP server that runs submitted
+code as a subprocess against a persistent per-pod workspace and returns its output, with
+`pandas`/`openpyxl` preinstalled for spreadsheet analysis. Both master and operator flags are off
+by default when unset (e.g. a bare `bootRun`); the Helm chart turns both on.
 
-- MCP: `create_sandbox`, `list_sandboxes`, `delete_sandbox`, served over the Spring AI MCP SSE
-  endpoint (`GET /sse`, `POST /mcp/message`) on this service's port.
+- **Task agents** get a single tool, `run_python_code(code, files?)`, which runs in the calling
+  attempt's own sandbox (`vader-sandbox-attempt-<attemptId>`). core-server creates it lazily on
+  the first call, stages every file attached to the original request into it (and re-stages any
+  that went missing) before each run, and deletes it when the attempt settles. The model never
+  sees or supplies a sandbox name: the attempt comes from a server-supplied tool context.
+- **Ops/MCP** keep the ad-hoc tools -- `create_sandbox`, `list_sandboxes`, `delete_sandbox`,
+  `stage_object`, `run_python_code_in_sandbox` -- served over the Spring AI MCP SSE endpoint
+  (`GET /sse`, `POST /mcp/message`) on this service's port and offered to no internal agent. The
+  workspace (an `emptyDir`, so it survives container restarts) persists across calls, so a file
+  staged once is there for every later call against that sandbox.
 - REST (used by the Helm smoke test and for debugging):
   - `POST /vader/core-server/python-sandbox/sandboxes` — body `{"name": "<optional>"}`.
   - `GET /vader/core-server/python-sandbox/sandboxes`.
+  - `POST /vader/core-server/python-sandbox/sandboxes/{name}/execute` — body
+    `{"code": "...", "files": {"<filename>": "<base64>"}}`; returns
+    `{stdout, stderr, exitCode, timedOut}`.
   - `DELETE /vader/core-server/python-sandbox/sandboxes/{name}`.
-  - `502` when the Kubernetes API call fails.
+  - `502` when the Kubernetes API call fails, or when the sandbox's own HTTP server is
+    unreachable.
 
 ## Object storage
 

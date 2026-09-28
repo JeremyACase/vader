@@ -1,9 +1,44 @@
+:host {
+  display: block;
+}
+
 .detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.detail-main {
+  flex: 1;
+  min-width: 0;
   margin: 0.5rem 0 0.75rem 1rem;
   padding: 0.75rem 1rem;
   background: #12141b;
   border: 1px solid #2a2e38;
   border-radius: 8px;
+}
+
+/* Anchored beside the DAG rather than stacked beneath it, so selecting a node doesn't require
+   scrolling past the graph to see its attempts/updates -- it scrolls independently instead. */
+.detail-side {
+  width: 380px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 1.5rem;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .detail {
+    flex-direction: column;
+  }
+
+  .detail-side {
+    position: static;
+    width: 100%;
+    max-height: none;
+  }
 }
 
 .prompt-text {
@@ -16,36 +51,23 @@
   color: #d5d8e0;
 }
 
-.task-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
+.final-result {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.75rem;
+  background: #0f1115;
+  border: 1px solid #2f5c47;
+  border-radius: 6px;
 }
 
-.task-item {
-  padding: 0.4rem 0;
-  border-top: 1px solid #2a2e38;
+.final-result-label {
+  margin: 0 0 0.3rem;
+  color: #6fcf97;
+  font-size: 0.85rem;
 }
 
-.task-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: none;
-  border: none;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
+.final-result-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.task-title {
-  font-weight: 600;
-}
-
-.task-desc {
-  margin: 0.2rem 0 0 1.25rem;
-  color: #9aa3b2;
-  font-size: 0.9rem;
-}

@@ -13,16 +13,16 @@ import org.vader.common.model.vader.entity.TaskAssignmentOutboxMessageEntity;
 import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.repository.OutboxMessageRepository;
 import org.vader.core.server.repository.TaskAssignmentOutboxMessageRepository;
-import org.vader.core.server.service.agent.TaskAttemptService;
+import org.vader.core.server.service.agent.task.TaskAgentService;
 import org.vader.core.server.service.operators.agentharness.AgentHarnessOperator;
 
 /**
  * Inbox for task assignments: pops pending assignment messages and asks the agent-harness
- * operator to create a Job for each, via {@link TaskAttemptService}.
+ * operator to create a Job for each, via {@link TaskAgentService}.
  *
  * <p>{@code handle} only ever touches the claimed message's id (safe to read outside a session,
  * same as every other lazy-proxy field access in this package's inboxes) -- the actual
- * dispatch and status mutation happen inside {@link TaskAttemptService}'s own transactional
+ * dispatch and status mutation happen inside {@link TaskAgentService}'s own transactional
  * methods, which re-fetch fresh by id.</p>
  */
 @Service
@@ -33,15 +33,15 @@ public class TaskAssignmentInbox extends AbstractInbox<TaskAssignmentOutboxMessa
     @Autowired
     private TaskAssignmentOutboxMessageRepository messageRepository;
 
-    // Lazy: this inbox is itself one of BackpressureRegistry's queues, and TaskAttemptService
+    // Lazy: this inbox is itself one of BackpressureRegistry's queues, and TaskAgentService
     // depends on InterfaceInferenceGatewayStrategy -- in "local" mode,
     // LocalInferenceGatewayStrategy drags in Ollama's ChatClient.Builder and the whole Spring AI
     // tool-calling graph, which wires BackpressureTools back to BackpressureRegistry, closing a
     // cycle back through this bean. Same reasoning as ClientPromptInbox's own (pre-existing)
-    // lazy WorkflowService.
+    // lazy OrchestratorAgentService.
     @Autowired
     @Lazy
-    private TaskAttemptService taskAttemptService;
+    private TaskAgentService taskAttemptService;
 
     @Autowired(required = false)
     private AgentHarnessOperator operator;

@@ -1,11 +1,20 @@
 <div class="transcript">
+  @if (attempt().result) {
+    <p class="result-label"><strong>Result:</strong></p>
+    <pre class="result-text">{{attempt().result}}</pre>
+  }
   @if (!transcripts().length) {
     <p class="muted">No transcript recorded yet.</p>
   }
   <ol class="turns">
     @for (turn of transcripts(); track turn.id) {
       <li class="turn">
-        <p class="turn-index">Turn {{turn.turnIndex}}</p>
+        <p class="turn-index">
+          Turn {{turn.turnIndex}}
+          @if (finishLabel(turn); as label) {
+            <span class="turn-finish" [class.cut-off]="isCutOff(turn)">· {{label}}</span>
+          }
+        </p>
         <pre class="turn-prompt">{{turn.prompt}}</pre>
         <pre class="turn-response">{{turn.response}}</pre>
       </li>

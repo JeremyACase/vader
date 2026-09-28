@@ -13,6 +13,11 @@ logging:
   vader: INFO
 
 vader:
+  # Allowable values are: DEV, PROD, TEST. Canned results are permitted ONLY in TEST: the chart
+  # refuses to render, and core-server refuses to start, with orchestrator.type "static" in any
+  # other mode. In DEV and PROD an unreachable LLM always fails loudly -- nothing ever substitutes
+  # a canned result for a real request. This chart's out-of-the-box default is DEV; a real
+  # deployment should set PROD, and only the devops test pipeline (configurations/test) sets TEST.
   mode: DEV
   swagger:
     # When true, core-server serves the OpenAPI spec at /v3/api-docs and Swagger UI at
@@ -36,18 +41,51 @@ vader:
   orchestrator:
     # Allowable values are:
     #   local  - route prompts through an in-cluster Ollama instance
-    #   static - return a fixed, canned decomposition (no LLM; used for deterministic tests)
+    #   static - return a fixed, canned decomposition (no LLM). Requires mode TEST: for the
+    #            devops test pipeline only, never a dev or prod deployment.
     # (Remote/cloud-hosted LLM backends can be added here later, following the same pattern.)
     type: local
+    # How many times a task plan may be sent back for revision (structural problem, or the
+    # refinement critique flags it) before the last plan is used anyway rather than blocking the
+    # prompt indefinitely. 0 disables refinement's re-decomposition (the plan is still checked and
+    # logged, just never revised).
+    maxTaskPlanRevisions: 1
     local:
       # The Ollama model to download and run. Only used when orchestrator.type is "local".
       # Must support tool-calling and structured output for the orchestrator to work: qwen2.5
       # does both. Reasoning models (e.g. deepseek-r1) and sub-2B models tend to return
-      # malformed plans and rarely call tools.
-      model: qwen2.5:3b
-      # When the in-cluster LLM is unreachable, fall back to the canned static task plan rather
-      # than returning a 503. Keeps `helm test` / CI green without an Ollama deployment.
-      fallbackToStatic: true
+      # malformed plans and rarely call tools. qwen2.5:3b also runs, but its tool calls are
+      # unreliable enough that task agents regularly fail on them; the 7b model needs roughly
+      # 5-6 GB of memory on the node running Ollama.
+      model: qwen2.5:7b
+      # Bounds every individual Ollama HTTP call. Raise this if your hardware is slow enough that
+      # legitimate (if verbose) generations routinely exceed it -- but keep it well under
+      # agentHarness.deadlineSeconds, since a call this long already eats most of a task's budget.
+      requestTimeoutSeconds: 300
+      # Hard cap on how many tokens the model may generate in any single response (Ollama's
+      # num_predict), applied to every call: decomposition, agent inference turns, evaluation,
+      # reattempt decisions, refinement, synthesis. Without it a small model at temperature 0 can
+      # fall into a repetition loop and generate forever -- past requestTimeoutSeconds, and even
+      # after core-server gives up, holding Ollama's only slot so every later call queues behind
+      # it. A response that genuinely needs more than this is cut off and fails loudly (e.g. an
+      # unparseable plan) rather than hanging. Tune per model: larger or more verbose models may
+      # need more.
+      maxOutputTokens: 2048
+      # Ollama's context window (num_ctx) for every call, prompt and reply together. Ollama
+      # reserves maxOutputTokens of it for the reply, so the prompt budget is contextTokens minus
+      # maxOutputTokens -- and a prompt over that budget is silently cut from the front, dropping
+      # the system instructions first. Ollama's own default (4096) left only ~2k tokens of prompt,
+      # which task-plan decomposition and any agent turn carrying a tool result easily exceed.
+      # Must be larger than maxOutputTokens (the chart refuses to render otherwise). Costs KV-cache
+      # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
+      # on 32k, so there is no benefit going above 32768.
+      contextTokens: 16384
+      # How long the core-server Helm system test waits for each submitted prompt to be
+      # decomposed into a workflow. A real model on modest hardware takes minutes per
+      # decomposition, and a later prompt also queues behind earlier workflows' agent calls on the
+      # single LLM worker, so this is far above the fixed budget the static orchestrator gets.
+      # Pass a `helm test --timeout` that covers this for both of the test's prompts.
+      systemTestWorkflowWaitSeconds: 900
   storage:
     # Allowable values are:
     #   database - store uploaded file contents as BLOBs in the relational database (default;
@@ -84,6 +122,39 @@ vader:
       # rate, not how many harness Jobs may run at once -- see agentHarness.maxAttemptsPerTask
       # and the scheduler for the actual concurrency the task graph produces.
       maxConcurrency: 5
+    taskAttemptReview:
+      # How often the inbox polls for terminal attempts awaiting review. A newly-enqueued review
+      # is also drained immediately, so this is mostly a safety net.
+      pollIntervalMs: 1000
+      # Max attempts reviewed (evaluator verdict, then orchestrator reattempt decision if failed)
+      # concurrently. Kept at 1 by default since both steps make LLM calls already serialized
+      # through the single-worker requestQueue below -- raising this would only mean more callers
+      # queued up waiting for that same worker, not more actual parallelism.
+      maxConcurrency: 1
+      # When a review can't reach the LLM (unreachable, or the LLM queue timed out), it is retried
+      # at this interval for as long as the outage lasts, and its workflow reads AWAITING_LLM
+      # meanwhile -- never a fabricated verdict, and never a silent hang in RUNNING.
+      llmRetryIntervalMs: 30000
+  llm:
+    requestQueue:
+      # How often LlmRequestInbox polls for pending LLM requests. Much shorter than the other
+      # inboxes' 1000ms default: this is the only path by which a replica other than the one that
+      # enqueued a request (or the one already mid-request for an earlier one) ever notices a
+      # freed claim slot, so it directly adds to how long every blocked caller waits.
+      drainPollIntervalMs: 200
+      # How often a caller blocked in LlmRequestQueue re-checks whether its own request has been
+      # processed yet.
+      resultPollIntervalMs: 100
+      # A caller gives up once no request on the queue -- anywhere, by any replica -- has been
+      # claimed for this long. This, not maxWaitSeconds, is the real patience control: a deep but
+      # healthy queue keeps a caller waiting indefinitely (up to maxWaitSeconds) as long as it
+      # keeps seeing forward progress: only a genuinely stuck backend (nothing claimed at all)
+      # trips this.
+      stallTimeoutSeconds: 60
+      # Absolute backstop regardless of whether the queue is still making progress, so a queue
+      # that never actually stops moving (but never keeps up either) cannot block a caller
+      # forever.
+      maxWaitSeconds: 1800
   backpressure:
     # How often queue depth is sampled to derive ingress.queueRatePerMinute.
     sampleIntervalMs: 15000
@@ -95,7 +166,11 @@ vader:
     backpressure:
       # When true, core-server exposes the inbox/outbox back pressure over the MCP endpoint
       # (list_backpressure_queues / get_backpressure), mirroring the REST /backpressure API.
-      enabled: true
+      # Off by default: this is an operator/ops-debugging surface, not something a
+      # task-decomposition or task-execution agent needs, and every agent-harness inference turn
+      # offers the full registered tool set, so leaving it on just crowds out the tools a task
+      # actually needs. The REST /backpressure endpoint is unaffected either way.
+      enabled: false
     objectStorage:
       # When true, core-server exposes get_object_content over the MCP endpoint: an agent hands
       # it an ObjectMetadata id and gets the object's content back as base64, whether it's
@@ -105,6 +180,13 @@ vader:
       # to use instead) rather than inlined as base64, to keep a single tool result from blowing
       # the calling model's context budget.
       maxInlineBytes: 2097152
+    taskUpdate:
+      # When true, core-server exposes post_task_update over the MCP endpoint: a task-execution
+      # agent can leave an interim progress note against the task it is working on. Never a
+      # pass/fail/timeout verdict -- those stay reserved for an independent evaluator (and, for
+      # timeouts, the reaper) -- and never against another task, regardless of what the calling
+      # model supplies.
+      enabled: true
   operators:
     # Kubernetes operators core-server runs, each also exposed to LLMs as MCP tools.
     # Master switch: constructs the shared Kubernetes client and enables the RBAC the
@@ -113,14 +195,32 @@ vader:
     enabled: true
     pythonSandbox:
       # When true (and operators.enabled is true), core-server runs the Python sandbox
-      # operator and publishes its create/list/delete tools over the MCP SSE endpoint.
+      # operator and publishes its create/list/delete/run tools over the MCP SSE endpoint.
       enabled: true
       # The Deployment running core-server; the operator watches it and cascade-deletes every
       # sandbox if core-server itself is removed from the cluster.
       ownerDeploymentName: vader-core-server
       sandbox:
-        # Container image every sandbox pod runs.
-        image: python:3.12-slim
+        # Container image every sandbox pod runs: core-python-sandbox-server, a small HTTP
+        # server (built from services/core/python/core-python-sandbox-server) that runs
+        # submitted code as a subprocess against a persistent per-pod workspace and returns its
+        # stdout/stderr/exit code. pandas/openpyxl are preinstalled so an agent can analyze an
+        # uploaded spreadsheet with no setup step.
+        image: jeremyacase/vader-core-python-sandbox-server:latest
+        # Ceiling on how long a single run_python_code call may run inside the sandbox, in
+        # seconds -- enforced by the sandbox server itself regardless of what a caller requests.
+        execTimeoutSeconds: 30
+        # create_sandbox waits for the sandbox to become ready before returning, retrying up to
+        # this many times (readyPollMaxAttempts * readyPollIntervalMs = the total wait budget).
+        # Ready means the pod passed its readiness probe *and* answers through its Service, which
+        # lags the probe briefly. Otherwise a caller that stages a file or runs code right after
+        # create_sandbox returns can race the sandbox's startup and get a connection error.
+        readyPollMaxAttempts: 30
+        readyPollIntervalMs: 500
+        # How long core-server waits to open a connection to a sandbox before giving up. Bounds
+        # connecting only, never a code run itself, so a sandbox that stops responding can't
+        # stall the readiness wait above indefinitely.
+        connectTimeoutSeconds: 5
         resources:
           requests:
             cpu: 100m

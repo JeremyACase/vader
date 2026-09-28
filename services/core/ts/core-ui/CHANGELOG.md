@@ -3,6 +3,41 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0]
+### Added
+- Each transcript turn shows why the model stopped generating, and a turn cut off at the output
+  token cap is flagged in amber so a truncated reply isn't mistaken for a complete one.
+- `./gradlew build` now runs the unit tests, in a container with headless Chromium, so a failing
+  spec fails the build and no local browser is needed.
+
+## [0.16.0]
+### Added
+- Workflows paused on an LLM outage show an amber `AWAITING_LLM` badge, distinct from both
+  running and failed.
+
+## [0.15.0]
+### Added
+- The task update history now shows two new update types (`CREATED`, `RUNNING`) and who authored
+  each update (system, task agent, orchestrator, or evaluator).
+
+## [0.14.0]
+### Added
+- A left-anchored vertical nav rail, icon-only, sits outside the main content column now. Its
+  first item, Workflows, toggles the workflow panel open/closed rather than it always being
+  shown.
+
+## [0.13.0]
+### Added
+- The workflow panel now shows one selected workflow's task graph as an interactive DAG instead
+  of a flat list, colored by each task's live status (blue active, green succeeded, red failed,
+  gray never attempted). Clicking a node shows that task's full detail: its attempt history, each
+  attempt's chain-of-thought, and its update history (evaluator/orchestrator verdicts and
+  progress notes).
+### Changed
+- The panel itself is now a paginated, single-select list on the left, rather than an
+  inline-expanding accordion — selecting a workflow is independent of whatever page of the list
+  is currently showing, and keeps polling live regardless.
+
 ## [0.12.0]
 ### Added
 - A submitted prompt now appears in the workflows panel immediately as a "Decomposing…"

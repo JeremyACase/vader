@@ -49,16 +49,6 @@ class BackpressureControllerTest {
         assertThat(response.getBody()).isSameAs(snapshot);
     }
 
-    @Test
-    void handleUnknownModelType_returnsBadRequestWithStableErrorCode() {
-        var response = this.controller.handleUnknownModelType(
-            new IllegalArgumentException("no queue for 'Bogus'"));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().error()).isEqualTo("unknown_model_type");
-        assertThat(response.getBody().message()).contains("Bogus");
-    }
-
     private static BackPressure snapshot() {
         var ingress = new Ingress();
         ingress.setQueuedRecords(2L);

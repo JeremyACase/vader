@@ -56,6 +56,43 @@ public class InboxAsyncConfig {
     }
 
     /**
+     * The dedicated single-thread executor for enqueue-triggered attempt-review inbox drains. A
+     * discarded nudge here is harmless -- the review pipeline's own scheduled poll is a tight
+     * enough safety net on its own, same reasoning as {@code llmRequestInboxExecutor}.
+     *
+     * @return the executor
+     */
+    @Bean("taskAttemptReviewInboxExecutor")
+    public TaskExecutor taskAttemptReviewInboxExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("task-attempt-review-inbox-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        return executor;
+    }
+
+    /**
+     * The dedicated single-thread executor for enqueue-triggered LLM-request inbox drains. A
+     * discarded nudge here is harmless -- {@code LlmRequestInbox}'s own much shorter scheduled
+     * poll (default 200ms, versus the other inboxes' 1000ms) is a tight enough safety net on its
+     * own.
+     *
+     * @return the executor
+     */
+    @Bean("llmRequestInboxExecutor")
+    public TaskExecutor llmRequestInboxExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("llm-request-inbox-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        return executor;
+    }
+
+    /**
      * The dedicated single-thread executor {@code TaskGraphSchedulerListener} hands
      * {@code TaskGraphScheduler#evaluate} off to.
      *
@@ -73,6 +110,50 @@ public class InboxAsyncConfig {
         executor.setCorePoolSize(1);
         executor.setMaxPoolSize(1);
         executor.setThreadNamePrefix("task-graph-scheduler-");
+        return executor;
+    }
+
+    /**
+     * The dedicated executor {@code AgentHarnessJobCleanupListener} hands Job deletion off to.
+     *
+     * <p>Deliberately separate from {@code taskGraphSchedulerExecutor}: a slow or stuck
+     * Kubernetes delete call must never delay task-graph progression, which is the more urgent
+     * of the two. Unlike that executor's unbounded queue, dropping a queued cleanup here under a
+     * genuine burst is an acceptable degradation -- the Job's own {@code ttlSecondsAfterFinished}
+     * still cleans it up eventually, just later than the common case.</p>
+     *
+     * @return the executor
+     */
+    @Bean("agentHarnessJobCleanupExecutor")
+    public TaskExecutor agentHarnessJobCleanupExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("agent-harness-job-cleanup-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        return executor;
+    }
+
+    /**
+     * The dedicated executor {@code TaskAttemptSandboxCleanupListener} hands sandbox deletion off
+     * to.
+     *
+     * <p>Unlike {@code agentHarnessJobCleanupExecutor}, a full queue runs the delete on the
+     * caller's thread rather than discarding it: a sandbox has no {@code ttlSecondsAfterFinished}
+     * backstop, so a dropped delete would leak its pod indefinitely. Briefly slowing the thread
+     * that committed a settlement is the cheaper failure.</p>
+     *
+     * @return the executor
+     */
+    @Bean("taskAttemptSandboxCleanupExecutor")
+    public TaskExecutor taskAttemptSandboxCleanupExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("task-attempt-sandbox-cleanup-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         return executor;
     }
 }

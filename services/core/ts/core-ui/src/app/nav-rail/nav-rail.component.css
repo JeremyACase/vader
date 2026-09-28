@@ -1,0 +1,57 @@
+.nav-rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 0;
+  background: #171a21;
+  border-right: 1px solid #2a2e38;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 52px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.25rem;
+  color: #9aa3b2;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: #1c1f27;
+  color: #e7e9ee;
+}
+
+.nav-item.active {
+  background: #1f2f4f;
+  color: #7fa8ff;
+}
+
+.nav-icon {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+}
+
+.nav-icon circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.nav-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.02em;
+}

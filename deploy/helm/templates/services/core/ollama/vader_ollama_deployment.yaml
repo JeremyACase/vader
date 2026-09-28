@@ -32,6 +32,11 @@ spec:
           env:
             - name: OLLAMA_MODEL
               value: {{ .Values.vader.orchestrator.local.model | quote }}
+            # Matches the num_ctx core-server sends on every call, so the model loaded by the
+            # startup warm-up below is already the one real requests use -- a different context
+            # size would force Ollama to reload the model on the first real call.
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: {{ .Values.vader.orchestrator.local.contextTokens | quote }}
           lifecycle:
             postStart:
               exec:

@@ -12,6 +12,12 @@ import jakarta.validation.constraints.NotNull;
  * running: the prompt sent to the model and the response it returned, over the
  * {@code /agent/inference} gateway. Every harness turn is persisted here -- this is the durable
  * transcript backing "log everything from prompt to workflow finished."
+ *
+ * <p>{@code prompt} holds only the messages newly appended to the running conversation since the
+ * previous turn -- not the whole conversation, which the harness resends in full on every call.
+ * The full conversation for an attempt is reconstructable by concatenating every row's
+ * {@code prompt} in {@code turnIndex} order; {@code messageCount} is the cumulative running
+ * total as of this turn, letting the next turn know where its own delta starts.</p>
  */
 @Entity
 public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
@@ -28,12 +34,22 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
     @NotNull
     private String prompt;
 
+    @NotNull
+    private Integer messageCount;
+
     @Lob
     @NotNull
     private String response;
 
     @NotNull
     private Long tokensSpent;
+
+    /**
+     * Why the model stopped generating this turn, as the provider reported it -- e.g. Ollama's
+     * {@code stop} or {@code length} (cut off at the output token cap). {@code null} for turns
+     * recorded before this was captured, or when the provider reports none.
+     */
+    private String finishReason;
 
     @Override
     public String getModelType() {
@@ -64,6 +80,14 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
         this.prompt = prompt;
     }
 
+    public Integer getMessageCount() {
+        return this.messageCount;
+    }
+
+    public void setMessageCount(Integer messageCount) {
+        this.messageCount = messageCount;
+    }
+
     public String getResponse() {
         return this.response;
     }
@@ -78,5 +102,13 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
 
     public void setTokensSpent(Long tokensSpent) {
         this.tokensSpent = tokensSpent;
+    }
+
+    public String getFinishReason() {
+        return this.finishReason;
+    }
+
+    public void setFinishReason(String finishReason) {
+        this.finishReason = finishReason;
     }
 }

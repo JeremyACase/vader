@@ -15,7 +15,7 @@ import org.vader.core.server.service.query.DatabaseQueryService;
  * Exposes read-only access to the vader database to LLMs as MCP tools: discover the schema with
  * {@code list_queryable_entities}, then filter/paginate with {@code query_database} /
  * {@code count_matching}. Every result is a DTO, so heavy/sensitive fields (file bytes) are
- * already stripped, and only the six registered entities are reachable.
+ * already stripped, and only the entities registered with a DAO controller are reachable.
  */
 @Component
 @ConditionalOnProperty(

@@ -1,5 +1,10 @@
-<div class="layout">
-  <main class="main-column">
+<div class="app-shell">
+  <app-nav-rail
+    [items]="navItems"
+    [activeId]="activeNavId()"
+    (itemClicked)="toggleNavItem($event)" />
+
+  <div class="content-column">
     <header class="brand">
       <img class="mascot" src="darth-vader.png" alt="Darth Vader">
       <div class="logo">VADER</div>
@@ -7,86 +12,104 @@
       <div class="product">CORE UI</div>
     </header>
 
-    <section class="card">
-      <h1>Submit a client prompt</h1>
-      <p class="muted">Send a prompt, with optional file attachments, to core-server. Only one
-        prompt may be in flight at a time — send another once this one's workflow comes back.</p>
+    <div class="layout">
+      @if (activeNavId() === 'workflows') {
+        <aside class="sidebar">
+          <app-workflow-panel
+            [justSubmittedPromptId]="lastSubmittedPromptId()"
+            (workflowSelected)="selectedWorkflowId.set($event)" />
+        </aside>
+      } @else if (activeNavId() === 'prompt') {
+        <aside class="sidebar">
+          <section class="card prompt-card">
+            <h1>Submit a client prompt</h1>
+            <p class="muted">Send a prompt, with optional file attachments, to core-server. Only one
+              prompt may be in flight at a time — send another once this one's workflow comes back.</p>
 
-      <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
-        <textarea
-          [formControl]="text"
-          rows="6"
-          placeholder="Describe what you'd like Vader to do…">
-        </textarea>
+            <form (submit)="submit(); $event.preventDefault()" class="form" autocomplete="off">
+              <textarea
+                [formControl]="text"
+                rows="6"
+                placeholder="Describe what you'd like Vader to do…">
+              </textarea>
 
-        <input
-          #fileInput
-          type="file"
-          multiple
-          (change)="onFilesSelected($event)">
+              <input
+                #fileInput
+                type="file"
+                multiple
+                (change)="onFilesSelected($event)">
 
-        @if (fileError()) {
-          <p class="err">{{fileError()}}</p>
-        }
-        @if (files().length) {
-          <div class="hint">
-            {{files().length}} / {{maxFiles}} files selected
-            <ul class="file-list">
-              @for (f of files(); track $index) {
-                <li>{{f.name}}</li>
+              @if (fileError()) {
+                <p class="err">{{fileError()}}</p>
               }
-            </ul>
-          </div>
-        }
+              @if (files().length) {
+                <div class="hint">
+                  {{files().length}} / {{maxFiles}} files selected
+                  <ul class="file-list">
+                    @for (f of files(); track $index) {
+                      <li>{{f.name}}</li>
+                    }
+                  </ul>
+                </div>
+              }
 
-        <div class="row">
-          <div class="hint" [class.error]="text.invalid">
-            @if (text.hasError('required')) {
-              <span>Prompt is required.</span>
-            } @else {
-              <span>{{chars()}} / {{max}} characters</span>
+              <div class="row">
+                <div class="hint" [class.error]="text.invalid">
+                  @if (text.hasError('required')) {
+                    <span>Prompt is required.</span>
+                  } @else {
+                    <span>{{chars()}} / {{max}} characters</span>
+                  }
+                </div>
+
+                <button type="submit"
+                        (click)="submit()"
+                        [disabled]="text.invalid || sending() || !!fileError() || hasPendingWorkflow()"
+                        [attr.aria-busy]="sending()">
+                  @if (sending()) {
+                    <span>Sending…</span>
+                  } @else if (hasPendingWorkflow()) {
+                    <span>Waiting on previous prompt…</span>
+                  } @else {
+                    <span>Send prompt</span>
+                  }
+                </button>
+              </div>
+            </form>
+
+            @if (sent() && !error()) {
+              <p class="ok">✅ Prompt accepted — see it in the Workflows panel.</p>
             }
-          </div>
-
-          <button type="submit"
-                  (click)="submit()"
-                  [disabled]="text.invalid || sending() || !!fileError() || hasPendingWorkflow()"
-                  [attr.aria-busy]="sending()">
-            @if (sending()) {
-              <span>Sending…</span>
-            } @else if (hasPendingWorkflow()) {
-              <span>Waiting on previous prompt…</span>
-            } @else {
-              <span>Send prompt</span>
+            @if (error()) {
+              <p class="err">⚠️ {{error()}}</p>
             }
-          </button>
-        </div>
-      </form>
 
-      @if (sent() && !error()) {
-        <p class="ok">✅ Prompt accepted — see it in the Workflows panel.</p>
-      }
-      @if (error()) {
-        <p class="err">⚠️ {{error()}}</p>
+            @if (backPressure(); as bp) {
+              <p class="hint">
+                {{bp.ingress.queuedRecords}} prompt(s) waiting
+                @if (bp.ingress.queueRatePerMinute) {
+                  <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
+                }
+                <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
+              </p>
+            }
+          </section>
+        </aside>
       }
 
-      @if (backPressure(); as bp) {
-        <p class="hint">
-          {{bp.ingress.queuedRecords}} prompt(s) waiting
-          @if (bp.ingress.queueRatePerMinute) {
-            <span>· {{bp.ingress.queueRatePerMinute > 0 ? '+' : ''}}{{bp.ingress.queueRatePerMinute}}/min</span>
+      @if (activeNavId() === 'workflows') {
+        <aside class="card viz-panel">
+          @if (selectedWorkflow(); as workflow) {
+            <app-workflow-detail [workflow]="workflow" />
+          } @else {
+            <p class="muted">Select a workflow on the left to see its task graph.</p>
           }
-          <span>· {{bp.egress.currentOpenMessages}}/{{bp.egress.maxOpenMessages}} in progress</span>
-        </p>
+        </aside>
       }
-    </section>
+    </div>
 
     <footer class="foot">
       <span>Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send.</span>
     </footer>
-  </main>
-
-  <aside class="sidebar">
-    <app-workflow-panel [justSubmittedPromptId]="lastSubmittedPromptId()" />
-  </aside>
+  </div>
 </div>

@@ -3,6 +3,42 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0]
+### Added
+- Transcript turns record why the model stopped generating (the provider's finish reason), so a
+  reply cut off at the output token cap is distinguishable from one that ended naturally.
+
+## [0.18.0]
+### Added
+- `WorkflowStatus.AWAITING_LLM`: a non-terminal status for a workflow paused while the LLM is
+  unavailable, which resumes to `RUNNING` on its own. Attempt-review queue messages can now be
+  deferred until a later retry time.
+
+## [0.17.0]
+### Added
+- `TaskUpdate` now records who authored it (system, task agent, orchestrator, or evaluator) and
+  two new update types, `CREATED` and `RUNNING`, so a task's history starts the moment it's
+  planned rather than only once something happens to it.
+
+## [0.16.0]
+### Added
+- A queue-message entity backing the new attempt-review pipeline, plus two new local-LLM request
+  kinds (evaluation, reattempt decision) sharing the existing durable request queue.
+### Changed
+- `TaskUpdate` now references the specific attempt it's about, not just the task.
+
+## [0.15.0]
+### Added
+- New `TaskUpdate` model recording an evaluator/orchestrator verdict or progress note against a
+  task; `Task` carries a shallow reference to its updates.
+
+## [0.14.0]
+### Added
+- New `TaskAttemptToolCall` model, recording one tool call a model requested and had executed
+  during a task attempt -- the tool, its arguments, and its result -- as its own immutable,
+  durable audit record, written at the moment of execution rather than only ever appearing
+  embedded in a later transcript entry.
+
 ## [0.13.0]
 ### Added
 - `ObjectMetadata` now records the exact key an object was stored under when the MinIO strategy

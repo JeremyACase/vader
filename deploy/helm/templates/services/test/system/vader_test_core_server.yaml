@@ -1,3 +1,8 @@
+{{- /* The static orchestrator answers instantly; a real model needs minutes per prompt. */}}
+{{- $workflowWaitSeconds := 120 }}
+{{- if ne .Values.vader.orchestrator.type "static" }}
+{{- $workflowWaitSeconds = .Values.vader.orchestrator.local.systemTestWorkflowWaitSeconds }}
+{{- end }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -20,6 +25,7 @@ spec:
           SERVER="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
           PROMPT_URL="$SERVER/vader/core-server/client-prompt"
           WORKFLOW_QUERY="$SERVER/vader/core-server/data/workflow/query/params"
+          WORKFLOW_POLLS=$(( {{ $workflowWaitSeconds }} / 3 ))
 
           # Submits a prompt (optionally with a file), asserts a 202 + receipt, then polls the
           # workflow query API by clientPrompt id until the decomposition appears.
@@ -46,7 +52,7 @@ spec:
 
             echo "   awaiting workflow for prompt $ID ..."
             i=0
-            while [ $i -lt 40 ]; do
+            while [ $i -lt $WORKFLOW_POLLS ]; do
               WF=$(curl -s --max-time 10 \
                 "$WORKFLOW_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&clientPrompt.id=$ID" || true)
               if echo "$WF" | grep -q '"objective"'; then
@@ -58,7 +64,7 @@ spec:
               i=$((i+1))
               sleep 3
             done
-            echo "❌ timed out waiting for a workflow for prompt $ID"
+            echo "❌ timed out after {{ $workflowWaitSeconds }}s waiting for a workflow for prompt $ID"
             exit 1
           }
 
