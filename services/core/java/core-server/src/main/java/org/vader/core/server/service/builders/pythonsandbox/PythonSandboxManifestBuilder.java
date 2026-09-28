@@ -23,7 +23,9 @@ import org.vader.core.server.service.operators.AbstractOperator;
  * a small HTTP server exposing {@code /execute} -- so no command override is needed here. Its
  * readiness and liveness probes hit that server's {@code /health} endpoint on the same
  * {@code exec} port the Service exposes, so {@link AbstractOperator}'s "Running" phase means the
- * server can actually accept requests, not just that the container process started.</p>
+ * server itself is up, not just that the container process started. It does not yet mean the
+ * Service routes to it -- that lags the probe briefly, which {@code PythonSandboxService} waits
+ * out separately.</p>
  *
  * <p>The workspace directory is an {@code emptyDir} volume rather than the container's own
  * writable layer, so staged files survive a container restart -- e.g. the server being OOM-killed

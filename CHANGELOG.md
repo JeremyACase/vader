@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1]
+### Fixed
+- **The system tests pass again, both in CI and against a real local model.** Spring's own
+  request errors (such as an unknown object-storage id) were being returned as 500s instead of
+  their proper 4xx status. With a real model, the core-server test now waits long enough for a
+  prompt to be decomposed. Locally, pass a longer `helm test --timeout` (around 35m).
+- **A task agent's first Python run no longer intermittently fails with a refused connection.**
+  A new sandbox is only reported ready once it actually answers through its Service, which lags
+  the pod's readiness probe briefly. Connections to a sandbox also now time out, so an
+  unresponsive one can't stall that wait.
+
 ## [0.15.0]
 ### Added
 - **Task agents can analyze attached files with Python.** Each task attempt gets its own managed

@@ -286,7 +286,8 @@ compress it further, not to add structure.
 | `vader.operators.python-sandbox.enabled` | `true` | Python sandbox operator |
 | `vader.operators.python-sandbox.sandbox.exec-timeout-seconds` | `30` | Ceiling on one `run_python_code` call, enforced by `core-python-sandbox-server` itself regardless of what a caller requests |
 | `vader.operators.python-sandbox.sandbox.ready-poll-max-attempts` | `30` | How many times `create_sandbox` re-checks pod readiness before giving up and returning whatever phase it last saw |
-| `vader.operators.python-sandbox.sandbox.ready-poll-interval-ms` | `500` | Delay between those readiness checks -- together with the attempt cap, the total wait budget `create_sandbox` blocks for so a caller staging a file or running code immediately after doesn't race the pod's own startup |
+| `vader.operators.python-sandbox.sandbox.ready-poll-interval-ms` | `500` | Delay between those readiness checks -- together with the attempt cap, the total wait budget `create_sandbox` blocks for so a caller staging a file or running code immediately after doesn't race the pod's own startup. Ready means the pod's readiness probe passed *and* the sandbox answers `/health` through its Service, which lags the probe briefly |
+| `vader.operators.python-sandbox.sandbox.connect-timeout-seconds` | `5` | Connect timeout on every core-server → sandbox HTTP call; bounds connecting only, never a code run, so an unresponsive sandbox can't stall the readiness wait |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
 | `vader.mcp.backpressure.enabled` | `false` | Expose inbox/outbox backpressure tools over MCP -- an ops-debugging surface, not something task-execution agents need |
 | `vader.storage.type` | `database` | `database` or `minio`; picks the `InterfaceFileStorageStrategy` backing both upload and the object-storage download endpoint/tool |

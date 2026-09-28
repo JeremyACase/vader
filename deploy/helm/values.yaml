@@ -80,6 +80,12 @@ vader:
       # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
       # on 32k, so there is no benefit going above 32768.
       contextTokens: 16384
+      # How long the core-server Helm system test waits for each submitted prompt to be
+      # decomposed into a workflow. A real model on modest hardware takes minutes per
+      # decomposition, and a later prompt also queues behind earlier workflows' agent calls on the
+      # single LLM worker, so this is far above the fixed budget the static orchestrator gets.
+      # Pass a `helm test --timeout` that covers this for both of the test's prompts.
+      systemTestWorkflowWaitSeconds: 900
   storage:
     # Allowable values are:
     #   database - store uploaded file contents as BLOBs in the relational database (default;
@@ -204,12 +210,17 @@ vader:
         # Ceiling on how long a single run_python_code call may run inside the sandbox, in
         # seconds -- enforced by the sandbox server itself regardless of what a caller requests.
         execTimeoutSeconds: 30
-        # create_sandbox waits for the pod to actually become ready before returning, retrying up
-        # to this many times (readyPollMaxAttempts * readyPollIntervalMs = the total wait budget)
-        # -- otherwise a caller that immediately stages a file or runs code right after
-        # create_sandbox returns can race the pod's own startup and get a connection error.
+        # create_sandbox waits for the sandbox to become ready before returning, retrying up to
+        # this many times (readyPollMaxAttempts * readyPollIntervalMs = the total wait budget).
+        # Ready means the pod passed its readiness probe *and* answers through its Service, which
+        # lags the probe briefly. Otherwise a caller that stages a file or runs code right after
+        # create_sandbox returns can race the sandbox's startup and get a connection error.
         readyPollMaxAttempts: 30
         readyPollIntervalMs: 500
+        # How long core-server waits to open a connection to a sandbox before giving up. Bounds
+        # connecting only, never a code run itself, so a sandbox that stops responding can't
+        # stall the readiness wait above indefinitely.
+        connectTimeoutSeconds: 5
         resources:
           requests:
             cpu: 100m

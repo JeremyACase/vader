@@ -5,14 +5,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.vader.core.server.exceptions.AssignmentAlreadyTerminalException;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
 import org.vader.core.server.exceptions.SandboxExecutionException;
@@ -129,6 +133,34 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().error()).isEqualTo("invalid_argument");
         assertThat(response.getBody().message()).contains("Bogus");
+    }
+
+    @Test
+    void handleFramework_keepsNotFoundForAnUnresolvedResource() {
+        var response = this.handler.handleFramework(
+            new NoResourceFoundException(HttpMethod.GET, "object-storage/bogus-id/content"),
+            this.request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().error()).isEqualTo("request_rejected");
+    }
+
+    @Test
+    void handleFramework_keepsMethodNotAllowedForAnUnsupportedMethod() {
+        var response = this.handler.handleFramework(
+            new HttpRequestMethodNotSupportedException("DELETE"), this.request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(response.getBody().error()).isEqualTo("request_rejected");
+    }
+
+    @Test
+    void handleFramework_fallsBackToInternalServerErrorWhenNoStatusIsCarried() {
+        var response = this.handler.handleFramework(
+            new ServletException("filter blew up"), this.request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody().error()).isEqualTo("internal_error");
     }
 
     @Test

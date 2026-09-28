@@ -1,15 +1,18 @@
 package org.vader.core.server.controller.advice;
 
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.ObjectError;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.vader.core.server.exceptions.AssignmentAlreadyTerminalException;
@@ -199,6 +202,26 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Lets Spring MVC's own request-level failures -- no handler or resource for the path (which
+     * is how the object-storage download reports an unknown id), unsupported method or media
+     * type, a missing parameter, a {@code ResponseStatusException} -- keep the 4xx status Spring
+     * already assigned them. Without this, {@link #handleUnexpected} would catch them first and
+     * turn every one into a 500. A {@code ServletException} that carries no status of its own
+     * still falls through to that backstop.
+     *
+     * @param exception the framework failure
+     * @param request the originating request
+     * @return a response with Spring's own status, or a 500 for a status-less failure
+     */
+    @ExceptionHandler({ServletException.class, ErrorResponseException.class})
+    public ResponseEntity<ErrorResponse> handleFramework(
+        final Exception exception, final HttpServletRequest request) {
+        return exception instanceof org.springframework.web.ErrorResponse framework
+            ? handleFrameworkStatus(framework, exception, request)
+            : handleUnexpected(exception, request);
+    }
+
+    /**
      * Backstop for anything not specifically mapped above: still a well-formed
      * {@link ErrorResponse}, logged at {@code ERROR} with the full stack trace, rather than
      * Spring Boot's bare whitelabel body -- which a caller cannot distinguish from a genuine
@@ -217,8 +240,18 @@ public class GlobalExceptionHandler {
         return status(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error", exception.getMessage());
     }
 
+    private static ResponseEntity<ErrorResponse> handleFrameworkStatus(
+            final org.springframework.web.ErrorResponse framework,
+            final Exception exception,
+            final HttpServletRequest request) {
+        var statusCode = framework.getStatusCode();
+        logger.warn("Rejected {} with {}: {}",
+            request.getRequestURI(), statusCode.value(), exception.getMessage());
+        return status(statusCode, "request_rejected", exception.getMessage());
+    }
+
     private static ResponseEntity<ErrorResponse> status(
-            final HttpStatus status, final String error, final String message) {
+            final HttpStatusCode status, final String error, final String message) {
         return ResponseEntity.status(status).body(new ErrorResponse(error, message));
     }
 }

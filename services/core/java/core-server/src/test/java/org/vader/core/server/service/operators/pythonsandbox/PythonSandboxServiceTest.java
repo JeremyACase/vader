@@ -2,6 +2,7 @@ package org.vader.core.server.service.operators.pythonsandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -47,6 +48,44 @@ class PythonSandboxServiceTest {
         // Zeroed so awaitReady's retry loop, when it runs, does not actually sleep in tests.
         ReflectionTestUtils.setField(this.service, "readyPollIntervalMs", 0L);
         ReflectionTestUtils.setField(this.service, "readyPollMaxAttempts", 3);
+        // Reachable by default; the tests of the Service-routing gap override this.
+        lenient().when(this.executionClient.isReachable(any())).thenReturn(true);
+    }
+
+    @Test
+    void create_keepsWaitingWhileTheRunningSandboxIsNotYetReachableThroughItsService() {
+        when(this.operator.reconcile(any(PythonSandboxSpec.class)))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Running", Map.of()));
+        when(this.executionClient.isReachable("vader-sandbox-my-box"))
+            .thenReturn(false)
+            .thenReturn(true);
+
+        var info = this.service.create("My Box");
+
+        assertThat(info.phase()).isEqualTo("Running");
+        verify(this.operator, times(2)).reconcile(any(PythonSandboxSpec.class));
+    }
+
+    @Test
+    void create_reportsPendingWhenTheRunningSandboxNeverBecomesReachable() {
+        when(this.operator.reconcile(any(PythonSandboxSpec.class)))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Running", Map.of()));
+        when(this.executionClient.isReachable("vader-sandbox-my-box")).thenReturn(false);
+
+        var info = this.service.create("My Box");
+
+        assertThat(info.phase()).isEqualTo("Pending");
+        verify(this.operator, times(4)).reconcile(any(PythonSandboxSpec.class));
+    }
+
+    @Test
+    void create_neverProbesTheServiceBeforeThePodIsReady() {
+        when(this.operator.reconcile(any(PythonSandboxSpec.class)))
+            .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Pending", Map.of()));
+
+        this.service.create("My Box");
+
+        verify(this.executionClient, never()).isReachable(any());
     }
 
     @Test

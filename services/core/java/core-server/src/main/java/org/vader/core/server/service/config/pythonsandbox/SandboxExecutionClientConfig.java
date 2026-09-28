@@ -1,6 +1,8 @@
 package org.vader.core.server.service.config.pythonsandbox;
 
 import java.net.http.HttpClient;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -17,8 +19,11 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class SandboxExecutionClientConfig {
 
+    @Value("${vader.operators.python-sandbox.sandbox.connect-timeout-seconds:5}")
+    private long connectTimeoutSeconds;
+
     /**
-     * Builds the client pinned to HTTP/1.1.
+     * Builds the client pinned to HTTP/1.1, with a connect timeout.
      *
      * <p>The JDK's {@link HttpClient} -- the request factory Spring Boot auto-detects when no
      * Apache/Jetty/Reactor Netty client is on the classpath, as is the case here -- attempts an
@@ -28,11 +33,19 @@ public class SandboxExecutionClientConfig {
      * every call fail with a 422 for a "missing" body. Pinning the version here avoids the
      * upgrade attempt entirely.</p>
      *
+     * <p>The connect timeout bounds only establishing the connection, never a code run. Without
+     * it, a sandbox whose address stops answering could hold a caller for as long as the OS lets
+     * the connection attempt hang, including the readiness poll in {@code PythonSandboxService}.
+     * </p>
+     *
      * @return the configured client
      */
     @Bean
     public RestClient sandboxExecutionRestClient() {
-        var httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+        var httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(this.connectTimeoutSeconds))
+            .build();
         return RestClient.builder()
             .requestFactory(new JdkClientHttpRequestFactory(httpClient))
             .build();

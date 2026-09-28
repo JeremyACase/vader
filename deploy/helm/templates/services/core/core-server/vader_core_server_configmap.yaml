@@ -192,11 +192,12 @@ data:
             # Passed to the sandbox pod as SANDBOX_LOG_LEVEL, so its log verbosity tracks
             # core-server's own (logging.vader) the same way agent-harness's log-level does.
             log-level: {{ .Values.logging.vader }}
-            # create_sandbox blocks until the pod is actually ready (or this budget is spent) so a
-            # caller that immediately stages a file or runs code right after create_sandbox
-            # returns doesn't race the pod's own startup.
+            # create_sandbox blocks until the sandbox answers through its Service (or this budget
+            # is spent) so a caller that immediately stages a file or runs code right after
+            # create_sandbox returns doesn't race the sandbox's startup.
             ready-poll-max-attempts: {{ .Values.vader.operators.pythonSandbox.sandbox.readyPollMaxAttempts }}
             ready-poll-interval-ms: {{ .Values.vader.operators.pythonSandbox.sandbox.readyPollIntervalMs }}
+            connect-timeout-seconds: {{ .Values.vader.operators.pythonSandbox.sandbox.connectTimeoutSeconds }}
             resources:
               requests:
                 cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.cpu }}

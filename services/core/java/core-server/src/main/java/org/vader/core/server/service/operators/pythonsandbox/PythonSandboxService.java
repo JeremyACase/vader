@@ -50,9 +50,11 @@ public class PythonSandboxService {
     // pod is actually serving traffic -- without waiting here, a caller (a model, per its own
     // task instructions) that immediately stages a file or runs code right after create_sandbox
     // returns hits a real race: the sandbox's Service has no ready endpoints yet, so the very
-    // next call fails with a connection error. The default (30 * 500ms = 15s) comfortably covers
-    // this image's typical readinessProbe pass time (2s initial delay + a 5s period, per
-    // PythonSandboxManifestBuilder) even on a cold pull.
+    // next call fails with a connection error. The wait ends only once the pod's readiness
+    // probe has passed *and* the sandbox answers through its Service (see withReachability).
+    // The default (30 * 500ms = 15s) comfortably covers this image's typical readinessProbe pass
+    // time (2s initial delay + a 5s period, per PythonSandboxManifestBuilder) plus that Service
+    // routing lag, even on a cold pull.
     @Value("${vader.operators.python-sandbox.sandbox.ready-poll-max-attempts:30}")
     private int readyPollMaxAttempts;
 
@@ -60,6 +62,7 @@ public class PythonSandboxService {
     private long readyPollIntervalMs;
 
     private static final String RUNNING_PHASE = "Running";
+    private static final String PENDING_PHASE = "Pending";
 
     /**
      * Creates a sandbox, or returns the existing one if a sandbox of the resolved name is already
@@ -91,14 +94,29 @@ public class PythonSandboxService {
 
     private ManagedResource awaitReady(
             final PythonSandboxSpec spec, final ManagedResource initial) {
-        var managed = initial;
+        var managed = this.withReachability(initial);
         var attempts = 0;
         while (!RUNNING_PHASE.equals(managed.phase()) && attempts < this.readyPollMaxAttempts) {
             sleep(this.readyPollIntervalMs);
-            managed = this.operator.reconcile(spec);
+            managed = this.withReachability(this.operator.reconcile(spec));
             attempts++;
         }
         return managed;
+    }
+
+    /**
+     * Reports a {@code "Running"} sandbox as {@code "Pending"} until it actually answers through
+     * its Service. The operator's {@code "Running"} comes from the pod's readiness probe, which
+     * passes before the Service's endpoints and kube-proxy's routing catch up. In that gap a
+     * connection is refused outright, so a caller trusting the probe alone intermittently fails
+     * its very first request.
+     */
+    private ManagedResource withReachability(final ManagedResource managed) {
+        return RUNNING_PHASE.equals(managed.phase())
+                && !this.executionClient.isReachable(managed.name())
+            ? new ManagedResource(
+                managed.name(), managed.namespace(), PENDING_PHASE, managed.labels())
+            : managed;
     }
 
     private static void sleep(final long millis) {

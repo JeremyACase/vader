@@ -58,6 +58,41 @@ class SandboxExecutionClientTest {
     }
 
     @Test
+    void isReachable_whenTheSandboxAnswersHealthThroughItsService_isTrue() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/health"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess("{\"status\":\"ok\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(this.client.isReachable("vader-sandbox-a")).isTrue();
+        this.mockServer.verify();
+    }
+
+    @Test
+    void isReachable_whenHealthReturnsAnError_isFalse() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/health"))
+            .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThat(this.client.isReachable("vader-sandbox-a")).isFalse();
+    }
+
+    @Test
+    void isReachable_whenTheConnectionIsRefused_isFalseRatherThanThrowing() {
+        // What a Service with no routable endpoint yet looks like to the JDK HTTP client.
+        ClientHttpRequestFactory factory = (uri, httpMethod) -> {
+            throw new ConnectException();
+        };
+        var client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(
+            client, "sandboxExecutionRestClient",
+            RestClient.builder().requestFactory(factory).build());
+        ReflectionTestUtils.setField(client, "namespace", "vader");
+
+        assertThat(client.isReachable("vader-sandbox-a")).isFalse();
+    }
+
+    @Test
     void execute_postsToTheSandboxsServiceAndReturnsTheResult() {
         this.mockServer
             .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/execute"))

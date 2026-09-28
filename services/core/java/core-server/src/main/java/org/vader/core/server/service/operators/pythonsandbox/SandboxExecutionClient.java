@@ -33,6 +33,8 @@ public class SandboxExecutionClient {
     private static final int MAX_SANDBOX_NAME_IN_ERROR = 80;
     private static final String EXECUTE_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/execute";
+    private static final String HEALTH_URI =
+        "http://{name}.{namespace}.svc.cluster.local:{port}/health";
     private static final String STAGE_FILE_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/workspace/files/{filename}";
 
@@ -122,6 +124,28 @@ public class SandboxExecutionClient {
                     + describe(e), e);
         }
         return staged;
+    }
+
+    /**
+     * Checks whether the sandbox answers its health endpoint through its Service -- the same
+     * route every real request takes. A passing readiness probe is not enough on its own: the
+     * pod is reported ready before the Service's endpoints and kube-proxy's routing catch up, and
+     * in that gap a connection to the Service is refused outright.
+     *
+     * @param sandboxName the exact sandbox name
+     * @return {@code true} only if the sandbox answered 2xx; {@code false} for any other status
+     *     or any failure to reach it at all
+     */
+    public boolean isReachable(final String sandboxName) {
+        boolean reachable;
+        try {
+            reachable = Boolean.TRUE.equals(this.sandboxExecutionRestClient.get()
+                .uri(HEALTH_URI, sandboxName, this.namespace, EXEC_PORT)
+                .exchange((request, response) -> response.getStatusCode().is2xxSuccessful()));
+        } catch (IllegalArgumentException | RestClientException e) {
+            reachable = false;
+        }
+        return reachable;
     }
 
     /**

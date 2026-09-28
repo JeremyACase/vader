@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.1]
+### Fixed
+- Spring's own request errors, such as an unknown object-storage id, return their proper 4xx
+  status again instead of a 500, and the system test now waits long enough for a real local
+  model to decompose a prompt.
+- A new Python sandbox is only reported ready once it answers through its Service, which lags
+  the pod's readiness probe, so an agent's first code run no longer intermittently fails with a
+  refused connection. Sandbox connections also time out now (default 5s).
+
 ## [0.26.0]
 ### Changed
 - Every inference turn now records the model's finish reason in its transcript and relays it to
