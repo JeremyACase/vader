@@ -16,8 +16,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.vader.common.library.dao.model.QueryFilter;
 import org.vader.common.model.vader.entity.AbstractModelEntity;
-import org.vader.core.server.models.EntityDescription;
-import org.vader.core.server.models.QueryResult;
+import org.vader.core.server.models.query.EntityDescription;
+import org.vader.core.server.models.query.QueryResult;
 import org.vader.core.server.service.registries.VaderDaoRegistry;
 
 /**

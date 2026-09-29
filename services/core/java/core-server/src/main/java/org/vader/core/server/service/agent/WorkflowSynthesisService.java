@@ -10,8 +10,8 @@ import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.WorkflowEntity;
-import org.vader.core.server.models.TaskOutcome;
-import org.vader.core.server.models.WorkflowSynthesisRequest;
+import org.vader.core.server.models.llm.TaskOutcome;
+import org.vader.core.server.models.llm.WorkflowSynthesisRequest;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
@@ -72,7 +72,7 @@ public class WorkflowSynthesisService {
     private TaskOutcome outcomeFrom(final TaskEntity task, final TaskAttemptEntity attempt) {
         var succeeded = attempt.getStatus() == TaskAttemptStatus.SUCCEEDED;
         var output = succeeded
-            ? Objects.requireNonNullElse(attempt.getResult(), "(no result reported)")
+            ? Objects.requireNonNullElse(attempt.effectiveResult(), "(no result reported)")
             : Objects.requireNonNullElse(
                 attempt.getFailureReason(), "(no failure reason reported)");
         return new TaskOutcome(task.getTitle(), succeeded, output);

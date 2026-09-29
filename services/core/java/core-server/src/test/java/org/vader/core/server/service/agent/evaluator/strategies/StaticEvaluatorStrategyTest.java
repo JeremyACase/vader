@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
-import org.vader.core.server.models.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationRequest;
 
 class StaticEvaluatorStrategyTest {
 
@@ -14,7 +14,7 @@ class StaticEvaluatorStrategyTest {
     @Test
     void evaluate_forSucceededAttempt_passes() {
         var request = new EvaluationRequest(
-            "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of());
+            "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
 
         var verdict = this.strategy.evaluate(request);
 
@@ -25,7 +25,7 @@ class StaticEvaluatorStrategyTest {
     @Test
     void evaluate_forFailedAttempt_doesNotPass() {
         var request = new EvaluationRequest(
-            "title", "description", TaskAttemptStatus.FAILED, null, "boom", List.of());
+            "title", "description", TaskAttemptStatus.FAILED, null, "boom", List.of(), null);
 
         var verdict = this.strategy.evaluate(request);
 

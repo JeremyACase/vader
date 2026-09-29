@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0]
+### Changed
+- The task and task-attempt mappers carry the new runtime-subtask link and rolled-up result.
+
 ## [0.17.0]
 ### Changed
 - The transcript mapper carries each turn's finish reason.

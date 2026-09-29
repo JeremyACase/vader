@@ -3,6 +3,20 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0]
+### Added
+- **An agent can no longer pass off unfinished work as a finished result.** The harness sends back
+  a final answer containing code the model never ran, or one written right after a failed tool
+  call, instead of reporting it as done. When the evaluator still finds an attempt made real but
+  unfinished progress, it splits the remaining work into up to three subtasks, each run by a
+  fresh agent, and the task succeeds once they all do. Prerequisite results are now labelled as
+  data, so a downstream agent stops re-running an earlier task's code as though it were its own.
+  Decomposition is on by default and tunable under `vader.taskDecomposition`.
+- **The local LLM runs on the host's GPU.** Both KIND install scripts now start Ollama in Docker
+  on this machine, where GPU passthrough works (unlike inside KIND nodes), pull the configured
+  model, and point Vader at it. The chart's new `vader.orchestrator.local.externalBaseUrl` does
+  the same for any Ollama outside the cluster.
+
 ## [0.15.1]
 ### Fixed
 - **The system tests pass again, both in CI and against a real local model.** Spring's own

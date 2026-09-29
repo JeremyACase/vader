@@ -3,10 +3,12 @@ package org.vader.core.server.service.llm;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -17,12 +19,13 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
-import org.vader.core.server.models.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.RemainingSubtask;
 
 class EvaluationLlmExecutorTest {
 
     private static final EvaluationRequest REQUEST = new EvaluationRequest(
-        "title", "description", TaskAttemptStatus.SUCCEEDED, "the result", null, List.of());
+        "title", "description", TaskAttemptStatus.SUCCEEDED, "the result", null, List.of(), null);
 
     private static ChatResponse responseWith(final String assistantText) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(assistantText))));
@@ -46,6 +49,44 @@ class EvaluationLlmExecutorTest {
         assertThat(outcome.isUnreachable()).isFalse();
         assertThat(outcome.verdict().passed()).isTrue();
         assertThat(outcome.verdict().reasoning()).isEqualTo("looks correct");
+    }
+
+    @Test
+    void execute_parsesRemainingSubtasksAndDefaultsThemToEmptyWhenOmitted() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+            responseWith("{\"passed\":false,\"reasoning\":\"code never ran\","
+                + "\"remainingSubtasks\":[{\"title\":\"Run the fix\","
+                + "\"description\":\"Run the corrected code.\"}]}"),
+            responseWith("{\"passed\":false,\"reasoning\":\"no progress\"}"));
+        var executor = executor(ChatClient.builder(chatModel));
+
+        var decomposable = executor.execute(REQUEST).verdict();
+        var plainFailure = executor.execute(REQUEST).verdict();
+
+        assertThat(decomposable.remainingSubtasks())
+            .containsExactly(new RemainingSubtask("Run the fix", "Run the corrected code."));
+        assertThat(plainFailure.remainingSubtasks()).isEmpty();
+    }
+
+    @Test
+    void execute_includesTheToolCallEvidenceInThePrompt() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+            responseWith("{\"passed\":false,\"reasoning\":\"last run failed\"}"));
+        var request = new EvaluationRequest(
+            "title", "description", TaskAttemptStatus.SUCCEEDED, "Let's proceed.", null,
+            List.of(), "The agent's last tool call was run_python_code: it FAILED.");
+
+        executor(ChatClient.builder(chatModel)).execute(request);
+
+        var promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getContents())
+            .contains("run_python_code: it FAILED")
+            .contains("remainingSubtasks");
     }
 
     @Test

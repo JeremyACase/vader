@@ -24,7 +24,7 @@ import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
-import org.vader.core.server.models.DecompositionRequest;
+import org.vader.core.server.models.llm.DecompositionRequest;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 import org.vader.core.server.service.registries.ToolAudienceTag;

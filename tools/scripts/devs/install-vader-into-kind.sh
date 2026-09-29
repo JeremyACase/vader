@@ -45,10 +45,20 @@ kubectl apply -f deploy/compose/config/dev/vader_dev_service_account.yaml -n vad
 # This is to ensure services have a shared mount path for anything they deploy in KIND
 kubectl apply -f deploy/compose/config/dev/vader_dev_kind_pv.yaml -n vader
 
+# Runs Ollama in Docker on this machine's GPU (KIND nodes can't reach it) and pulls the configured
+# model; Vader is pointed at it below instead of deploying an in-cluster, CPU-only Ollama.
+if ! bash tools/scripts/devs/install-ollama.sh; then
+    echo "ERROR: could not start the local Ollama."
+    exit 1
+fi
+LOCAL_OLLAMA_URL="http://vader-ollama-local:11434"
+
 if helm status vader -n vader > /dev/null 2>&1; then
     echo "Helm release 'vader' exists — upgrading..."
-    helm upgrade vader deploy/helm/ --values deploy/helm/configurations/dev/dev.yaml -n vader
+    helm upgrade vader deploy/helm/ --values deploy/helm/configurations/dev/dev.yaml \
+        --set vader.orchestrator.local.externalBaseUrl="${LOCAL_OLLAMA_URL}" -n vader
 else
     echo "Installing Helm release 'vader'..."
-    helm install vader deploy/helm/ --values deploy/helm/configurations/dev/dev.yaml -n vader
+    helm install vader deploy/helm/ --values deploy/helm/configurations/dev/dev.yaml \
+        --set vader.orchestrator.local.externalBaseUrl="${LOCAL_OLLAMA_URL}" -n vader
 fi

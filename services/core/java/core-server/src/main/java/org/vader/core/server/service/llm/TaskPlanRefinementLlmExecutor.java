@@ -11,8 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.server.models.TaskPlanRefinementRequest;
-import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict;
 
 /**
  * Actually asks the in-cluster Ollama instance to critique a freshly-decomposed task plan, via

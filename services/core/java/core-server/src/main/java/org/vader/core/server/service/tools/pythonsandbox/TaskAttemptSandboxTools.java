@@ -6,7 +6,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.vader.core.server.models.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
 import org.vader.core.server.service.agent.task.TaskAttemptToolContext;
 import org.vader.core.server.service.operators.pythonsandbox.TaskAttemptSandboxService;
 

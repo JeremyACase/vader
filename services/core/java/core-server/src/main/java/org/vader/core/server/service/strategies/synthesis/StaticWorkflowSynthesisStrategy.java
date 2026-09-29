@@ -2,8 +2,8 @@ package org.vader.core.server.service.strategies.synthesis;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.vader.core.server.models.TaskOutcome;
-import org.vader.core.server.models.WorkflowSynthesisRequest;
+import org.vader.core.server.models.llm.TaskOutcome;
+import org.vader.core.server.models.llm.WorkflowSynthesisRequest;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 
 /**

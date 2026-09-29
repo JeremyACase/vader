@@ -55,6 +55,18 @@ impl ConversationMessage {
         }
     }
 
+    /// An `Assistant` message replaying a prior turn's plain-text reply, so a follow-up `User`
+    /// message (e.g. a nudge) has something to respond to.
+    pub fn assistant_text(content: impl Into<String>) -> Self {
+        Self {
+            role: ConversationRole::Assistant,
+            content: Some(content.into()),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+            tool_name: None,
+        }
+    }
+
     /// An `Assistant` message replaying the tool calls a prior turn requested, so the following
     /// `Tool` messages have something to correlate against.
     pub fn assistant_tool_calls(tool_calls: Vec<ToolCall>) -> Self {

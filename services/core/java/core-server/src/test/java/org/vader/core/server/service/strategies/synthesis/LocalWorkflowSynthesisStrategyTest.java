@@ -18,8 +18,8 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.models.TaskOutcome;
-import org.vader.core.server.models.WorkflowSynthesisRequest;
+import org.vader.core.server.models.llm.TaskOutcome;
+import org.vader.core.server.models.llm.WorkflowSynthesisRequest;
 
 class LocalWorkflowSynthesisStrategyTest {
 

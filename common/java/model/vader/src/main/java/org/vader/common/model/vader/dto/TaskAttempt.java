@@ -40,6 +40,8 @@ public class TaskAttempt extends AbstractModel {
 
     private String failureReason;
 
+    private String rollupResult;
+
     @Override
     public String getModelType() {
         return "TaskAttempt";
@@ -131,5 +133,13 @@ public class TaskAttempt extends AbstractModel {
 
     public void setFailureReason(String failureReason) {
         this.failureReason = failureReason;
+    }
+
+    public String getRollupResult() {
+        return this.rollupResult;
+    }
+
+    public void setRollupResult(String rollupResult) {
+        this.rollupResult = rollupResult;
     }
 }

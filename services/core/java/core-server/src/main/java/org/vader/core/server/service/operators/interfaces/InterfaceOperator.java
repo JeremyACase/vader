@@ -1,7 +1,7 @@
 package org.vader.core.server.service.operators.interfaces;
 
 import java.util.List;
-import org.vader.core.server.models.ManagedResource;
+import org.vader.core.server.models.operators.ManagedResource;
 
 /**
  * Contract for a Kubernetes operator that manages the lifecycle of a set of resources derived from

@@ -11,7 +11,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.server.models.TaskPlanRefinementVerdict.MissingDependency;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict.MissingDependency;
 
 /**
  * Adds the dependencies a plan critique found missing directly to the plan, instead of sending the

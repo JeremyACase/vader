@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.server.models.TaskPlanRefinementRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
 
 class StaticTaskPlanRefinementStrategyTest {
 

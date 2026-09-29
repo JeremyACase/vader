@@ -31,6 +31,9 @@ public class TaskDtoMapper extends GenericDtoMapper<TaskEntity, Task> {
             if (Objects.nonNull(from.getParentTask())) {
                 to.setParentTaskId(from.getParentTask().getId());
             }
+            if (Objects.nonNull(from.getSpawnedByAttempt())) {
+                to.setSpawnedByAttemptId(from.getSpawnedByAttempt().getId());
+            }
 
             to.setSubTasks(this.map(from.getSubTasks()));
 

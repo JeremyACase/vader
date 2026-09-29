@@ -1,6 +1,6 @@
 package org.vader.core.server.service.strategies.synthesis.interfaces;
 
-import org.vader.core.server.models.WorkflowSynthesisRequest;
+import org.vader.core.server.models.llm.WorkflowSynthesisRequest;
 
 /**
  * Strategy for writing a workflow's final answer once every one of its tasks has settled.

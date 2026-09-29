@@ -10,6 +10,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +32,7 @@ import org.vader.core.server.repository.TaskAttemptReviewOutboxMessageRepository
 import org.vader.core.server.repository.TaskUpdateRepository;
 import org.vader.core.server.repository.WorkflowRepository;
 import org.vader.core.server.service.agent.WorkflowSynthesisService;
+import org.vader.core.server.service.agent.decomposition.TaskDecompositionSaga;
 import org.vader.core.server.service.io.TaskAssignmentOutbox;
 import org.vader.core.server.service.io.TaskAttemptReviewOutbox;
 
@@ -44,6 +47,7 @@ class TaskGraphSchedulerTest {
     private TaskAttemptReviewOutbox taskAttemptReviewOutbox;
     private TaskAttemptReviewOutboxMessageRepository taskAttemptReviewOutboxMessageRepository;
     private WorkflowSynthesisService workflowSynthesisService;
+    private TaskDecompositionSaga taskDecompositionSaga;
     private TaskGraphScheduler scheduler;
 
     @BeforeEach
@@ -56,6 +60,7 @@ class TaskGraphSchedulerTest {
         this.taskAttemptReviewOutboxMessageRepository =
             mock(TaskAttemptReviewOutboxMessageRepository.class);
         this.workflowSynthesisService = mock(WorkflowSynthesisService.class);
+        this.taskDecompositionSaga = mock(TaskDecompositionSaga.class);
 
         this.scheduler = new TaskGraphScheduler();
         ReflectionTestUtils.setField(
@@ -73,6 +78,8 @@ class TaskGraphSchedulerTest {
             this.taskAttemptReviewOutboxMessageRepository);
         ReflectionTestUtils.setField(
             this.scheduler, "workflowSynthesisService", this.workflowSynthesisService);
+        ReflectionTestUtils.setField(
+            this.scheduler, "taskDecompositionSaga", this.taskDecompositionSaga);
     }
 
     private static WorkflowEntity runningWorkflowWithOneTask(final TaskEntity task) {
@@ -269,5 +276,122 @@ class TaskGraphSchedulerTest {
         assertThat(captor.getValue().getTask()).isSameAs(task);
         assertThat(captor.getValue().getAttemptNumber()).isEqualTo(2);
         assertThat(captor.getValue().getStatus()).isEqualTo(TaskAttemptStatus.PENDING);
+    }
+
+    private static WorkflowEntity runningWorkflowWith(final TaskEntity... roots) {
+        var workflow = runningWorkflowWithOneTask(roots[0]);
+        workflow.getTaskPlan().getTaskGraph().setTasks(new LinkedHashSet<>(List.of(roots)));
+        return workflow;
+    }
+
+    private static TaskUpdateEntity update(final TaskUpdateType type) {
+        var update = new TaskUpdateEntity();
+        update.setType(type);
+        return update;
+    }
+
+    /** A root task whose attempt "pa" was decomposed into the single subtask "c". */
+    private TaskEntity decomposedParentWithSubtask(final TaskEntity subtask) {
+        var parent = task("p");
+        var parentAttempt = attempt("pa", TaskAttemptStatus.SUCCEEDED);
+        parentAttempt.setTask(parent);
+        subtask.setParentTask(parent);
+        subtask.setSpawnedByAttempt(parentAttempt);
+        parent.getSubTasks().add(subtask);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("p"))
+            .thenReturn(Optional.of(parentAttempt));
+        when(this.taskDecompositionSaga.subtasksOf(parentAttempt)).thenReturn(List.of(subtask));
+        return parent;
+    }
+
+    @Test
+    void evaluate_whenTaskWasDecomposed_dispatchesItsSubtaskAndLeavesTheWorkflowRunning() {
+        var subtask = task("c");
+        final var parent = this.decomposedParentWithSubtask(subtask);
+        verdictFor("pa", TaskUpdateType.DECOMPOSED);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("c"))
+            .thenReturn(Optional.empty());
+        when(this.taskAttemptRepository.save(any())).thenAnswer(
+            invocation -> invocation.getArgument(0));
+        when(this.workflowRepository.findById(WORKFLOW_ID))
+            .thenReturn(Optional.of(runningWorkflowWith(parent)));
+
+        this.scheduler.evaluate(WORKFLOW_ID);
+
+        var captor = ArgumentCaptor.forClass(TaskAttemptEntity.class);
+        verify(this.taskAssignmentOutbox).enqueue(captor.capture());
+        assertThat(captor.getValue().getTask()).isSameAs(subtask);
+        verify(this.taskDecompositionSaga, never()).rollUp(any());
+        verify(this.taskAttemptReviewOutbox, never()).enqueue(any());
+        verify(this.workflowRepository, never()).save(any());
+    }
+
+    @Test
+    void evaluate_whenEverySubtaskSucceeded_rollsUpAndUnblocksDependentsInTheSamePass() {
+        var subtask = task("c");
+        final var parent = this.decomposedParentWithSubtask(subtask);
+        when(this.taskUpdateRepository
+                .findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(eq("pa"), anyList()))
+            .thenReturn(Optional.of(update(TaskUpdateType.DECOMPOSED)),
+                Optional.of(update(TaskUpdateType.COMPLETED)));
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("c"))
+            .thenReturn(Optional.of(attempt("ca", TaskAttemptStatus.SUCCEEDED)));
+        verdictFor("ca", TaskUpdateType.COMPLETED);
+        var dependent = task("d");
+        dependent.getDependsOn().add(parent);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("d"))
+            .thenReturn(Optional.empty());
+        when(this.taskAttemptRepository.save(any())).thenAnswer(
+            invocation -> invocation.getArgument(0));
+        when(this.workflowRepository.findById(WORKFLOW_ID))
+            .thenReturn(Optional.of(runningWorkflowWith(parent, dependent)));
+
+        this.scheduler.evaluate(WORKFLOW_ID);
+
+        verify(this.taskDecompositionSaga).rollUp(any());
+        var captor = ArgumentCaptor.forClass(TaskAttemptEntity.class);
+        verify(this.taskAssignmentOutbox).enqueue(captor.capture());
+        assertThat(captor.getValue().getTask()).isSameAs(dependent);
+    }
+
+    @Test
+    void evaluate_whenSubtaskPermanentlyFailed_failsTheParentAndTheWorkflow() {
+        var subtask = task("c");
+        final var parent = this.decomposedParentWithSubtask(subtask);
+        when(this.taskUpdateRepository
+                .findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(eq("pa"), anyList()))
+            .thenReturn(Optional.of(update(TaskUpdateType.DECOMPOSED)),
+                Optional.of(update(TaskUpdateType.FAILED)));
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("c"))
+            .thenReturn(Optional.of(attempt("ca", TaskAttemptStatus.FAILED)));
+        verdictFor("ca", TaskUpdateType.FAILED);
+        var workflow = runningWorkflowWith(parent);
+        when(this.workflowRepository.findById(WORKFLOW_ID)).thenReturn(Optional.of(workflow));
+
+        this.scheduler.evaluate(WORKFLOW_ID);
+
+        verify(this.taskDecompositionSaga).compensate(any(), eq(subtask));
+        verify(this.taskDecompositionSaga, never()).rollUp(any());
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.FAILED);
+    }
+
+    @Test
+    void evaluate_neverDispatchesSubtasksThePlanItselfNested() {
+        var parent = task("p");
+        var planSubtask = task("wireframe");
+        planSubtask.setParentTask(parent);
+        parent.getSubTasks().add(planSubtask);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("p"))
+            .thenReturn(Optional.empty());
+        when(this.taskAttemptRepository.save(any())).thenAnswer(
+            invocation -> invocation.getArgument(0));
+        when(this.workflowRepository.findById(WORKFLOW_ID))
+            .thenReturn(Optional.of(runningWorkflowWith(parent)));
+
+        this.scheduler.evaluate(WORKFLOW_ID);
+
+        var captor = ArgumentCaptor.forClass(TaskAttemptEntity.class);
+        verify(this.taskAssignmentOutbox).enqueue(captor.capture());
+        assertThat(captor.getValue().getTask()).isSameAs(parent);
     }
 }

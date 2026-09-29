@@ -18,7 +18,7 @@ import { ActiveWorkflowsService } from '../active-workflows.service';
 import { Task, Workflow } from '../client-prompt.model';
 import { DagNode } from './task-graph-layout.model';
 import { flattenTasks, TaskGraphLayoutBuilder } from './task-graph-layout.builder';
-import { TaskNodeStatus, deriveNodeStatus } from './task-node-status';
+import { TaskNodeStatus, applySubtaskGate, deriveOwnStatus } from './task-node-status';
 
 /** A point in the SVG coordinate space. */
 interface Point {
@@ -28,9 +28,13 @@ interface Point {
 
 /**
  * Renders a workflow's task graph as a DAG: one node per task, colored by its derived status
- * (blue active, green succeeded, red failed, gray never attempted), edges drawn from each task
- * to whatever depends on it. Clicking a node selects it and emits its task id. The graph is
- * pannable (drag) and zoomable (scroll wheel or the toolbar buttons) so large graphs stay legible.
+ * (gray not yet started, blue in progress, green succeeded, red failed -- pass/fail from the
+ * evaluator's latest verdict, never the agent's self-report, and never while a task's runtime
+ * subtasks are still unsettled). Laid out bottom to top: final tasks at the top, prerequisites
+ * below what needs them, and decomposed subtasks in bands beneath the plan, with edges drawn up
+ * from each prerequisite to its dependent. Clicking a node selects it and emits
+ * its task id. The graph is pannable (drag) and zoomable (scroll wheel or the toolbar buttons) so
+ * large graphs stay legible.
  */
 @Component({
   selector: 'app-workflow-dag',
@@ -117,11 +121,18 @@ export class WorkflowDagComponent {
       return of(new Map<string, TaskNodeStatus>());
     }
     const perTask = taskIds.map((id) =>
-      this.activeWorkflowsService
-        .taskAttempts(id)
-        .pipe(map((attempts) => [id, deriveNodeStatus(attempts)] as const))
+      combineLatest([
+        this.activeWorkflowsService.taskAttempts(id),
+        this.activeWorkflowsService.taskUpdates(id)
+      ]).pipe(map(([attempts, updates]) => [id, deriveOwnStatus(attempts, updates)] as const))
     );
-    return combineLatest(perTask).pipe(map((entries) => new Map(entries)));
+    return combineLatest(perTask).pipe(
+      map((entries) => applySubtaskGate(this.rootTasks(), new Map(entries)))
+    );
+  }
+
+  private rootTasks(): Task[] {
+    return this.workflow().taskPlan?.taskGraph.tasks ?? [];
   }
 
   statusOf(taskId: string): TaskNodeStatus {
@@ -226,13 +237,15 @@ export class WorkflowDagComponent {
     return { x: node.x - this.nodeWidth / 2, y: node.y - this.nodeHeight / 2 };
   }
 
+  /** Edges run upward, so they leave the top edge of the lower node... */
   edgeStart(fromTaskId: string): Point {
     const node = this.nodeById().get(fromTaskId);
-    return node ? { x: node.x + this.nodeWidth / 2, y: node.y } : { x: 0, y: 0 };
+    return node ? { x: node.x, y: node.y - this.nodeHeight / 2 } : { x: 0, y: 0 };
   }
 
+  /** ...and arrive at the bottom edge of the higher one. */
   edgeEnd(toTaskId: string): Point {
     const node = this.nodeById().get(toTaskId);
-    return node ? { x: node.x - this.nodeWidth / 2, y: node.y } : { x: 0, y: 0 };
+    return node ? { x: node.x, y: node.y + this.nodeHeight / 2 } : { x: 0, y: 0 };
   }
 }

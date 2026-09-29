@@ -10,6 +10,9 @@ package org.vader.common.model.vader.entity;
  *   <li>{@code COMPLETED} -- an evaluator judged the task's latest attempt a pass.</li>
  *   <li>{@code FAILED} -- an evaluator judged the task's latest attempt a fail.</li>
  *   <li>{@code TIMED_OUT} -- the task's latest attempt ran out its deadline before finishing.</li>
+ *   <li>{@code DECOMPOSED} -- an evaluator judged the task's latest attempt real but unfinished
+ *       progress, and its remaining work was split into runtime subtasks. Not terminal: the task
+ *       completes (or fails) once those subtasks settle.</li>
  * </ul>
  */
 public enum TaskUpdateType {
@@ -18,5 +21,6 @@ public enum TaskUpdateType {
     UPDATE,
     COMPLETED,
     FAILED,
-    TIMED_OUT
+    TIMED_OUT,
+    DECOMPOSED
 }

@@ -16,7 +16,7 @@ import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.exceptions.OrchestratorResponseException;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.DecompositionRequest;
+import org.vader.core.server.models.llm.DecompositionRequest;
 import org.vader.core.server.service.agent.orchestrator.TaskTitleMatcher;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 import org.vader.core.server.service.llm.LlmRequestQueue;

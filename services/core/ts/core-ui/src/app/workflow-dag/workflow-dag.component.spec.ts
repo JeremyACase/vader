@@ -9,6 +9,7 @@ import { WorkflowDagComponent } from './workflow-dag.component';
 
 class FakeActiveWorkflowsService {
   attemptsByTaskId = new Map<string, TaskAttempt[]>();
+  updatesByTaskId = new Map<string, TaskUpdate[]>();
 
   recentWorkflows(): Observable<DaoPage<Workflow>> {
     return of({ content: [], totalElements: 0 });
@@ -26,8 +27,8 @@ class FakeActiveWorkflowsService {
     return of([]);
   }
 
-  taskUpdates(): Observable<TaskUpdate[]> {
-    return of([]);
+  taskUpdates(taskId: string): Observable<TaskUpdate[]> {
+    return of(this.updatesByTaskId.get(taskId) ?? []);
   }
 
   promptText(): Observable<string> {
@@ -49,7 +50,18 @@ function workflow(tasks: Task[]): Workflow {
 }
 
 function attempt(overrides: Partial<TaskAttempt> & Pick<TaskAttempt, 'taskId'>): TaskAttempt {
-  return { attemptNumber: 1, status: 'RUNNING', turnsUsed: 0, tokensUsed: 0, ...overrides };
+  return {
+    id: `${overrides.taskId}-a1`,
+    attemptNumber: 1,
+    status: 'RUNNING',
+    turnsUsed: 0,
+    tokensUsed: 0,
+    ...overrides
+  };
+}
+
+function verdict(taskId: string, type: TaskUpdate['type']): TaskUpdate {
+  return { taskId, taskAttemptId: `${taskId}-a1`, type, description: 'why', author: 'EVALUATOR' };
 }
 
 describe('WorkflowDagComponent', () => {
@@ -79,12 +91,35 @@ describe('WorkflowDagComponent', () => {
     expect(fixture.componentInstance.statusOf('t1')).toBe('inactive');
   });
 
-  it('derives green/succeeded from the latest attempt', () => {
+  it("derives green/succeeded from the evaluator's verdict", () => {
     fakeService.attemptsByTaskId.set('t1', [attempt({ taskId: 't1', status: 'SUCCEEDED' })]);
+    fakeService.updatesByTaskId.set('t1', [verdict('t1', 'COMPLETED')]);
     fixture.componentRef.setInput('workflow', workflow([task({ id: 't1', title: 'Design' })]));
     fixture.detectChanges();
 
     expect(fixture.componentInstance.statusOf('t1')).toBe('succeeded');
+  });
+
+  it('derives red/failed when the evaluator rejects a self-reported success', () => {
+    fakeService.attemptsByTaskId.set('t1', [attempt({ taskId: 't1', status: 'SUCCEEDED' })]);
+    fakeService.updatesByTaskId.set('t1', [verdict('t1', 'FAILED')]);
+    fixture.componentRef.setInput('workflow', workflow([task({ id: 't1', title: 'Design' })]));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.statusOf('t1')).toBe('failed');
+  });
+
+  it('keeps a decomposed parent blue until its runtime subtasks settle', () => {
+    const child = task({ id: 'c1', title: 'Run the fix', spawnedByAttemptId: 'p-a1' });
+    const parent = task({ id: 'p', title: 'Clean', subTasks: [child] });
+    fakeService.attemptsByTaskId.set('p', [attempt({ taskId: 'p', status: 'SUCCEEDED' })]);
+    fakeService.updatesByTaskId.set('p', [verdict('p', 'DECOMPOSED')]);
+    fakeService.attemptsByTaskId.set('c1', [attempt({ taskId: 'c1', status: 'RUNNING' })]);
+    fixture.componentRef.setInput('workflow', workflow([parent]));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.statusOf('p')).toBe('active');
+    expect(fixture.componentInstance.statusOf('c1')).toBe('active');
   });
 
   it('emits the task id and marks it selected when a node is clicked', () => {

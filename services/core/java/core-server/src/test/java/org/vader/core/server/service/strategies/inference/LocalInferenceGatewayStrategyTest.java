@@ -9,9 +9,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.ConversationRole;
-import org.vader.core.server.models.InferenceTurn;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.ConversationRole;
+import org.vader.core.server.models.harness.InferenceTurn;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 
 class LocalInferenceGatewayStrategyTest {

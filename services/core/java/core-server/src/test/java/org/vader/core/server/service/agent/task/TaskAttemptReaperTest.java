@@ -20,7 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
-import org.vader.core.server.models.ResultRequest;
+import org.vader.core.server.models.harness.ResultRequest;
 import org.vader.core.server.repository.TaskAttemptRepository;
 
 class TaskAttemptReaperTest {

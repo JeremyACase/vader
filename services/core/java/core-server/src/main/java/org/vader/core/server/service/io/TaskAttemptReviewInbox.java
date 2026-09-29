@@ -14,7 +14,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.common.model.vader.entity.TaskAttemptReviewOutboxMessageEntity;
-import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.events.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.repository.OutboxMessageRepository;
 import org.vader.core.server.repository.TaskAttemptReviewOutboxMessageRepository;
 import org.vader.core.server.service.agent.TaskAttemptReviewRetryService;

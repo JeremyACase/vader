@@ -22,6 +22,8 @@ export interface TaskAttempt {
   tokensUsed: number;
   result?: string;
   failureReason?: string;
+  /** Set once a decomposed attempt's subtasks all succeeded: their results, rolled up. */
+  rollupResult?: string;
 }
 
 /** Equivalent of org.vader.common.model.vader.dto.TaskAttemptTranscript. */

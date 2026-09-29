@@ -10,12 +10,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.vader.core.server.exceptions.SandboxExecutionException;
-import org.vader.core.server.models.ManagedResource;
-import org.vader.core.server.models.PythonSandboxSpec;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.SandboxInfo;
-import org.vader.core.server.models.StagedObjectInfo;
+import org.vader.core.server.models.operators.ManagedResource;
+import org.vader.core.server.models.operators.PythonSandboxSpec;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxInfo;
+import org.vader.core.server.models.sandbox.StagedObjectInfo;
 import org.vader.core.server.service.storage.ObjectStorageService;
 
 /**

@@ -22,8 +22,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.server.models.TaskPlanRefinementRequest;
-import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict;
 
 class TaskPlanRefinementLlmExecutorTest {
 

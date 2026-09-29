@@ -83,9 +83,11 @@
   cursor: pointer;
 }
 
-/* Default/inactive: created but never attempted, or only queued (PENDING/DISPATCHED) rather than
-   actually running -- deliberately translucent so it reads as "not yet doing anything", distinct
-   from the fully-opaque colors below. */
+/* Default/inactive: not yet started -- never attempted, or its first attempt is only queued
+   (PENDING/DISPATCHED) -- deliberately translucent so it reads as "not yet doing anything",
+   distinct from the fully-opaque colors below. Active means running, retrying, awaiting its
+   evaluator verdict, or waiting on its runtime subtasks; succeeded/failed come from the
+   evaluator's verdict, never the agent's self-report (see task-node-status.ts). */
 .dag-node-rect {
   fill: #2a2e38;
   fill-opacity: 0.35;

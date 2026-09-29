@@ -7,6 +7,7 @@ mod inference_gateway;
 mod runner;
 mod stall_detector;
 mod tool_executor;
+mod unfinished_answer_guard;
 mod wire;
 
 use std::time::{Duration, Instant};

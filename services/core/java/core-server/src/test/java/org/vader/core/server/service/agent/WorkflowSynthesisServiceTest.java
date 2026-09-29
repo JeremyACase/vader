@@ -19,7 +19,7 @@ import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskGraphEntity;
 import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.WorkflowEntity;
-import org.vader.core.server.models.WorkflowSynthesisRequest;
+import org.vader.core.server.models.llm.WorkflowSynthesisRequest;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.service.strategies.synthesis.interfaces.InterfaceWorkflowSynthesisStrategy;
 

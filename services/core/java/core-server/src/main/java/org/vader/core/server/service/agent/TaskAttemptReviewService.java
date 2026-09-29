@@ -8,14 +8,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
-import org.vader.core.server.models.TaskAttemptSettledEvent;
+import org.vader.core.server.models.events.TaskAttemptSettledEvent;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.service.agent.evaluator.EvaluatorAgentService;
 import org.vader.core.server.service.agent.orchestrator.OrchestratorAgentService;
 
 /**
- * Coordinates review of one newly-terminal attempt: an evaluator's verdict, and -- on anything
- * short of success -- the orchestrator's own decision on whether it's worth re-attempting.
+ * Coordinates review of one newly-terminal attempt: an evaluator's verdict, and -- on a failure
+ * or timeout -- the orchestrator's own decision on whether it's worth re-attempting. An attempt the
+ * evaluator decomposed into subtasks is neither: its work continues in those subtasks.
  *
  * <p>Called only from {@link org.vader.core.server.service.io.TaskAttemptReviewInbox}, which
  * drains the durable review pipeline off {@code TaskGraphScheduler}'s own thread specifically so
@@ -65,12 +66,20 @@ public class TaskAttemptReviewService {
     public void review(final String attemptId) {
         var attempt = this.taskAttemptRepository.findById(attemptId).orElseThrow();
         var verdictType = this.verdictFor(attempt);
-        if (verdictType != TaskUpdateType.COMPLETED) {
+        if (needsReattemptDecision(verdictType)) {
             this.orchestratorAgentService.decideReattempt(attemptId);
         }
         // Only reached once every LLM call above succeeded -- the LLM is evidently answering.
         this.retryService.resumeIfNoLongerWaiting(attempt);
         this.publishSettled(attempt);
+    }
+
+    /**
+     * A {@code DECOMPOSED} attempt is not a failure: its remaining work continues in subtasks,
+     * and re-running the whole task alongside them would only duplicate it.
+     */
+    private static boolean needsReattemptDecision(final TaskUpdateType verdictType) {
+        return verdictType == TaskUpdateType.FAILED || verdictType == TaskUpdateType.TIMED_OUT;
     }
 
     private TaskUpdateType verdictFor(final TaskAttemptEntity attempt) {
@@ -94,7 +103,7 @@ public class TaskAttemptReviewService {
     }
 
     private void publishSettled(final TaskAttemptEntity attempt) {
-        var workflowId = attempt.getTask().getTaskGraph().getTaskPlan().getWorkflow().getId();
+        var workflowId = attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow().getId();
         this.eventPublisher.publishEvent(new TaskAttemptSettledEvent(workflowId, attempt.getId()));
     }
 }

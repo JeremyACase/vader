@@ -5,6 +5,12 @@ use crate::error::HarnessError;
 use crate::inference_gateway::{ConversationMessage, InferenceGateway, InferenceTurn, ToolCall};
 use crate::stall_detector::StallDetector;
 use crate::tool_executor::ToolExecutor;
+use crate::unfinished_answer_guard::UnfinishedAnswerGuard;
+
+/// How many times one run may be sent back for an answer that looks unfinished (see
+/// [`UnfinishedAnswerGuard`]). Two covers the common "propose a fix, nudge, run it, hit another
+/// error, propose again" sequence; beyond that the answer goes to core-server's evaluator as-is.
+const MAX_UNFINISHED_ANSWER_NUDGES: u32 = 2;
 
 /// The terminal result of one harness run, reported back to `core-server` via
 /// [`ControlPlane::submit_result`].
@@ -85,6 +91,7 @@ pub struct AgentHarnessRunner<C: ControlPlane, G: InferenceGateway, T: ToolExecu
     tool_executor: T,
     budget: HarnessBudget,
     stall_detector: StallDetector,
+    unfinished_answer_guard: UnfinishedAnswerGuard,
 }
 
 impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C, G, T> {
@@ -101,6 +108,7 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             tool_executor,
             budget,
             stall_detector,
+            unfinished_answer_guard: UnfinishedAnswerGuard::new(MAX_UNFINISHED_ANSWER_NUDGES),
         }
     }
 
@@ -186,7 +194,12 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             log::warn!("assignment {assignment_id:?}: reply was cut off at the output token cap");
             TurnOutcome::CutOff
         } else if turn.tool_calls.is_empty() {
-            final_answer_or_nudge(assignment_id, messages, turn.content)
+            final_answer_or_nudge(
+                assignment_id,
+                messages,
+                turn.content,
+                &mut self.unfinished_answer_guard,
+            )
         } else {
             log::debug!(
                 "assignment {assignment_id:?}: model requested {} tool call(s)",
@@ -245,18 +258,42 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
     }
 }
 
-/// A turn with no tool calls is the model's final answer -- unless it is blank, in which case the
-/// model is nudged to continue instead (see [`EMPTY_REPLY_NUDGE`]).
+/// A turn with no tool calls is the model's final answer -- unless it is blank (see
+/// [`EMPTY_REPLY_NUDGE`]) or looks unfinished (see [`UnfinishedAnswerGuard`]), in which case the
+/// model is nudged to continue instead.
 fn final_answer_or_nudge(
     assignment_id: AssignmentId,
     messages: &mut Vec<ConversationMessage>,
     content: Option<String>,
+    unfinished_answer_guard: &mut UnfinishedAnswerGuard,
 ) -> TurnOutcome {
     match content.filter(|content| !content.trim().is_empty()) {
-        Some(answer) => TurnOutcome::Finished(answer),
+        Some(answer) => {
+            finished_or_nudged(assignment_id, messages, answer, unfinished_answer_guard)
+        }
         None => {
             log::warn!("assignment {assignment_id:?}: model returned an empty reply, nudging it");
             messages.push(ConversationMessage::user(EMPTY_REPLY_NUDGE));
+            TurnOutcome::Continuing
+        }
+    }
+}
+
+/// Accepts a non-blank answer as final unless the guard flags it as unfinished; then the answer
+/// is replayed into the conversation, followed by the nudge, so the model sees what it said and
+/// why it was sent back.
+fn finished_or_nudged(
+    assignment_id: AssignmentId,
+    messages: &mut Vec<ConversationMessage>,
+    answer: String,
+    unfinished_answer_guard: &mut UnfinishedAnswerGuard,
+) -> TurnOutcome {
+    match unfinished_answer_guard.review(&answer, messages) {
+        None => TurnOutcome::Finished(answer),
+        Some(nudge) => {
+            log::warn!("assignment {assignment_id:?}: final answer looks unfinished, nudging it");
+            messages.push(ConversationMessage::assistant_text(answer));
+            messages.push(ConversationMessage::user(nudge));
             TurnOutcome::Continuing
         }
     }
@@ -282,6 +319,7 @@ mod tests {
     use crate::assignment::TaskId;
     use crate::inference_gateway::ConversationRole;
     use crate::tool_executor::ToolResult;
+    use crate::unfinished_answer_guard::UNEXECUTED_CODE_NUDGE;
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::time::{Duration, Instant};
@@ -619,6 +657,69 @@ mod tests {
         let outcome = runner.run(assignment()).await.unwrap();
 
         assert_eq!(outcome, HarnessOutcome::Stalled);
+    }
+
+    #[tokio::test]
+    async fn run_nudges_past_an_answer_with_unrun_code_and_finishes_after_running_it() {
+        let control_plane = StubControlPlane::new();
+        let proposal = "Here's the fix:\n```python\nprint(df.describe())\n```\nLet's proceed.";
+        let code_call = "{\"code\":\"print(df.describe())\"}";
+        let inference_gateway = ScriptedInferenceGateway::succeeding(vec![
+            final_turn(proposal),
+            tool_call_turn("call-1", "run_python_code", code_call),
+            final_turn("The mean agility is 0.4."),
+        ]);
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+        );
+
+        let outcome = runner.run(assignment()).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            HarnessOutcome::Succeeded {
+                output: "The mean agility is 0.4.".to_string()
+            }
+        );
+        let second_call_messages = &runner.inference_gateway.messages_seen.borrow()[1];
+        let replayed = &second_call_messages[second_call_messages.len() - 2];
+        assert_eq!(replayed.role, ConversationRole::Assistant);
+        assert_eq!(replayed.content.as_deref(), Some(proposal));
+        let nudge = second_call_messages.last().expect("a message");
+        assert_eq!(nudge.role, ConversationRole::User);
+        assert_eq!(nudge.content.as_deref(), Some(UNEXECUTED_CODE_NUDGE));
+    }
+
+    #[tokio::test]
+    async fn run_accepts_an_unfinished_looking_answer_once_the_model_repeats_it() {
+        let control_plane = StubControlPlane::new();
+        let deliverable = "```python\ndef add(a, b):\n    return a + b\n```";
+        let inference_gateway = ScriptedInferenceGateway::succeeding(vec![
+            final_turn(deliverable),
+            final_turn(deliverable),
+        ]);
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+        );
+
+        let outcome = runner.run(assignment()).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            HarnessOutcome::Succeeded {
+                output: deliverable.to_string()
+            }
+        );
     }
 
     #[tokio::test]

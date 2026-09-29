@@ -4,7 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.vader.core.server.models.VaderMode;
+import org.vader.core.server.models.config.VaderMode;
 
 /**
  * Refuses to let core-server start with {@code vader.orchestrator.type=static} outside

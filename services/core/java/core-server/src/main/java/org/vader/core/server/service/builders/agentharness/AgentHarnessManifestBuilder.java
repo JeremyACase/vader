@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.vader.core.server.models.AgentHarnessSpec;
+import org.vader.core.server.models.operators.AgentHarnessSpec;
 import org.vader.core.server.service.operators.agentharness.AgentHarnessNaming;
 
 /**

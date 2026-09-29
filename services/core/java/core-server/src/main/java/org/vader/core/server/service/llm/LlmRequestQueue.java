@@ -16,13 +16,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.DecompositionRequest;
-import org.vader.core.server.models.EvaluationRequest;
-import org.vader.core.server.models.InferenceTurn;
-import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
-import org.vader.core.server.models.ReattemptDecisionRequest;
-import org.vader.core.server.models.TaskPlanRefinementRequest;
+import org.vader.core.server.models.events.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.InferenceTurn;
+import org.vader.core.server.models.llm.DecompositionRequest;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 
 /**

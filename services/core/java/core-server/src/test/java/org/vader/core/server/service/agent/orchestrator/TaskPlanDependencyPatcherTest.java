@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
-import org.vader.core.server.models.TaskPlanRefinementVerdict.MissingDependency;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict.MissingDependency;
 
 class TaskPlanDependencyPatcherTest {
 

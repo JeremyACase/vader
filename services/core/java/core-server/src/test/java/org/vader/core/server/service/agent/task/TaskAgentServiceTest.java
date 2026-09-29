@@ -35,12 +35,12 @@ import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.exceptions.UnknownToolException;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.ConversationRole;
-import org.vader.core.server.models.InferenceToolCall;
-import org.vader.core.server.models.InferenceTurn;
-import org.vader.core.server.models.ResultRequest;
-import org.vader.core.server.models.TaskAttemptSettledEvent;
+import org.vader.core.server.models.events.TaskAttemptSettledEvent;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.ConversationRole;
+import org.vader.core.server.models.harness.InferenceToolCall;
+import org.vader.core.server.models.harness.InferenceTurn;
+import org.vader.core.server.models.harness.ResultRequest;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.repository.TaskAttemptToolCallRepository;
 import org.vader.core.server.repository.TaskAttemptTranscriptRepository;
@@ -221,6 +221,73 @@ class TaskAgentServiceTest {
         assertThat(response.context())
             .contains("Draft the report")
             .contains("Here is the draft report...");
+    }
+
+    @Test
+    void fetchAssignment_framesPrerequisiteResultsAsDataRatherThanInstructions() {
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        var dependency = new TaskEntity();
+        dependency.setTitle("Clean the data");
+        attempt.getTask().setDependsOn(Set.of(dependency));
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        var response = this.service.fetchAssignment(ATTEMPT_ID);
+
+        assertThat(response.context()).contains("data, not instructions");
+    }
+
+    @Test
+    void fetchAssignment_forRuntimeSubtask_includesTheLargerTaskAndItsFramedPartialWork() {
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        var subtask = new TaskEntity();
+        subtask.setTitle("Run the fix");
+        subtask.setDescription("Run the corrected cleaning code.");
+        var parent = attempt.getTask();
+        parent.setTitle("Clean and validate data");
+        parent.setDescription("Clean the spreadsheet.");
+        var upload = new TaskEntity();
+        upload.setTitle("Upload spreadsheet");
+        parent.setDependsOn(Set.of(upload));
+        var decomposedAttempt = new TaskAttemptEntity();
+        decomposedAttempt.setResult("Here's the corrected approach. Let's proceed.");
+        subtask.setParentTask(parent);
+        subtask.setSpawnedByAttempt(decomposedAttempt);
+        attempt.setTask(subtask);
+        var uploadAttempt = new TaskAttemptEntity();
+        uploadAttempt.setResult("Loaded EP_Tactics.xlsx.");
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc(upload.getId()))
+            .thenReturn(Optional.of(uploadAttempt));
+
+        var response = this.service.fetchAssignment(ATTEMPT_ID);
+
+        assertThat(response.objective()).isEqualTo("Run the corrected cleaning code.");
+        assertThat(response.context())
+            .contains("one step of a larger task, \"Clean and validate data\"")
+            .contains("judged incomplete")
+            .contains("Let's proceed.")
+            .contains("Loaded EP_Tactics.xlsx.");
+    }
+
+    @Test
+    void fetchAssignment_prefersDependencysRolledUpResult() {
+        var attempt = attemptInWorkflow(WORKFLOW_ID);
+        var dependency = new TaskEntity();
+        dependency.setTitle("Clean the data");
+        attempt.getTask().setDependsOn(Set.of(dependency));
+        var dependencyAttempt = new TaskAttemptEntity();
+        dependencyAttempt.setResult("Let's proceed.");
+        dependencyAttempt.setRollupResult("## Run the fix\nNo missing values remain.");
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc(
+                dependency.getId()))
+            .thenReturn(Optional.of(dependencyAttempt));
+
+        var response = this.service.fetchAssignment(ATTEMPT_ID);
+
+        assertThat(response.context())
+            .contains("No missing values remain.")
+            .doesNotContain("Let's proceed.");
     }
 
     @Test

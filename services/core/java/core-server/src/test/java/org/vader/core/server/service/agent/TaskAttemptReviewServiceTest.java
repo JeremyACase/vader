@@ -23,7 +23,7 @@ import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.TaskAttemptSettledEvent;
+import org.vader.core.server.models.events.TaskAttemptSettledEvent;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.service.agent.evaluator.EvaluatorAgentService;
 import org.vader.core.server.service.agent.orchestrator.OrchestratorAgentService;
@@ -102,6 +102,18 @@ class TaskAttemptReviewServiceTest {
         this.service.review(ATTEMPT_ID);
 
         verify(this.orchestratorAgentService).decideReattempt(ATTEMPT_ID);
+    }
+
+    @Test
+    void review_whenEvaluatorDecomposes_doesNotAskTheOrchestratorToReattempt() {
+        var attempt = attemptInWorkflow(TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.evaluatorAgentService.evaluate(ATTEMPT_ID))
+            .thenReturn(TaskUpdateType.DECOMPOSED);
+
+        this.service.review(ATTEMPT_ID);
+
+        verify(this.orchestratorAgentService, never()).decideReattempt(any());
     }
 
     @Test

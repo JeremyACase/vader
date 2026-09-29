@@ -9,7 +9,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
-import org.vader.core.server.models.TaskAttemptSettledEvent;
+import org.vader.core.server.models.events.TaskAttemptSettledEvent;
 import org.vader.core.server.service.operators.agentharness.AgentHarnessNaming;
 import org.vader.core.server.service.operators.agentharness.AgentHarnessOperator;
 
