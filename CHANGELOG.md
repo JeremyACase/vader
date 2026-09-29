@@ -15,7 +15,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **The local LLM runs on the host's GPU.** Both KIND install scripts now start Ollama in Docker
   on this machine, where GPU passthrough works (unlike inside KIND nodes), pull the configured
   model, and point Vader at it. The chart's new `vader.orchestrator.local.externalBaseUrl` does
-  the same for any Ollama outside the cluster.
+  the same for any Ollama outside the cluster, and the install notes then point there rather
+  than at an in-cluster port-forward.
 
 ## [0.15.1]
 ### Fixed
