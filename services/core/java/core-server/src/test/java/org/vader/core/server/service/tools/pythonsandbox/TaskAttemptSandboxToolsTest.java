@@ -16,7 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
-import org.vader.core.server.models.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
 import org.vader.core.server.service.agent.task.TaskAttemptToolContext;
 import org.vader.core.server.service.operators.pythonsandbox.TaskAttemptSandboxService;
 

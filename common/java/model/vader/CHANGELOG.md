@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0]
+### Added
+- Tasks can gain subtasks at runtime: a new `DECOMPOSED` verdict, a link from each runtime subtask
+  to the attempt whose unfinished work it continues, and a rolled-up result on that attempt once
+  its subtasks all succeed. Subtasks resolve their workflow through their root task.
+
 ## [0.19.0]
 ### Added
 - Transcript turns record why the model stopped generating (the provider's finish reason), so a

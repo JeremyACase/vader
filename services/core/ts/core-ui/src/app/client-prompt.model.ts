@@ -18,6 +18,8 @@ export interface Task {
   title: string;
   description: string;
   parentTaskId?: string;
+  /** Set on a subtask created at runtime: the parent attempt whose unfinished work it continues. */
+  spawnedByAttemptId?: string;
   subTasks: Task[];
   dependsOnTaskIds: string[];
 }

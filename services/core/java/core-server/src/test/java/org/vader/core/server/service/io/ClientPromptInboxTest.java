@@ -10,7 +10,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ClientPromptOutboxMessageEntity;
-import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.events.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.service.agent.orchestrator.OrchestratorAgentService;
 
 class ClientPromptInboxTest {

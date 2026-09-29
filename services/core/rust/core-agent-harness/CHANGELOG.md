@@ -5,6 +5,12 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+### Added
+- A final answer that contains code the model never ran, or that follows a failed tool call with
+  nothing succeeding since, is sent back with a nudge to finish the work instead of ending the
+  run. At most two nudges per run, and a model that repeats the same answer is taken at its word.
+
 ## [0.3.3]
 ### Fixed
 - An empty reply from the model (no text and no tool calls) no longer ends the run as a success

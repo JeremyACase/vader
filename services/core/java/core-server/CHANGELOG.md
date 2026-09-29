@@ -3,6 +3,18 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0]
+### Added
+- The evaluator can decompose an attempt that made real but unfinished progress into chained
+  subtasks rather than failing it. The scheduler runs them in order, then rolls their results up
+  into the parent (or fails it if one permanently fails), so dependents receive finished work
+  instead of a plan. The evaluator also now sees whether the attempt's last tool call errored,
+  and prerequisite results handed to an agent are labelled as data, not instructions.
+
+### Changed
+- Internal model classes are grouped into subpackages by domain (harness contract, LLM
+  payloads, operators, sandbox, events, query, storage, config). No behavior change.
+
 ## [0.26.1]
 ### Fixed
 - Spring's own request errors, such as an unknown object-storage id, return their proper 4xx

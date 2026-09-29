@@ -33,6 +33,7 @@ public class TaskAttemptDtoMapper extends GenericDtoMapper<TaskAttemptEntity, Ta
             to.setTokensUsed(from.getTokensUsed());
             to.setResult(from.getResult());
             to.setFailureReason(from.getFailureReason());
+            to.setRollupResult(from.getRollupResult());
         }
         return to;
     }

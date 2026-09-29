@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
-import org.vader.core.server.models.DecompositionRequest;
+import org.vader.core.server.models.llm.DecompositionRequest;
 import org.vader.core.server.service.agent.orchestrator.strategies.LlmTaskPlan;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;

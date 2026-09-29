@@ -2,8 +2,8 @@ package org.vader.core.server.service.agent.orchestrator.strategies;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.vader.core.server.models.ReattemptDecision;
-import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.llm.ReattemptDecision;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceReattemptDecisionStrategy;
 
 /**

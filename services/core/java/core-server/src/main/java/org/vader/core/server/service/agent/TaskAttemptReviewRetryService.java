@@ -104,6 +104,6 @@ public class TaskAttemptReviewRetryService {
     }
 
     private static WorkflowEntity workflowOf(final TaskAttemptEntity attempt) {
-        return attempt.getTask().getTaskGraph().getTaskPlan().getWorkflow();
+        return attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow();
     }
 }

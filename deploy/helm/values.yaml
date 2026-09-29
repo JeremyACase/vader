@@ -58,6 +58,12 @@ vader:
       # unreliable enough that task agents regularly fail on them; the 7b model needs roughly
       # 5-6 GB of memory on the node running Ollama.
       model: qwen2.5:7b
+      # Base URL of an Ollama instance running outside the cluster -- in dev, the one
+      # tools/scripts/devs/install-ollama.sh starts in Docker so it can use the host's GPU, which
+      # KIND nodes can't reach (both KIND install scripts set this to it). When set, the chart
+      # deploys no Ollama of its own and core-server calls this URL instead. Leave empty to run
+      # Ollama in-cluster.
+      externalBaseUrl: ""
       # Bounds every individual Ollama HTTP call. Raise this if your hardware is slow enough that
       # legitimate (if verbose) generations routinely exceed it -- but keep it well under
       # agentHarness.deadlineSeconds, since a call this long already eats most of a task's budget.
@@ -86,6 +92,18 @@ vader:
       # single LLM worker, so this is far above the fixed budget the static orchestrator gets.
       # Pass a `helm test --timeout` that covers this for both of the test's prompts.
       systemTestWorkflowWaitSeconds: 900
+  # An evaluator that judges an attempt real but unfinished progress (it showed code it never
+  # ran, or ended right after a failed tool call) can split the remaining work into subtasks
+  # instead of failing the whole task. Each subtask runs as its own agent; the task succeeds once
+  # they all do, with a result rolled up from theirs.
+  taskDecomposition:
+    # false turns every would-be decomposition into a plain failure (and the usual retry).
+    enabled: true
+    # A task this many levels deep or deeper cannot decompose further. 1 means only the planner's
+    # own tasks decompose; their subtasks cannot, which bounds the extra work per task.
+    maxDepth: 1
+    # Steps the evaluator lists beyond this many are dropped.
+    maxSubtasks: 3
   storage:
     # Allowable values are:
     #   database - store uploaded file contents as BLOBs in the relational database (default;

@@ -1,5 +1,6 @@
 package org.vader.core.server.service.llm;
 
+import java.util.Objects;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,8 +8,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
-import org.vader.core.server.models.EvaluationRequest;
-import org.vader.core.server.models.EvaluationVerdict;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationVerdict;
 
 /**
  * Actually asks the in-cluster Ollama instance to independently judge one settled attempt, via
@@ -36,9 +37,20 @@ public class EvaluationLlmExecutor {
         reason if it claimed failure), and any prior updates already recorded against this task,
         then decide for yourself: did this attempt actually accomplish the task?
 
-        Set `passed` to true only if the reported result genuinely satisfies the task. Explain
-        your reasoning in `reasoning` -- this is recorded as the durable audit trail for this
-        task, so be specific about what you checked and why you reached your conclusion.
+        Set `passed` to true only if the reported result genuinely satisfies the task. A result
+        that describes work instead of reporting it has NOT passed: code the agent shows but never
+        ran, a plan for what it will do next ("let's proceed", "next I will"), or a confident
+        answer written right after its last tool call failed. Explain your reasoning in
+        `reasoning` -- this is recorded as the durable audit trail for this task, so be specific
+        about what you checked and why you reached your conclusion.
+
+        When `passed` is false but the agent made real progress toward the task, list the work
+        that is still left in `remainingSubtasks`, in the order it must be done: at most three
+        small, concrete steps, each with a short `title` and a `description` that a different
+        agent -- one that never saw this attempt -- could carry out on its own. Mention the
+        specific error to fix or the specific code to run when there is one. Leave
+        `remainingSubtasks` empty when the attempt passed, or when it made no usable progress and
+        should simply be tried again from scratch.
         """;
 
     @Autowired
@@ -76,6 +88,8 @@ public class EvaluationLlmExecutor {
         var priorUpdates = request.priorUpdateDescriptions().isEmpty()
             ? "(none)"
             : String.join("\n", request.priorUpdateDescriptions());
+        var toolEvidence = Objects.requireNonNullElse(
+            request.lastToolCallEvidence(), "The agent made no tool calls.");
 
         return """
             Task: %s
@@ -84,9 +98,13 @@ public class EvaluationLlmExecutor {
 
             %s
 
+            Evidence from the agent's tool-call log (recorded by the system, not by the agent):
+            %s
+
             Prior updates already recorded against this task:
             %s
             """.formatted(
-                request.taskTitle(), request.taskDescription(), reported, priorUpdates);
+                request.taskTitle(), request.taskDescription(), reported, toolEvidence,
+                priorUpdates);
     }
 }

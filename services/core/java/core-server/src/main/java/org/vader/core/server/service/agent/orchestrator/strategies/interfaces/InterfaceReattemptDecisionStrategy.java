@@ -1,7 +1,7 @@
 package org.vader.core.server.service.agent.orchestrator.strategies.interfaces;
 
-import org.vader.core.server.models.ReattemptDecision;
-import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.llm.ReattemptDecision;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
 
 /**
  * Strategy for deciding whether a failed task is worth re-attempting.

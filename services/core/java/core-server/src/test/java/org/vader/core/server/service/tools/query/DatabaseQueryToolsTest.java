@@ -12,8 +12,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.vader.common.library.dao.model.QueryFilter;
-import org.vader.core.server.models.EntityDescription;
-import org.vader.core.server.models.QueryResult;
+import org.vader.core.server.models.query.EntityDescription;
+import org.vader.core.server.models.query.QueryResult;
 import org.vader.core.server.service.query.DatabaseQueryService;
 
 @ExtendWith(MockitoExtension.class)

@@ -7,10 +7,10 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.SandboxInfo;
-import org.vader.core.server.models.StagedObjectInfo;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxInfo;
+import org.vader.core.server.models.sandbox.StagedObjectInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 /**

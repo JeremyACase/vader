@@ -14,10 +14,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.SandboxInfo;
-import org.vader.core.server.models.StagedObjectInfo;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxInfo;
+import org.vader.core.server.models.sandbox.StagedObjectInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 @ExtendWith(MockitoExtension.class)

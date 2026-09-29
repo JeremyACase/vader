@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.vader.common.library.dao.model.QueryFilter;
-import org.vader.core.server.models.EntityDescription;
+import org.vader.core.server.models.query.EntityDescription;
 import org.vader.core.server.service.query.DatabaseQueryService;
 
 /**

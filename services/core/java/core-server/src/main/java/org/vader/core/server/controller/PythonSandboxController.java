@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxInfo;
 import org.vader.core.server.service.operators.pythonsandbox.PythonSandboxService;
 
 /**

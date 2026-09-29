@@ -1,7 +1,7 @@
 package org.vader.core.server.service.agent.orchestrator.strategies.interfaces;
 
-import org.vader.core.server.models.TaskPlanRefinementRequest;
-import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict;
 
 /**
  * Strategy for critiquing a freshly-decomposed task plan before it is ever persisted.

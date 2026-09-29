@@ -85,6 +85,15 @@ Otherwise, or on any other cluster type, you can always fall back to:
 **************************************************
 {{- if eq .Values.vader.orchestrator.type "local" }}
 Vader Orchestrator (Ollama):
+{{- if .Values.vader.orchestrator.local.externalBaseUrl }}
+
+Core Server is configured to orchestrate against an external Ollama instance
+at "{{ .Values.vader.orchestrator.local.externalBaseUrl }}". It runs outside
+the "{{ .Release.Namespace }}" namespace, so this chart deploys no Ollama of
+its own and there is nothing to port-forward. If it was installed with
+tools/scripts/devs/install-ollama.sh, it's already reachable from the host at
+"http://localhost:11434" (or whatever OLLAMA_PORT it was run with).
+{{- else }}
 
 Core Server is configured to orchestrate against a local Ollama instance,
 installed alongside Vader as the "vader-ollama" Deployment/Service. It's
@@ -93,5 +102,6 @@ port-forwarded for direct access:
 
 1. $ kubectl port-forward svc/vader-ollama -n {{ .Release.Namespace }} {{ .Values.vader.components.core.ollama.service.port }}:{{ .Values.vader.components.core.ollama.service.port }}
 2. Navigate to "http://localhost:{{ .Values.vader.components.core.ollama.service.port }}"
+{{- end }}
 **************************************************
 {{- end }}

@@ -18,7 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.vader.core.server.models.ManagedResource;
+import org.vader.core.server.models.operators.ManagedResource;
 import org.vader.core.server.service.operators.interfaces.InterfaceOperator;
 
 /**

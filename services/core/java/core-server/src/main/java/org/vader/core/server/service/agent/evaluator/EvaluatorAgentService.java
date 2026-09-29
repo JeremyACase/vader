@@ -5,13 +5,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
+import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateEntity;
 import org.vader.common.model.vader.entity.TaskUpdateType;
-import org.vader.core.server.models.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationVerdict;
 import org.vader.core.server.repository.TaskAttemptRepository;
 import org.vader.core.server.repository.TaskUpdateRepository;
 import org.vader.core.server.service.agent.TaskUpdateService;
+import org.vader.core.server.service.agent.decomposition.TaskDecompositionSaga;
 import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
 
 /**
@@ -23,6 +26,10 @@ import org.vader.core.server.service.agent.evaluator.strategies.interfaces.Inter
  * <p>Called only from {@code TaskAttemptReviewService}, which drains the durable review pipeline
  * off {@code TaskGraphScheduler}'s own thread specifically so this evaluation's LLM call never
  * blocks workflow-progress bookkeeping.</p>
+ *
+ * <p>Besides pass and fail, a verdict can name the steps still left on an attempt that made real
+ * but unfinished progress. When the task may be decomposed, those steps are handed to
+ * {@link TaskDecompositionSaga} instead of failing the attempt outright.</p>
  */
 @Service
 public class EvaluatorAgentService {
@@ -39,12 +46,18 @@ public class EvaluatorAgentService {
     @Autowired
     private InterfaceEvaluatorStrategy evaluatorStrategy;
 
+    @Autowired
+    private ToolCallEvidenceAdapter toolCallEvidenceAdapter;
+
+    @Autowired
+    private TaskDecompositionSaga taskDecompositionSaga;
+
     /**
      * Evaluates one settled attempt and records the verdict as a {@link TaskUpdateEntity}.
      *
      * @param attemptId the settled attempt's id
-     * @return the verdict's type, {@link TaskUpdateType#COMPLETED} or
-     *     {@link TaskUpdateType#FAILED}
+     * @return the verdict's type: {@link TaskUpdateType#COMPLETED},
+     *     {@link TaskUpdateType#FAILED}, or {@link TaskUpdateType#DECOMPOSED}
      */
     @Transactional
     public TaskUpdateType evaluate(final String attemptId) {
@@ -52,10 +65,23 @@ public class EvaluatorAgentService {
         var task = attempt.getTask();
         var request = this.requestFor(task.getTitle(), task.getDescription(), attempt);
         var verdict = this.evaluatorStrategy.evaluate(request);
-        var type = verdict.passed() ? TaskUpdateType.COMPLETED : TaskUpdateType.FAILED;
-        this.taskUpdateService.record(
-            task, attempt, type, verdict.reasoning(), TaskUpdateAuthor.EVALUATOR);
+        TaskUpdateType type;
+        if (this.shouldDecompose(task, verdict)) {
+            this.taskDecompositionSaga.decompose(
+                attempt, verdict.remainingSubtasks(), verdict.reasoning());
+            type = TaskUpdateType.DECOMPOSED;
+        } else {
+            type = verdict.passed() ? TaskUpdateType.COMPLETED : TaskUpdateType.FAILED;
+            this.taskUpdateService.record(
+                task, attempt, type, verdict.reasoning(), TaskUpdateAuthor.EVALUATOR);
+        }
         return type;
+    }
+
+    private boolean shouldDecompose(final TaskEntity task, final EvaluationVerdict verdict) {
+        return !verdict.passed()
+            && !verdict.remainingSubtasks().isEmpty()
+            && this.taskDecompositionSaga.canDecompose(task);
     }
 
     private EvaluationRequest requestFor(
@@ -63,7 +89,8 @@ public class EvaluatorAgentService {
             final TaskAttemptEntity attempt) {
         return new EvaluationRequest(
             taskTitle, taskDescription, attempt.getStatus(), attempt.getResult(),
-            attempt.getFailureReason(), this.priorUpdateDescriptions(attempt.getTask().getId()));
+            attempt.getFailureReason(), this.priorUpdateDescriptions(attempt.getTask().getId()),
+            this.toolCallEvidenceAdapter.lastToolCallEvidence(attempt.getId()));
     }
 
     private List<String> priorUpdateDescriptions(final String taskId) {

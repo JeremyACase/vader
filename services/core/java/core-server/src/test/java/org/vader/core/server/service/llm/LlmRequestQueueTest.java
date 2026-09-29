@@ -21,12 +21,12 @@ import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.ConversationRole;
-import org.vader.core.server.models.EvaluationRequest;
-import org.vader.core.server.models.InferenceTurn;
-import org.vader.core.server.models.OutboxMessageEnqueuedEvent;
-import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.events.OutboxMessageEnqueuedEvent;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.ConversationRole;
+import org.vader.core.server.models.harness.InferenceTurn;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
 import org.vader.core.server.repository.LlmRequestOutboxMessageRepository;
 
 class LlmRequestQueueTest {
@@ -96,7 +96,7 @@ class LlmRequestQueueTest {
             return Optional.of(message);
         });
         var request = new EvaluationRequest(
-            "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of());
+            "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
 
         var outcome = this.queue.submitEvaluation(request);
 

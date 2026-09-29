@@ -9,12 +9,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.ConversationRole;
-import org.vader.core.server.models.InferenceRequest;
-import org.vader.core.server.models.InferenceTurn;
-import org.vader.core.server.models.ToolCallInvocationRequest;
-import org.vader.core.server.models.ToolCallInvocationResult;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.ConversationRole;
+import org.vader.core.server.models.harness.InferenceRequest;
+import org.vader.core.server.models.harness.InferenceTurn;
+import org.vader.core.server.models.harness.ToolCallInvocationRequest;
+import org.vader.core.server.models.harness.ToolCallInvocationResult;
 import org.vader.core.server.service.agent.task.TaskAgentService;
 
 class AgentAssignmentControllerTest {

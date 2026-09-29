@@ -13,7 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.vader.core.server.exceptions.ObjectNotFoundException;
-import org.vader.core.server.models.EncodedObjectContent;
+import org.vader.core.server.models.storage.EncodedObjectContent;
 import org.vader.core.server.service.storage.ObjectStorageService;
 import org.vader.core.server.service.strategies.storage.FileStorageException;
 

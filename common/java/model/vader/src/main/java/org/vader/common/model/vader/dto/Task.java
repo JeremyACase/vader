@@ -11,7 +11,9 @@ import java.util.List;
  *
  * <p>{@code parentTaskId} is a shallow reference to the task this one was decomposed from (root
  * tasks leave it {@code null}); embedding the parent object here, rather than referencing it by
- * id, would recurse back through this task's own {@code subTasks}. {@code dependsOnTaskIds} are
+ * id, would recurse back through this task's own {@code subTasks}. {@code spawnedByAttemptId}
+ * is set only on a subtask created at runtime, naming the parent attempt whose unfinished work it
+ * continues. {@code dependsOnTaskIds} are
  * shallow references too, for the same reason -- they're graph edges, not owned children.
  * {@code taskUpdateIds} are shallow references as well -- the default for any "many" side
  * association, per the mapper conventions -- since {@link TaskUpdate}s are independently
@@ -27,6 +29,8 @@ public class Task extends AbstractModel {
     private String description;
 
     private String parentTaskId;
+
+    private String spawnedByAttemptId;
 
     private List<@Valid Task> subTasks = new ArrayList<>();
 
@@ -61,6 +65,14 @@ public class Task extends AbstractModel {
 
     public void setParentTaskId(String parentTaskId) {
         this.parentTaskId = parentTaskId;
+    }
+
+    public String getSpawnedByAttemptId() {
+        return this.spawnedByAttemptId;
+    }
+
+    public void setSpawnedByAttemptId(String spawnedByAttemptId) {
+        this.spawnedByAttemptId = spawnedByAttemptId;
     }
 
     public List<Task> getSubTasks() {

@@ -8,13 +8,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.vader.core.server.models.AssignmentResponse;
-import org.vader.core.server.models.HeartbeatRequest;
-import org.vader.core.server.models.InferenceRequest;
-import org.vader.core.server.models.InferenceTurn;
-import org.vader.core.server.models.ResultRequest;
-import org.vader.core.server.models.ToolCallInvocationRequest;
-import org.vader.core.server.models.ToolCallInvocationResult;
+import org.vader.core.server.models.harness.AssignmentResponse;
+import org.vader.core.server.models.harness.HeartbeatRequest;
+import org.vader.core.server.models.harness.InferenceRequest;
+import org.vader.core.server.models.harness.InferenceTurn;
+import org.vader.core.server.models.harness.ResultRequest;
+import org.vader.core.server.models.harness.ToolCallInvocationRequest;
+import org.vader.core.server.models.harness.ToolCallInvocationResult;
 import org.vader.core.server.service.agent.task.TaskAgentService;
 
 /**

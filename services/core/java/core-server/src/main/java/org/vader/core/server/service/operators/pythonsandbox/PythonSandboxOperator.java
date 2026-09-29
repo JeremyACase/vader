@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.vader.core.server.models.PythonSandboxSpec;
+import org.vader.core.server.models.operators.PythonSandboxSpec;
 import org.vader.core.server.service.builders.pythonsandbox.PythonSandboxManifestBuilder;
 import org.vader.core.server.service.initializers.pythonsandbox.PythonSandboxOperatorInitializer;
 import org.vader.core.server.service.operators.AbstractOperator;

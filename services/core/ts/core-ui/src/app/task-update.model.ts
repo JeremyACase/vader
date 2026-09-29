@@ -1,6 +1,6 @@
 /** Equivalent of org.vader.common.model.vader.entity.TaskUpdateType. */
 export type TaskUpdateType = 'CREATED' | 'RUNNING' | 'UPDATE' | 'COMPLETED' | 'FAILED'
-  | 'TIMED_OUT';
+  | 'TIMED_OUT' | 'DECOMPOSED';
 
 /** Equivalent of org.vader.common.model.vader.entity.TaskUpdateAuthor. */
 export type TaskUpdateAuthor = 'SYSTEM' | 'TASK_AGENT' | 'ORCHESTRATOR' | 'EVALUATOR';

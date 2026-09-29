@@ -1,4 +1,4 @@
-{{- if eq .Values.vader.orchestrator.type "local" }}
+{{- if and (eq .Values.vader.orchestrator.type "local") (not .Values.vader.orchestrator.local.externalBaseUrl) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

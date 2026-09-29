@@ -9,8 +9,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.ReattemptDecision;
-import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.llm.ReattemptDecision;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 import org.vader.core.server.service.llm.ReattemptDecisionOutcome;
 

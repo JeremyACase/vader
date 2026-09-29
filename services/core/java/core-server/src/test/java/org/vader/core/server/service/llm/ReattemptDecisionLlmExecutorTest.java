@@ -16,7 +16,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.ResourceAccessException;
-import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
 
 class ReattemptDecisionLlmExecutorTest {
 

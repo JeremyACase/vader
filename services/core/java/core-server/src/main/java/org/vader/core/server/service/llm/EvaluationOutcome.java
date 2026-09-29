@@ -1,6 +1,6 @@
 package org.vader.core.server.service.llm;
 
-import org.vader.core.server.models.EvaluationVerdict;
+import org.vader.core.server.models.llm.EvaluationVerdict;
 
 /**
  * The result of one evaluation attempt -- deliberately not an exception even when the LLM was

@@ -8,9 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.core.server.exceptions.SandboxExecutionException;
 import org.vader.core.server.exceptions.UnknownAssignmentException;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.WorkspaceFile;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.WorkspaceFile;
 import org.vader.core.server.repository.TaskAttemptRepository;
 
 /**
@@ -86,7 +86,7 @@ public class TaskAttemptSandboxService {
             .orElseThrow(() -> new UnknownAssignmentException(
                 "Unknown assignment: " + taskAttemptId));
         var clientPrompt =
-            attempt.getTask().getTaskGraph().getTaskPlan().getWorkflow().getClientPrompt();
+            attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow().getClientPrompt();
         return workspaceFilesFor(clientPrompt);
     }
 

@@ -10,8 +10,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.TaskPlanRefinementRequest;
-import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 import org.vader.core.server.service.llm.TaskPlanRefinementOutcome;
 

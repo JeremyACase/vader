@@ -4,8 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.EvaluationRequest;
-import org.vader.core.server.models.EvaluationVerdict;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationVerdict;
 import org.vader.core.server.service.agent.evaluator.strategies.interfaces.InterfaceEvaluatorStrategy;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 

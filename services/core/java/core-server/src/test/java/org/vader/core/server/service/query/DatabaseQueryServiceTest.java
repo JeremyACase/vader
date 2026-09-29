@@ -18,7 +18,7 @@ import org.vader.common.library.dao.model.QueryFilter;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.server.controller.dao.WorkflowDaoController;
-import org.vader.core.server.models.EntityDescription;
+import org.vader.core.server.models.query.EntityDescription;
 import org.vader.core.server.service.registries.VaderDaoRegistry;
 
 class DatabaseQueryServiceTest {

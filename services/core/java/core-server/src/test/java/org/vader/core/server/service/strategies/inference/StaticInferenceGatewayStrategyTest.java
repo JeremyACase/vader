@@ -8,8 +8,8 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.ConversationRole;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.ConversationRole;
 import org.vader.core.server.service.registries.AgentToolAudience;
 import org.vader.core.server.service.registries.McpToolCallbackRegistry;
 

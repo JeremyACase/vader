@@ -7,8 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.InferenceTurn;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.InferenceTurn;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 
 /**

@@ -2,8 +2,8 @@ package org.vader.core.server.service.agent.orchestrator.strategies;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.vader.core.server.models.TaskPlanRefinementRequest;
-import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.models.llm.TaskPlanRefinementRequest;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceTaskPlanRefinementStrategy;
 
 /**

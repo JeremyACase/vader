@@ -10,7 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.models.TaskAttemptSettledEvent;
+import org.vader.core.server.models.events.TaskAttemptSettledEvent;
 import org.vader.core.server.service.operators.pythonsandbox.TaskAttemptSandboxService;
 
 class TaskAttemptSandboxCleanupListenerTest {

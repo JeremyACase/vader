@@ -3,6 +3,20 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0]
+### Changed
+- Task graph nodes are coloured by the evaluator's latest verdict instead of the agent's own
+  self-reported outcome: gray until a task starts, blue while it runs, awaits review, or waits on
+  subtasks, then green or red from the verdict. A task that was split into runtime subtasks never
+  shows pass or fail until all of those subtasks have.
+- The task graph reads bottom to top: final tasks at the top, prerequisites beneath what needs
+  them, and decomposed subtasks in bands below the plan. Decomposing a task only adds rows at the
+  bottom, so the rest of the graph stays put.
+
+### Added
+- Models understand the new `DECOMPOSED` task update, runtime subtasks' originating attempt, and
+  an attempt's rolled-up result.
+
 ## [0.17.0]
 ### Added
 - Each transcript turn shows why the model stopped generating, and a turn cut off at the output

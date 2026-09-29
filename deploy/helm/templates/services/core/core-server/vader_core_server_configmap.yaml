@@ -61,7 +61,9 @@ data:
           chat: {{ if eq .Values.vader.orchestrator.type "local" }}ollama{{ else }}none{{ end }}
         {{- if eq .Values.vader.orchestrator.type "local" }}
         ollama:
-          base-url: http://vader-ollama:{{ .Values.vader.components.core.ollama.service.port }}
+          # An external Ollama (see vader.orchestrator.local.externalBaseUrl) replaces the in-cluster
+          # one entirely.
+          base-url: {{ .Values.vader.orchestrator.local.externalBaseUrl | default (printf "http://vader-ollama:%v" .Values.vader.components.core.ollama.service.port) }}
           chat:
             options:
               model: {{ .Values.vader.orchestrator.local.model }}
@@ -134,6 +136,12 @@ data:
           # queue forever instead of failing and freeing it for the next request.
           request-timeout-seconds: {{ .Values.vader.orchestrator.local.requestTimeoutSeconds }}
         {{- end }}
+      # When an evaluator judges an attempt real but unfinished progress, its remaining steps run
+      # as runtime subtasks and the task succeeds once they all do.
+      task-decomposition:
+        enabled: {{ .Values.vader.taskDecomposition.enabled }}
+        max-depth: {{ .Values.vader.taskDecomposition.maxDepth }}
+        max-subtasks: {{ .Values.vader.taskDecomposition.maxSubtasks }}
       storage:
         type: {{ .Values.vader.storage.type | default "database" }}
         {{- if eq .Values.vader.storage.type "minio" }}

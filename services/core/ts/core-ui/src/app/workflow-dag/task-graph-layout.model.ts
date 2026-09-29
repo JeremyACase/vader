@@ -6,7 +6,7 @@ export interface DagNode {
   y: number;
 }
 
-/** One `dependsOnTaskIds` edge, drawn from the dependency to the dependent task. */
+/** One `dependsOnTaskIds` edge, drawn upward from the prerequisite to the dependent task. */
 export interface DagEdge {
   fromTaskId: string;
   toTaskId: string;

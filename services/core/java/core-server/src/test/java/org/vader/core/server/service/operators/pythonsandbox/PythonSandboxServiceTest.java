@@ -19,11 +19,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.models.ManagedResource;
-import org.vader.core.server.models.PythonSandboxSpec;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.models.operators.ManagedResource;
+import org.vader.core.server.models.operators.PythonSandboxSpec;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxInfo;
 import org.vader.core.server.service.storage.ObjectContent;
 import org.vader.core.server.service.storage.ObjectStorageService;
 

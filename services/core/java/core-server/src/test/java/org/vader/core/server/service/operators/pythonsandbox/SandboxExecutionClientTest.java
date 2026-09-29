@@ -21,7 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import org.vader.core.server.exceptions.SandboxExecutionException;
-import org.vader.core.server.models.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
 
 class SandboxExecutionClientTest {
 

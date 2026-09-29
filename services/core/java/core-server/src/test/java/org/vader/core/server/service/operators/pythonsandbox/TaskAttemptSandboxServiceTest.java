@@ -28,9 +28,9 @@ import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.exceptions.SandboxExecutionException;
 import org.vader.core.server.exceptions.UnknownAssignmentException;
-import org.vader.core.server.models.SandboxExecutionRequest;
-import org.vader.core.server.models.SandboxExecutionResult;
-import org.vader.core.server.models.SandboxInfo;
+import org.vader.core.server.models.sandbox.SandboxExecutionRequest;
+import org.vader.core.server.models.sandbox.SandboxExecutionResult;
+import org.vader.core.server.models.sandbox.SandboxInfo;
 import org.vader.core.server.repository.TaskAttemptRepository;
 
 @ExtendWith(MockitoExtension.class)

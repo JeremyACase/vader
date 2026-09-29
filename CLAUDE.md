@@ -40,6 +40,11 @@ npm start
 # Agent harness: build/test/lint directly with cargo (also wired into ./gradlew build)
 cd services/core/rust/core-agent-harness && cargo build
 
+# Local LLM: both KIND install scripts run this first -- Ollama in Docker on the host GPU (GPU
+# passthrough works there, not inside KIND nodes), pulling the configured model -- and point
+# Vader at it. Re-runnable on its own; uninstall-ollama.sh [--purge-models] removes it.
+tools/scripts/devs/install-ollama.sh
+
 # Python sandbox exec server: lint/test run dockerized (also wired into ./gradlew build) --
 # no host Python install required
 ./gradlew :services:core:python:core-python-sandbox-server:build
@@ -278,10 +283,14 @@ compress it further, not to add structure.
 | `vader.mode` | `PROD` | `DEV`, `PROD`, or `TEST`. Canned results are permitted **only** in `TEST` (the devops test pipeline): `vader.orchestrator.type=static` is refused -- by the Helm chart at render time and by core-server at startup -- in any other mode. In every mode an unreachable local LLM fails loudly with `OrchestratorUnavailableException`; no `Local*Strategy` ever substitutes a canned result |
 | `vader.orchestrator.type` | `local` (Helm) | `local` (Ollama) or `static` (canned results; requires `vader.mode=TEST`) |
 | `vader.orchestrator.local.model` | — | Ollama model name |
+| `spring.ai.ollama.base-url` (Helm: `vader.orchestrator.local.externalBaseUrl`) | in-cluster `http://vader-ollama:11434` | Set the Helm value to use an Ollama outside the cluster (e.g. `install-ollama.sh`'s, on the host GPU); the chart then deploys no Ollama of its own. Both dev KIND install scripts set it to their local Ollama |
 | `spring.ai.ollama.chat.options.num-predict` (Helm: `vader.orchestrator.local.maxOutputTokens`) | `2048` (Helm) | Hard cap on tokens generated per response, for every Ollama call. Stops a small model's runaway repetition loop from generating forever and holding Ollama's single slot; tune per model |
 | `spring.ai.ollama.chat.options.num-ctx` (Helm: `vader.orchestrator.local.contextTokens`) | `16384` (Helm) | Ollama's context window per call. The prompt budget is this minus `num-predict`; a longer prompt is silently cut from the front, so it must comfortably exceed `num-predict` (the chart refuses to render otherwise) |
 | `vader.orchestrator.local.request-timeout-seconds` | `300` | Read timeout on every Ollama HTTP call (decomposition, inference turns, evaluation, reattempt decisions, synthesis) -- the JDK HTTP client Spring auto-detects has none of its own, so an unbounded call would otherwise wedge the single-worker `LlmRequestQueue` forever |
 | `vader.orchestrator.max-task-plan-revisions` | `1` | How many times a freshly-decomposed `TaskPlan` may be sent back for revision (a structural problem -- dangling dependency, dependency cycle -- or the refinement critique flags it) before the last plan is used anyway rather than blocking the prompt indefinitely |
+| `vader.task-decomposition.enabled` | `true` | Lets the evaluator split an attempt's real-but-unfinished work into runtime subtasks (the task succeeds once they all do) instead of failing it. `false` makes every such verdict a plain failure |
+| `vader.task-decomposition.max-depth` | `1` | A task at this depth or deeper cannot decompose; `1` means only the planner's own tasks can, never their subtasks |
+| `vader.task-decomposition.max-subtasks` | `3` | Remaining steps an evaluator lists beyond this many are dropped |
 | `vader.operators.enabled` | `true` | Master switch for Kubernetes operators. Set to `false` where no cluster is reachable (unit/integration test runs, CI) |
 | `vader.operators.python-sandbox.enabled` | `true` | Python sandbox operator |
 | `vader.operators.python-sandbox.sandbox.exec-timeout-seconds` | `30` | Ceiling on one `run_python_code` call, enforced by `core-python-sandbox-server` itself regardless of what a caller requests |

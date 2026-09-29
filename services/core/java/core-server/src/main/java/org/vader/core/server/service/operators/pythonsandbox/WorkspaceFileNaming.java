@@ -6,7 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
-import org.vader.core.server.models.WorkspaceFile;
+import org.vader.core.server.models.sandbox.WorkspaceFile;
 
 /**
  * Assigns each file attached to a client prompt the name it is staged under in a task attempt's

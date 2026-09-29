@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
-import org.vader.core.server.models.WorkspaceFile;
+import org.vader.core.server.models.sandbox.WorkspaceFile;
 
 class WorkspaceFileNamingTest {
 

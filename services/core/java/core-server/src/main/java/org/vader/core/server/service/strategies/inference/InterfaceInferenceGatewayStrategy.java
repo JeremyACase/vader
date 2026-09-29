@@ -1,8 +1,8 @@
 package org.vader.core.server.service.strategies.inference;
 
 import java.util.List;
-import org.vader.core.server.models.ConversationMessage;
-import org.vader.core.server.models.InferenceTurn;
+import org.vader.core.server.models.harness.ConversationMessage;
+import org.vader.core.server.models.harness.InferenceTurn;
 import org.vader.core.server.service.agent.orchestrator.strategies.interfaces.InterfaceLlmOrchestrationStrategy;
 
 /**

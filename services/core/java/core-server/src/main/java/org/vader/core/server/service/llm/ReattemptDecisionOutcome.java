@@ -1,6 +1,6 @@
 package org.vader.core.server.service.llm;
 
-import org.vader.core.server.models.ReattemptDecision;
+import org.vader.core.server.models.llm.ReattemptDecision;
 
 /**
  * The result of one reattempt-decision attempt -- deliberately not an exception even when the LLM

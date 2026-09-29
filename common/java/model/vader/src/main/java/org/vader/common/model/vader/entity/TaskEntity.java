@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.validation.constraints.NotNull;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -19,6 +20,11 @@ import java.util.Set;
  * <p>Each task points to the parent it was decomposed from (if any) and the subtasks it was
  * further decomposed into. Separately, a task may also depend on other tasks completing first
  * -- e.g. a fan-in node with more than one direct predecessor -- tracked via {@code dependsOn}.
+ *
+ * <p>Only root tasks sit directly on the {@link TaskGraphEntity}; a subtask's {@code taskGraph} is
+ * {@code null} and it is reached through its parent -- use {@link #owningTaskGraph()} to get from
+ * any task to its graph. A subtask created at runtime, when an evaluator decomposed an attempt's
+ * unfinished work, also records that attempt as {@code spawnedByAttempt}.</p>
  */
 @Entity
 public class TaskEntity extends AbstractModelEntity {
@@ -40,6 +46,10 @@ public class TaskEntity extends AbstractModelEntity {
 
     @OneToMany(mappedBy = "parentTask", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     private Set<TaskEntity> subTasks = new LinkedHashSet<>();
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_spawned_by_attempt_join_id")
+    private TaskAttemptEntity spawnedByAttempt;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -97,6 +107,33 @@ public class TaskEntity extends AbstractModelEntity {
 
     public void setSubTasks(Set<TaskEntity> subTasks) {
         this.subTasks = subTasks;
+    }
+
+    public TaskAttemptEntity getSpawnedByAttempt() {
+        return this.spawnedByAttempt;
+    }
+
+    public void setSpawnedByAttempt(TaskAttemptEntity spawnedByAttempt) {
+        this.spawnedByAttempt = spawnedByAttempt;
+    }
+
+    /**
+     * The graph this task belongs to, whether it is a root task (held directly) or a subtask at
+     * any depth (held by its root ancestor).
+     *
+     * @return the owning task graph
+     */
+    public TaskGraphEntity owningTaskGraph() {
+        return Objects.isNull(this.parentTask) ? this.taskGraph : this.parentTask.owningTaskGraph();
+    }
+
+    /**
+     * How many ancestors this task has: {@code 0} for a root task.
+     *
+     * @return the task's depth in its decomposition tree
+     */
+    public int depth() {
+        return Objects.isNull(this.parentTask) ? 0 : this.parentTask.depth() + 1;
     }
 
     public Set<TaskEntity> getDependsOn() {

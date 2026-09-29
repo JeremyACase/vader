@@ -1,7 +1,7 @@
 package org.vader.core.server.service.agent.evaluator.strategies.interfaces;
 
-import org.vader.core.server.models.EvaluationRequest;
-import org.vader.core.server.models.EvaluationVerdict;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationVerdict;
 
 /**
  * Strategy for independently judging whether a settled attempt actually succeeded.

@@ -10,15 +10,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.core.server.exceptions.OrchestratorUnavailableException;
-import org.vader.core.server.models.EvaluationRequest;
-import org.vader.core.server.models.EvaluationVerdict;
+import org.vader.core.server.models.llm.EvaluationRequest;
+import org.vader.core.server.models.llm.EvaluationVerdict;
 import org.vader.core.server.service.llm.EvaluationOutcome;
 import org.vader.core.server.service.llm.LlmRequestQueue;
 
 class LocalEvaluatorStrategyTest {
 
     private static final EvaluationRequest REQUEST = new EvaluationRequest(
-        "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of());
+        "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
 
     private LocalEvaluatorStrategy strategy(final LlmRequestQueue requestQueue) {
         var strategy = new LocalEvaluatorStrategy();

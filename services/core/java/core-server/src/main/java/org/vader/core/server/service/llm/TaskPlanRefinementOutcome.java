@@ -1,6 +1,6 @@
 package org.vader.core.server.service.llm;
 
-import org.vader.core.server.models.TaskPlanRefinementVerdict;
+import org.vader.core.server.models.llm.TaskPlanRefinementVerdict;
 
 /**
  * The result of one task-plan refinement attempt -- deliberately not an exception even when the

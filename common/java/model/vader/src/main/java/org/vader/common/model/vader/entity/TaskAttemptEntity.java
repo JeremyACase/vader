@@ -9,6 +9,7 @@ import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.validation.constraints.NotNull;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 
 /**
  * JPA entity representing a single dispatch of a {@link TaskEntity} to an agent harness.
@@ -54,6 +55,9 @@ public class TaskAttemptEntity extends AbstractModelEntity {
 
     @Lob
     private String failureReason;
+
+    @Lob
+    private String rollupResult;
 
     @Override
     public String getModelType() {
@@ -146,5 +150,28 @@ public class TaskAttemptEntity extends AbstractModelEntity {
 
     public void setFailureReason(String failureReason) {
         this.failureReason = failureReason;
+    }
+
+    /**
+     * The result rolled up from this attempt's runtime subtasks, once they all succeeded -- set
+     * only on an attempt the evaluator decomposed. Read in preference to {@code result}, which
+     * keeps the attempt's own (incomplete) output for audit.
+     */
+    public String getRollupResult() {
+        return this.rollupResult;
+    }
+
+    public void setRollupResult(String rollupResult) {
+        this.rollupResult = rollupResult;
+    }
+
+    /**
+     * What this attempt produced, as downstream readers should see it: the rolled-up result of
+     * its subtasks when it was decomposed, otherwise its own result.
+     *
+     * @return the rolled-up result if set, else the attempt's own result (possibly {@code null})
+     */
+    public String effectiveResult() {
+        return Objects.isNull(this.rollupResult) ? this.result : this.rollupResult;
     }
 }

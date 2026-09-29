@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.models.VaderMode;
+import org.vader.core.server.models.config.VaderMode;
 
 class StaticStrategyModeGuardTest {
 

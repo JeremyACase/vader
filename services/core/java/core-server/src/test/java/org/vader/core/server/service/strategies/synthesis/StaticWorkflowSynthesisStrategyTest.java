@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.vader.core.server.models.TaskOutcome;
-import org.vader.core.server.models.WorkflowSynthesisRequest;
+import org.vader.core.server.models.llm.TaskOutcome;
+import org.vader.core.server.models.llm.WorkflowSynthesisRequest;
 
 class StaticWorkflowSynthesisStrategyTest {
 

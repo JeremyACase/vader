@@ -6,8 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
-import org.vader.core.server.models.ReattemptDecision;
-import org.vader.core.server.models.ReattemptDecisionRequest;
+import org.vader.core.server.models.llm.ReattemptDecision;
+import org.vader.core.server.models.llm.ReattemptDecisionRequest;
 
 /**
  * Actually asks the in-cluster Ollama instance whether a failed task is worth re-attempting, via
