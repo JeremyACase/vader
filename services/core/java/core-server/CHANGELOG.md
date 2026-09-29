@@ -3,6 +3,22 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0]
+### Changed
+- **TEST mode now runs the real LLM code.** `vader.orchestrator.type=static` is renamed
+  `scripted`: a scripted chat model stands in for Ollama, so the test pipeline exercises the real
+  prompts, queue and response parsing instead of a parallel set of canned strategies. It is still
+  refused outside `vader.mode=TEST`, and unit and integration tests now run in it too.
+- **Every LLM call goes through the one request queue**, including workflow synthesis, which
+  could previously run alongside another call. All calls share one generic path, so adding a new
+  kind of LLM call is an executor class rather than a new queue method, inbox case and outcome
+  type. An unreachable LLM during an inference turn is now reported as unreachable, like any
+  other call.
+- **Internals reorganized, with no behavior change**: the two largest services are split by
+  responsibility, packages are organized by feature over a few infrastructure packages, and
+  comments state rules rather than history. The build now fails any production class that
+  depends on more than 20 other types.
+
 ## [0.27.0]
 ### Added
 - The evaluator can decompose an attempt that made real but unfinished progress into chained

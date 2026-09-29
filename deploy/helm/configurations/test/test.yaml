@@ -1,14 +1,14 @@
 # Helm values for the "test" Vader deployment configuration.
 vader:
-  # The only mode in which static, canned results are permitted -- required by orchestrator.type
-  # "static" below.
+  # The only mode in which canned results are permitted -- required by orchestrator.type
+  # "scripted" below.
   mode: TEST
   orchestrator:
-    # Static, canned decomposition: no Ollama deployment, no model download, deterministic
-    # Helm test. Swap to "local" to exercise the real LLM path. Also drives the inference
-    # gateway (StaticInferenceGatewayStrategy) a dispatched agent-harness Job calls into --
-    # same switch, so the harness system test is deterministic too, with no Ollama needed.
-    type: static
+    # A scripted chat model stands in for the LLM: every real prompt, queue and response parser
+    # runs, but the model's replies are canned, so there's no Ollama deployment, no model
+    # download, and a deterministic Helm test -- including every agent-harness Job's inference
+    # turns. Swap to "local" to exercise a real LLM.
+    type: scripted
   operators:
     enabled: true
     agentHarness:

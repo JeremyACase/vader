@@ -1,6 +1,6 @@
-{{- /* The static orchestrator answers instantly; a real model needs minutes per prompt. */}}
+{{- /* The scripted chat model answers instantly; a real model needs minutes per prompt. */}}
 {{- $workflowWaitSeconds := 120 }}
-{{- if ne .Values.vader.orchestrator.type "static" }}
+{{- if ne .Values.vader.orchestrator.type "scripted" }}
 {{- $workflowWaitSeconds = .Values.vader.orchestrator.local.systemTestWorkflowWaitSeconds }}
 {{- end }}
 apiVersion: v1
@@ -10,8 +10,8 @@ metadata:
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    # CI installs with configurations/test/test.yaml (vader.orchestrator.type=static): the
-    # static strategy returns a canned decomposition instantly, no Ollama needed. Prompt intake
+    # CI installs with configurations/test/test.yaml (vader.orchestrator.type=scripted): the
+    # scripted chat model returns a canned decomposition instantly, no Ollama needed. Prompt intake
     # is asynchronous -- the POST returns 202 with a receipt and a downstream inbox builds the
     # workflow -- so the checks below submit, then poll the workflow query API for the result.
 spec:

@@ -1,5 +1,5 @@
-{{- if and (eq .Values.vader.orchestrator.type "static") (ne (.Values.vader.mode | default "PROD") "TEST") }}
-{{- fail (printf "vader.orchestrator.type=static returns canned results and is only permitted with vader.mode=TEST (got %s). Use vader.orchestrator.type=local." (.Values.vader.mode | default "PROD")) }}
+{{- if and (eq .Values.vader.orchestrator.type "scripted") (ne (.Values.vader.mode | default "PROD") "TEST") }}
+{{- fail (printf "vader.orchestrator.type=scripted returns canned results and is only permitted with vader.mode=TEST (got %s). Use vader.orchestrator.type=local." (.Values.vader.mode | default "PROD")) }}
 {{- end }}
 {{- if eq .Values.vader.orchestrator.type "local" }}
 {{- if le (int .Values.vader.orchestrator.local.contextTokens) (int .Values.vader.orchestrator.local.maxOutputTokens) }}
@@ -55,8 +55,8 @@ data:
         name: core-server
 
       ai:
-        # Only wire an Ollama chat model when the local orchestrator is active; otherwise
-        # disable chat-model autoconfig entirely so the static / test contexts need no LLM.
+        # Only wire an Ollama chat model when the local orchestrator is active; in scripted mode
+        # core-server supplies its own scripted chat model instead, so no LLM is needed.
         model:
           chat: {{ if eq .Values.vader.orchestrator.type "local" }}ollama{{ else }}none{{ end }}
         {{- if eq .Values.vader.orchestrator.type "local" }}

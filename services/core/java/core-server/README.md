@@ -4,6 +4,10 @@ Minimal Spring Boot service for Vader's `core` layer. Establishes the base patte
 core services will follow: a `Config` bean that pins the JVM's default timezone to UTC on
 startup.
 
+Code is organized by feature package (`intake`, `orchestration`, `workflow`, `review`,
+`taskagent`, `sandbox`, `storage`, `query`, `backpressure`) over a few infrastructure packages
+(`llm`, `messaging`, `mcp`, `operators`); the root CLAUDE.md has the full package guide.
+
 ## Running locally
 
 ```
@@ -41,12 +45,14 @@ exposed.
 
 ## Orchestration
 
-`vader.orchestrator.type` picks the strategy (`@ConditionalOnProperty`):
+Every LLM call goes through `LlmRequestQueue` to an executor that builds the prompt and parses
+the reply with Spring AI's `ChatClient`. `vader.orchestrator.type` picks the chat model behind it:
 
-- `static` — returns a fixed `StaticTaskPlan`, no LLM, whatever the prompt. For the devops test
+- `scripted` — `ScriptedChatModelStub` gives canned replies (a fixed birthday-party plan, whatever
+  the prompt), while every real prompt, queue and parser still runs. For the devops test
   pipeline only: it requires `vader.mode: TEST`, and both the Helm chart and core-server refuse
   to run it in any other mode.
-- `local` — Spring AI `ChatClient` against an in-cluster Ollama. The client prompt is sent
+- `local` — Ollama, in-cluster or external. The client prompt is sent
   **with every registered tool** (each `ToolCallbackProvider` bean — currently the MCP operator
   tools) and the model may call them while decomposing; the final message is
   structured-output-converted to a `TaskPlan`. Needs a tool-capable model

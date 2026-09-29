@@ -17,6 +17,33 @@ prompts and displays results.
 | `services/core/rust/core-agent-harness` | Ephemeral k8s Job: executes exactly one task-graph subtask. All LLM calls are proxied through `core-server` — the harness never talks to an LLM directly. |
 | `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server executing agent-submitted code as a subprocess against a persistent per-pod workspace, reachable only from `core-server`. |
 
+### core-server package layout
+
+`core-server` is organized by feature, not by technical layer: each feature package holds its own
+controller, services, MCP tools, config, repositories, exceptions and (in a `model` subpackage)
+its records. Put new code in the feature it serves; features depend on the infrastructure
+packages, never the reverse.
+
+| Package (`org.vader.core.server.*`) | Holds |
+|---|---|
+| `intake` | Accepting client prompts and queueing them for decomposition |
+| `orchestration` | Prompt -> task plan: decomposition, refinement, plan validation |
+| `workflow` | Running the task graph, workflow synthesis, task updates; the shared workflow/task/attempt repositories |
+| `review` | Judging settled attempts: evaluation, reattempt decisions, runtime decomposition |
+| `taskagent` | The harness control plane (assignments, inference, tool calls); `taskagent.harness` is the Kubernetes Job side |
+| `sandbox` | Python sandboxes: operator, execution client, tools |
+| `storage` | Object storage strategies, download endpoint, tools |
+| `query` | The dynamic DAO query API (`query.dao` holds the per-entity controllers) and its tools |
+| `backpressure` | Queue-depth sampling, endpoint and tools |
+| `llm` | Infrastructure: the LLM request queue/inbox, executor registry, chat-model config |
+| `messaging` | Infrastructure: the inbox/outbox base classes and queue-message processing |
+| `mcp` | Infrastructure: MCP tool registry, tool audiences, tool-call logging |
+| `operators` | Infrastructure: the Kubernetes operator base classes and client |
+| `config`, `web` | App-wide config and `VaderMode`; the global REST exception handler |
+
+An LLM executor lives with the feature whose prompt it holds (e.g. `DecompositionLlmExecutor` in
+`orchestration`), not in `llm`.
+
 ## Build and run
 
 Aside from the JVM and the Java server code, no build environment needs to be installed on the
@@ -51,7 +78,9 @@ tools/scripts/devs/install-ollama.sh
 ```
 
 Checkstyle runs on every build. Config is in `common/java/checkstyle/`. The project follows
-Google Java Style with a 100-character line limit.
+Google Java Style with a 100-character line limit. The Google checks only warn, but one check
+fails the build: `ClassFanOutComplexity` caps a production class at 20 other types it depends on
+(annotation packages excluded, test classes exempt) — see "Class size" below.
 
 Prefer `var` for local variable declarations and let the compiler infer the type. Only spell
 out the type explicitly when inference is impossible or the inferred type would be genuinely
@@ -73,6 +102,22 @@ eliminate nesting. Never use `continue` in loops — restructure the loop body i
 Aim for a cyclomatic complexity of 1–3 per method. Extract private helpers rather than
 nesting conditionals.
 
+### Comments
+
+A comment states the rule the code keeps and why, in a sentence or two. No war stories: don't
+narrate how the code got here, which model misbehaved, what an incident looked like, or what the
+code used to do -- that history belongs in commits and changelogs. When a workaround exists
+because of an upstream bug, link the issue, but don't date it ("still open as of ...").
+
+### Class size
+
+The same idea one level up: a class does one job. When a service starts serving several callers
+for unrelated reasons, split it along those lines into pattern-named classes (e.g.
+`TaskAttemptLifecycleService`, `AssignmentContextBuilder`, `TaskToolInvocationService`) rather
+than letting it accumulate `@Autowired` collaborators. Checkstyle's `ClassFanOutComplexity`
+(max 20) fails the build before a class gets there; if you hit it, split the class — don't raise
+the limit or suppress it.
+
 ### Design patterns — use them and name them explicitly
 
 When applying a pattern, encode the pattern name in the class name. Examples:
@@ -80,20 +125,21 @@ When applying a pattern, encode the pattern name in the class name. Examples:
 | Pattern | Naming example |
 |---|---|
 | Builder | `PythonSandboxManifestBuilder` |
-| Strategy | `LocalLlmOrchestrationStrategy`, `StaticLlmOrchestrationStrategy` |
+| Strategy | `DatabaseFileStorageStrategy`, `MinioFileStorageStrategy` |
 | Adapter | `WidgetStorageAdapter` |
 | Saga | `WidgetSaga` |
 | Inbox | `WidgetInbox` |
 | Operator | `PythonSandboxOperator` |
 | Registry | `VaderDaoRegistry` |
 | Mapper | `TaskDtoMapper` |
+| Stub | `ScriptedChatModelStub` |
 
 Both classic GoF patterns and modern distributed-systems patterns (Saga, Inbox/Outbox, etc.)
 are welcome. The goal is that a reader can see the pattern from the class name without reading
 the implementation.
 
 Abstract base classes are prefixed `Abstract` (`AbstractOperator`, `AbstractModelEntity`).
-Interfaces are prefixed `Interface` (`InterfaceOperator`, `InterfaceLlmOrchestrationStrategy`).
+Interfaces are prefixed `Interface` (`InterfaceOperator`, `InterfaceFileStorageStrategy`).
 
 ### Model naming
 
@@ -120,7 +166,7 @@ explicitly in a Javadoc comment on the mapper explaining why the exception is ju
 1. Create `WidgetEntity` and `Widget` in the model module.
 2. Create `WidgetDtoMapper` in the implementation module.
 3. Create `WidgetDaoController extends GenericVaderDaoController<WidgetEntity, Widget>` in
-   `core-server`. This automatically provides REST endpoints (`GET/POST /query*`) and three
+   `core-server`'s `query.dao` package. This automatically provides REST endpoints (`GET/POST /query*`) and three
    MCP tools (`query_widget`, `count_widget`, `get_widget_by_id`).
 4. Register the entity in `VaderDaoRegistry` if it needs to appear in `list_queryable_entities`.
 
@@ -280,8 +326,8 @@ compress it further, not to add structure.
 
 | Property | Default | Effect |
 |---|---|---|
-| `vader.mode` | `PROD` | `DEV`, `PROD`, or `TEST`. Canned results are permitted **only** in `TEST` (the devops test pipeline): `vader.orchestrator.type=static` is refused -- by the Helm chart at render time and by core-server at startup -- in any other mode. In every mode an unreachable local LLM fails loudly with `OrchestratorUnavailableException`; no `Local*Strategy` ever substitutes a canned result |
-| `vader.orchestrator.type` | `local` (Helm) | `local` (Ollama) or `static` (canned results; requires `vader.mode=TEST`) |
+| `vader.mode` | `PROD` | `DEV`, `PROD`, or `TEST`. Canned results are permitted **only** in `TEST` (the devops test pipeline): `vader.orchestrator.type=scripted` is refused -- by the Helm chart at render time and by core-server at startup -- in any other mode. In every mode an unreachable local LLM fails loudly with `OrchestratorUnavailableException`; nothing ever substitutes a canned result |
+| `vader.orchestrator.type` | `local` (Helm) | `local` (Ollama) or `scripted` (`ScriptedChatModelStub` stands in for the LLM: every real prompt, queue and parser runs, but replies are canned; requires `vader.mode=TEST`) |
 | `vader.orchestrator.local.model` | — | Ollama model name |
 | `spring.ai.ollama.base-url` (Helm: `vader.orchestrator.local.externalBaseUrl`) | in-cluster `http://vader-ollama:11434` | Set the Helm value to use an Ollama outside the cluster (e.g. `install-ollama.sh`'s, on the host GPU); the chart then deploys no Ollama of its own. Both dev KIND install scripts set it to their local Ollama |
 | `spring.ai.ollama.chat.options.num-predict` (Helm: `vader.orchestrator.local.maxOutputTokens`) | `2048` (Helm) | Hard cap on tokens generated per response, for every Ollama call. Stops a small model's runaway repetition loop from generating forever and holding Ollama's single slot; tune per model |
