@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0]
+### Changed
+- **The devops test mode runs Vader's real LLM code.** The chart's
+  `vader.orchestrator.type: static` is renamed `scripted` -- update any values file that sets
+  it. A scripted chat model now stands in for Ollama, so `helm test` exercises the real prompts,
+  LLM queue and response parsing rather than canned stand-ins. It is still refused outside
+  `vader.mode: TEST`.
+- **Every LLM call is serialized through one queue**, including workflow synthesis, so no call
+  competes with another for Ollama's single slot.
+- **core-server's internals are reorganized for maintainability**, with no behavior change:
+  one generic path for LLM calls, smaller single-purpose services, feature-based packages, and a
+  build-time limit on class coupling.
+
 ## [0.16.0]
 ### Added
 - **An agent can no longer pass off unfinished work as a finished result.** The harness sends back

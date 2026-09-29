@@ -11,10 +11,10 @@ metadata:
     # agent-harness Job per task, waits for those real Jobs to call back into core-server's
     # agent control plane / inference gateway, and asserts the workflow's own status --
     # which the scheduler only ever sets once every task has genuinely settled -- reaches
-    # SUCCEEDED. Runs against the static orchestrator/inference gateway (test.yaml), so no
-    # Ollama is needed and the canned response is deterministic.
+    # SUCCEEDED. Runs against the scripted chat model (test.yaml), so no Ollama is needed and
+    # the canned response is deterministic.
     #
-    # StaticInferenceGatewayStrategy scripts its very first turn as a request to call
+    # ScriptedChatModelStub scripts every harness's first turn as a request to call
     # list_queryable_entities rather than answering directly, so every one of these real
     # harness Jobs also exercises the full agent action loop -- including a real POST to
     # /agent/tool-calls -- deterministically, with no need to race a live assignment for it.
@@ -73,7 +73,7 @@ spec:
           echo "✅ prompt accepted as $ID"
 
           echo "== Waiting for the scheduler to dispatch real agent-harness Jobs and the workflow to complete =="
-          echo "   (each of the static plan's 4 independent tasks gets its own Job; this waits on all of them)"
+          echo "   (each of the scripted plan's 4 independent tasks gets its own Job; this waits on all of them)"
           WORKFLOW=""
           i=1
           while [ $i -le 80 ]; do
@@ -96,12 +96,12 @@ spec:
           echo "== Spot-check: at least one inference turn was logged to the transcript =="
           TRANSCRIPT=$(curl -s --max-time 10 \
             "$TRANSCRIPT_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt" || true)
-          echo "$TRANSCRIPT" | grep -qF "Static inference response" \
-            || { echo "❌ no logged transcript contains the expected static response: $TRANSCRIPT"; exit 1; }
+          echo "$TRANSCRIPT" | grep -qF "Scripted inference response" \
+            || { echo "❌ no logged transcript contains the expected scripted response: $TRANSCRIPT"; exit 1; }
           echo "✅ the inference gateway call was logged to the transcript, end to end"
 
           echo "== Spot-check: a real harness actually invoked the scripted tool call =="
-          echo "   (StaticInferenceGatewayStrategy's first turn always requests list_queryable_entities;"
+          echo "   (ScriptedChatModelStub's first turn always requests list_queryable_entities;"
           echo "    a real harness Job must have called POST /agent/tool-calls to get past it)"
           TOOL_CALL=$(curl -s --max-time 10 \
             "$TOOL_CALL_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&toolName=list_queryable_entities" || true)

@@ -1,0 +1,241 @@
+package org.vader.core.server.sandbox;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+import java.net.ConnectException;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
+
+class SandboxExecutionClientTest {
+
+    private MockRestServiceServer mockServer;
+    private SandboxExecutionClient client;
+
+    @BeforeEach
+    void setUp() {
+        var builder = RestClient.builder();
+        this.mockServer = MockRestServiceServer.bindTo(builder).build();
+        this.client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(this.client, "sandboxExecutionRestClient", builder.build());
+        ReflectionTestUtils.setField(this.client, "namespace", "vader");
+    }
+
+    /**
+     * A sandbox name unbuildable into a valid host component reaches this far without
+     * {@code MockRestServiceServer} noticing (it intercepts requests after the URI is already
+     * built, and template expansion alone happily percent-encodes spaces/newlines into a
+     * syntactically-parseable, if absurd, URI). The real JDK HTTP client rejects such a URI at
+     * connection time instead -- reproduced here with a request factory that fails the same way,
+     * independent of what MockRestServiceServer would otherwise accept.
+     */
+    private static SandboxExecutionClient clientWithRejectingRequestFactory() {
+        ClientHttpRequestFactory factory = (uri, httpMethod) -> {
+            throw new IllegalArgumentException("Unsupported URI " + uri);
+        };
+        var client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(
+            client, "sandboxExecutionRestClient",
+            RestClient.builder().requestFactory(factory).build());
+        ReflectionTestUtils.setField(client, "namespace", "vader");
+        return client;
+    }
+
+    @Test
+    void isReachable_whenTheSandboxAnswersHealthThroughItsService_isTrue() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/health"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess("{\"status\":\"ok\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(this.client.isReachable("vader-sandbox-a")).isTrue();
+        this.mockServer.verify();
+    }
+
+    @Test
+    void isReachable_whenHealthReturnsAnError_isFalse() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/health"))
+            .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThat(this.client.isReachable("vader-sandbox-a")).isFalse();
+    }
+
+    @Test
+    void isReachable_whenTheConnectionIsRefused_isFalseRatherThanThrowing() {
+        // What a Service with no routable endpoint yet looks like to the JDK HTTP client.
+        ClientHttpRequestFactory factory = (uri, httpMethod) -> {
+            throw new ConnectException();
+        };
+        var client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(
+            client, "sandboxExecutionRestClient",
+            RestClient.builder().requestFactory(factory).build());
+        ReflectionTestUtils.setField(client, "namespace", "vader");
+
+        assertThat(client.isReachable("vader-sandbox-a")).isFalse();
+    }
+
+    @Test
+    void execute_postsToTheSandboxsServiceAndReturnsTheResult() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/execute"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json(
+                "{\"code\":\"print('hi')\",\"files\":{},\"timeoutSeconds\":null}"))
+            .andRespond(withSuccess(
+                "{\"stdout\":\"hi\\n\",\"stderr\":\"\",\"exitCode\":0,\"timedOut\":false}",
+                MediaType.APPLICATION_JSON));
+
+        var result = this.client.execute(
+            "vader-sandbox-a", new SandboxExecutionRequest("print('hi')", Map.of(), null));
+
+        assertThat(result.stdout()).isEqualTo("hi\n");
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(result.timedOut()).isFalse();
+        this.mockServer.verify();
+    }
+
+    @Test
+    void execute_withNullFiles_sendsAnEmptyMapInstead() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/execute"))
+            .andExpect(content().json(
+                "{\"code\":\"print(1)\",\"files\":{},\"timeoutSeconds\":null}"))
+            .andRespond(withSuccess(
+                "{\"stdout\":\"1\\n\",\"stderr\":\"\",\"exitCode\":0,\"timedOut\":false}",
+                MediaType.APPLICATION_JSON));
+
+        this.client.execute("vader-sandbox-a", new SandboxExecutionRequest("print(1)", null, null));
+
+        this.mockServer.verify();
+    }
+
+    @Test
+    void execute_whenTheSandboxIsUnreachable_throwsSandboxExecutionException() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/execute"))
+            .andRespond(withServerError());
+
+        assertThatThrownBy(() -> this.client.execute(
+            "vader-sandbox-a", new SandboxExecutionRequest("pass", Map.of(), null)))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("vader-sandbox-a");
+    }
+
+    @Test
+    void execute_withAnInvalidSandboxName_throwsWithoutEchoingItsFullContent() {
+        var hugeInvalidName = "import pandas as pd\n".repeat(20);
+        var client = clientWithRejectingRequestFactory();
+
+        assertThatThrownBy(() -> client.execute(
+            hugeInvalidName, new SandboxExecutionRequest("pass", Map.of(), null)))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("not a valid sandbox name")
+            .satisfies(e -> assertThat(e.getMessage().length())
+                .isLessThan(hugeInvalidName.length()));
+    }
+
+    @Test
+    void stageFile_putsTheRawBytesToTheSandboxsWorkspaceEndpoint() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andExpect(method(HttpMethod.PUT))
+            .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
+            .andExpect(content().bytes("raw bytes".getBytes()))
+            .andRespond(withSuccess("{\"filename\":\"report.xlsx\",\"size\":9}",
+                MediaType.APPLICATION_JSON));
+
+        this.client.stageFile("vader-sandbox-a", "report.xlsx", "raw bytes".getBytes());
+
+        this.mockServer.verify();
+    }
+
+    @Test
+    void stageFile_whenTheSandboxIsUnreachable_throwsSandboxExecutionException() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andRespond(withServerError());
+
+        assertThatThrownBy(() -> this.client.stageFile(
+            "vader-sandbox-a", "report.xlsx", "raw bytes".getBytes()))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("report.xlsx")
+            .hasMessageContaining("vader-sandbox-a");
+    }
+
+    @Test
+    void stageFile_withAnInvalidSandboxName_throwsWithoutEchoingItsFullContent() {
+        var hugeInvalidName = "import pandas as pd\n".repeat(20);
+        var client = clientWithRejectingRequestFactory();
+
+        assertThatThrownBy(() -> client.stageFile(
+            hugeInvalidName, "report.xlsx", "raw bytes".getBytes()))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("not a valid sandbox name")
+            .satisfies(e -> assertThat(e.getMessage().length())
+                .isLessThan(hugeInvalidName.length()));
+    }
+
+    @Test
+    void isStaged_whenTheSandboxAnswers200_isTrue() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andExpect(method(HttpMethod.HEAD))
+            .andRespond(withSuccess());
+
+        assertThat(this.client.isStaged("vader-sandbox-a", "report.xlsx")).isTrue();
+        this.mockServer.verify();
+    }
+
+    @Test
+    void isStaged_whenTheSandboxAnswers404_isFalseRatherThanThrowing() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.xlsx"))
+            .andExpect(method(HttpMethod.HEAD))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThat(this.client.isStaged("vader-sandbox-a", "report.xlsx")).isFalse();
+    }
+
+    @Test
+    void stageFile_whenTheHostCannotBeReached_namesTheRootCauseInsteadOfNull() {
+        // The JDK HTTP client reports an unresolvable host (a sandbox that doesn't exist) as a
+        // ConnectException with no message at all.
+        ClientHttpRequestFactory factory = (uri, httpMethod) -> {
+            throw new ConnectException();
+        };
+        var client = new SandboxExecutionClient();
+        ReflectionTestUtils.setField(
+            client, "sandboxExecutionRestClient",
+            RestClient.builder().requestFactory(factory).build());
+        ReflectionTestUtils.setField(client, "namespace", "vader");
+
+        assertThatThrownBy(() -> client.stageFile(
+            "new-sandbox-127", "EP_Tactics.xlsx", "raw bytes".getBytes()))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("new-sandbox-127")
+            .hasMessageContaining("ConnectException")
+            .hasMessageNotContaining(": null");
+    }
+}

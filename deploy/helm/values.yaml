@@ -14,7 +14,7 @@ logging:
 
 vader:
   # Allowable values are: DEV, PROD, TEST. Canned results are permitted ONLY in TEST: the chart
-  # refuses to render, and core-server refuses to start, with orchestrator.type "static" in any
+  # refuses to render, and core-server refuses to start, with orchestrator.type "scripted" in any
   # other mode. In DEV and PROD an unreachable LLM always fails loudly -- nothing ever substitutes
   # a canned result for a real request. This chart's out-of-the-box default is DEV; a real
   # deployment should set PROD, and only the devops test pipeline (configurations/test) sets TEST.
@@ -40,9 +40,10 @@ vader:
     transactionIsolation: TRANSACTION_READ_COMMITTED
   orchestrator:
     # Allowable values are:
-    #   local  - route prompts through an in-cluster Ollama instance
-    #   static - return a fixed, canned decomposition (no LLM). Requires mode TEST: for the
-    #            devops test pipeline only, never a dev or prod deployment.
+    #   local    - route prompts through an in-cluster Ollama instance
+    #   scripted - a scripted chat model gives canned replies (no LLM) while every real prompt
+    #              and parser still runs. Requires mode TEST: for the devops test pipeline only,
+    #              never a dev or prod deployment.
     # (Remote/cloud-hosted LLM backends can be added here later, following the same pattern.)
     type: local
     # How many times a task plan may be sent back for revision (structural problem, or the
@@ -89,7 +90,7 @@ vader:
       # How long the core-server Helm system test waits for each submitted prompt to be
       # decomposed into a workflow. A real model on modest hardware takes minutes per
       # decomposition, and a later prompt also queues behind earlier workflows' agent calls on the
-      # single LLM worker, so this is far above the fixed budget the static orchestrator gets.
+      # single LLM worker, so this is far above the fixed budget the scripted model gets.
       # Pass a `helm test --timeout` that covers this for both of the test's prompts.
       systemTestWorkflowWaitSeconds: 900
   # An evaluator that judges an attempt real but unfinished progress (it showed code it never

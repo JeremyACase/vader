@@ -404,6 +404,37 @@
                                    ]/IDENT"/>
       <property name="message" value="'[a-z][a-z0-9][a-zA-Z0-9]*(?:_[a-z][a-z0-9][a-zA-Z0-9]*)*'"/>
     </module>
+    <!-- Guardrail against god classes: a class may depend on at most 20 other types. Fails the
+         build (severity error, unlike the Google checks above). Annotation-only packages are
+         excluded so the count tracks real collaborators, not @Autowired/@Service/@Value.
+         Test classes are exempt (checkstyle-suppressions.xml): they wire many types by design. -->
+    <module name="ClassFanOutComplexity">
+      <property name="severity" value="error"/>
+      <property name="max" value="20"/>
+      <property name="excludedPackages"
+                value="java.util,
+                   java.util.function,
+                   java.util.stream,
+                   java.time,
+                   java.io,
+                   java.net,
+                   java.nio.file,
+                   java.math,
+                   java.lang.reflect,
+                   org.springframework.beans.factory.annotation,
+                   org.springframework.stereotype,
+                   org.springframework.context.annotation,
+                   org.springframework.transaction.annotation,
+                   org.springframework.transaction.event,
+                   org.springframework.scheduling.annotation,
+                   org.springframework.boot.autoconfigure.condition,
+                   org.springframework.web.bind.annotation,
+                   jakarta.persistence,
+                   jakarta.validation.constraints,
+                   jakarta.annotation,
+                   com.fasterxml.jackson.annotation,
+                   io.swagger.v3.oas.annotations"/>
+    </module>
     <module name="SingleLineJavadoc"/>
     <module name="EmptyCatchBlock">
       <property name="exceptionVariableName" value="expected"/>

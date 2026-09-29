@@ -2,14 +2,16 @@ package org.vader.common.model.vader.entity;
 
 /**
  * Which shape of local-LLM call an {@link LlmRequestOutboxMessageEntity} carries -- determines
- * how its {@code requestJson} is decoded and which tool audience is offered.
+ * which executor performs it, and so how its {@code requestJson} is decoded.
  */
 public enum LlmRequestKind {
 
     /** One harness turn: {@code requestJson} is a JSON array of {@code ConversationMessage}. */
     INFERENCE_TURN,
 
-    /** One prompt decomposition: {@code requestJson} is the raw client-prompt text. */
+    /**
+     * One prompt decomposition: {@code requestJson} is a JSON {@code DecompositionRequest}.
+     */
     DECOMPOSITION,
 
     /**
@@ -29,4 +31,10 @@ public enum LlmRequestKind {
      * {@code requestJson} is a JSON {@code TaskPlanRefinementRequest}.
      */
     TASK_PLAN_REFINEMENT,
+
+    /**
+     * One final answer for a completed workflow: {@code requestJson} is a JSON
+     * {@code WorkflowSynthesisRequest}.
+     */
+    WORKFLOW_SYNTHESIS,
 }
