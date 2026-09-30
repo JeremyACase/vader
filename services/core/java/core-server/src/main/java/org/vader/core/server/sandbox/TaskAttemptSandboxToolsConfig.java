@@ -25,7 +25,7 @@ import org.vader.core.server.mcp.ToolAudienceTag;
 public class TaskAttemptSandboxToolsConfig {
 
     /**
-     * Exposes the attempt-scoped sandbox tool.
+     * Exposes the attempt-scoped sandbox tools.
      *
      * @param tools the annotated tool bean
      * @return a callback provider over its {@code @Tool} methods

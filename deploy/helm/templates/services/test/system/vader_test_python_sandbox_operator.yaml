@@ -89,6 +89,17 @@ spec:
           [ "$STATUS" = "404" ] || { echo "❌ expected HTTP 404 for a missing file, got $STATUS"; exit 1; }
           echo "✅ HEAD reports staged files as present and missing ones as absent"
 
+          echo "== A file code wrote can be read back out of the workspace =="
+          # core-server's upload_object tool copies agent-written files to object storage this way.
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+            "http://$ADDR:8888/workspace/files/greeting.txt" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading a workspace file, got $STATUS"; exit 1; }
+          [ "$(cat "$BODY_FILE")" = "hello" ] || { echo "❌ unexpected file content: $(cat "$BODY_FILE")"; exit 1; }
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "http://$ADDR:8888/workspace/files/never-written.md" || true)
+          [ "$STATUS" = "404" ] || { echo "❌ expected HTTP 404 reading a missing file, got $STATUS"; exit 1; }
+          echo "✅ GET returns a workspace file's raw bytes, and 404 for a missing one"
+
           echo "== Delete the sandbox =="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
             -X DELETE "$BASE/$NAME" || true)

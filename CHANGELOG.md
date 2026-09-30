@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0]
+### Added
+- **Task agents can save their work to object storage.** An agent can upload a file it wrote or
+  edited in its Python sandbox -- a report, a modified spreadsheet -- and it becomes a stored
+  object linked to the task attempt that produced it, downloadable like any uploaded attachment.
+  It works the same whether the release stores objects in the database or MinIO. A new Helm
+  system test covers the flow end to end.
+
 ## [0.17.1]
 ### Changed
 - **The agent harness is restructured for maintainability**, with no behavior change: it is now a

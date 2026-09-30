@@ -7,7 +7,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
 
-/** JPA entity representing storage metadata for an uploaded object. */
+/** JPA entity representing storage metadata for a stored object. */
 @Entity
 public class ObjectMetadataEntity extends AbstractModelEntity {
 
@@ -40,6 +40,14 @@ public class ObjectMetadataEntity extends AbstractModelEntity {
     @JoinColumn(name = "object_metadata_client_prompt_join_id")
     private ClientPromptEntity clientPrompt;
 
+    /**
+     * The task attempt that uploaded this object as one of its outputs. Null for a file attached
+     * to a client prompt.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "object_metadata_task_attempt_join_id")
+    private TaskAttemptEntity taskAttempt;
+
     @Override
     public String getModelType() {
         return "ObjectMetadata";
@@ -51,6 +59,14 @@ public class ObjectMetadataEntity extends AbstractModelEntity {
 
     public void setClientPrompt(ClientPromptEntity clientPrompt) {
         this.clientPrompt = clientPrompt;
+    }
+
+    public TaskAttemptEntity getTaskAttempt() {
+        return this.taskAttempt;
+    }
+
+    public void setTaskAttempt(TaskAttemptEntity taskAttempt) {
+        this.taskAttempt = taskAttempt;
     }
 
     public String getBucketName() {

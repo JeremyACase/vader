@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
+import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.core.server.storage.interfaces.InterfaceFileStorageStrategy;
+import org.vader.core.server.storage.model.ObjectUpload;
 
 class ObjectStorageServiceTest {
 
@@ -87,5 +89,21 @@ class ObjectStorageServiceTest {
         assertThatThrownBy(() -> this.service.retrieve(ID))
             .isInstanceOf(ObjectNotFoundException.class);
         verify(this.storageStrategy, never()).retrieve(any());
+    }
+
+    @Test
+    void storeTaskAttemptOutput_storesViaTheStrategyAndLinksTheProducingAttempt() {
+        var upload = new ObjectUpload(
+            "report.md", "text/markdown", 5, new ByteArrayResource("hello".getBytes()));
+        var attempt = new TaskAttemptEntity();
+        var stored = metadata();
+        when(this.storageStrategy.store(upload)).thenReturn(stored);
+        when(this.repository.save(stored)).thenReturn(stored);
+
+        var descriptor = this.service.storeTaskAttemptOutput(upload, attempt);
+
+        assertThat(stored.getTaskAttempt()).isSameAs(attempt);
+        assertThat(descriptor.id()).isEqualTo(ID);
+        assertThat(descriptor.filename()).isEqualTo("diagram.png");
     }
 }

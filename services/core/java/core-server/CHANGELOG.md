@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0]
+### Added
+- **Task agents can upload files to object storage.** A new `upload_object` tool saves a file
+  from the agent's own sandbox (a report it wrote, a spreadsheet it edited) and returns its id.
+  The bytes go straight from sandbox to storage, never through the model's conversation, and the
+  object is linked to the attempt that produced it. Intake and agent uploads now share one
+  storage path, so neither knows whether the database or MinIO is active. A scripted upload
+  flow in TEST mode lets `helm test` cover this end to end.
+
 ## [0.28.0]
 ### Changed
 - **TEST mode now runs the real LLM code.** `vader.orchestrator.type=static` is renamed

@@ -13,6 +13,7 @@ import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.core.server.storage.interfaces.InterfaceFileStorageStrategy;
+import org.vader.core.server.storage.model.ObjectUpload;
 
 /**
  * Accepts a client prompt for asynchronous decomposition: stores any attachments, persists the
@@ -63,7 +64,10 @@ public class ClientPromptIntakeService {
         if (files.isEmpty()) {
             return;
         }
-        var stored = this.fileStorageStrategy.store(files);
+        var stored = files.stream()
+            .map(ObjectUpload::of)
+            .map(this.fileStorageStrategy::store)
+            .toList();
         stored.forEach(file -> file.setClientPrompt(prompt));
         prompt.setFiles(new LinkedHashSet<>(stored));
     }

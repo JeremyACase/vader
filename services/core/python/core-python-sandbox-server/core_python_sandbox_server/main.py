@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse
 
 from core_python_sandbox_server.logging_config import configure_logging
 from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult, StageFileResult
@@ -79,3 +80,16 @@ def file_exists(filename: str) -> Response:
     skip re-staging a file that's already there."""
     status_code = 200 if executor.has_file(filename) else 404
     return Response(status_code=status_code)
+
+
+@app.get("/workspace/files/{filename:path}")
+def fetch_file(filename: str) -> Response:
+    """Streams a workspace file's raw bytes back, or 404 if there is no such file -- lets
+    core-server copy a file submitted code wrote into object storage without it ever passing
+    through an LLM's tool-calling conversation."""
+    path = executor.workspace_file(filename)
+    response = Response(status_code=404)
+    if path is not None:
+        response = FileResponse(path, media_type="application/octet-stream")
+    logger.info("fetched file %s: status=%d", filename, response.status_code)
+    return response

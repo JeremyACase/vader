@@ -65,3 +65,20 @@ def test_head_on_a_staged_file_returns_200():
     response = client.head(f"/workspace/files/{filename}")
 
     assert response.status_code == 200
+
+
+def test_get_on_a_file_code_wrote_returns_its_raw_bytes():
+    filename = f"written-{uuid.uuid4()}.md"
+    client.post("/execute", json={"code": f"open('{filename}', 'wb').write(b'# Report')"})
+
+    response = client.get(f"/workspace/files/{filename}")
+
+    assert response.status_code == 200
+    assert response.content == b"# Report"
+    assert response.headers["content-type"] == "application/octet-stream"
+
+
+def test_get_on_a_missing_file_returns_404():
+    response = client.get(f"/workspace/files/never-written-{uuid.uuid4()}.xlsx")
+
+    assert response.status_code == 404

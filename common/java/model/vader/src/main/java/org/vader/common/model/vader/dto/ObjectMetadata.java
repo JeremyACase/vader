@@ -1,6 +1,6 @@
 package org.vader.common.model.vader.dto;
 
-/** DTO representing storage metadata for an uploaded object. */
+/** DTO representing storage metadata for a stored object. */
 public class ObjectMetadata extends AbstractModel {
 
     private String bucketName;
@@ -10,6 +10,9 @@ public class ObjectMetadata extends AbstractModel {
     private String contentType;
 
     private Long size;
+
+    /** The task attempt that uploaded this object, or null for a client prompt's attachment. */
+    private String taskAttemptId;
 
     @Override
     public String getModelType() {
@@ -46,5 +49,13 @@ public class ObjectMetadata extends AbstractModel {
 
     public void setSize(Long size) {
         this.size = size;
+    }
+
+    public String getTaskAttemptId() {
+        return this.taskAttemptId;
+    }
+
+    public void setTaskAttemptId(String taskAttemptId) {
+        this.taskAttemptId = taskAttemptId;
     }
 }

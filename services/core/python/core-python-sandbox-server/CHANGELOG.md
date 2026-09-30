@@ -5,6 +5,11 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+### Added
+- `GET /workspace/files/{filename}` returns a workspace file's raw bytes (404 if absent), so
+  `core-server` can copy a file the agent's code wrote into object storage.
+
 ## [0.3.0]
 ### Changed
 - A bare expression on the last line of submitted code is now echoed to stdout, as a notebook

@@ -154,6 +154,17 @@ public class PythonSandboxService {
     }
 
     /**
+     * Reads a file the sandbox's own code wrote back out of its workspace.
+     *
+     * @param name the exact sandbox name
+     * @param filename the file's path relative to the sandbox's workspace
+     * @return the file's raw bytes
+     */
+    public byte[] fetchFile(final String name, final String filename) {
+        return this.executionClient.fetchFile(name, filename);
+    }
+
+    /**
      * Fetches a previously-uploaded object and writes its raw bytes straight into a sandbox's
      * workspace, so a model never has to hold or re-emit the content itself, whatever its size.
      *

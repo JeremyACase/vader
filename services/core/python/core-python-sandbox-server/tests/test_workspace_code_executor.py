@@ -185,3 +185,25 @@ def test_execute_runs_code_as_main_with_workspace_modules_importable(tmp_path):
     )
 
     assert result.stdout == "42\n"
+
+
+def test_workspace_file_is_none_until_the_file_exists(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    assert executor.workspace_file("report.md") is None
+    executor.stage_file("report.md", b"bytes")
+    assert executor.workspace_file("report.md") == (tmp_path / "report.md").resolve()
+
+
+def test_workspace_file_is_none_for_a_directory(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    (tmp_path / "subdir").mkdir()
+
+    assert executor.workspace_file("subdir") is None
+
+
+def test_workspace_file_rejects_path_traversal(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+
+    with pytest.raises(ValueError, match="escapes the workspace"):
+        executor.workspace_file("../evil.bin")
