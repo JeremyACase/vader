@@ -196,6 +196,45 @@ class SandboxExecutionClientTest {
     }
 
     @Test
+    void fetchFile_getsTheRawBytesFromTheSandboxsWorkspaceEndpoint() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.md"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess("# Report".getBytes(), MediaType.APPLICATION_OCTET_STREAM));
+
+        var content = this.client.fetchFile("vader-sandbox-a", "report.md");
+
+        assertThat(content).isEqualTo("# Report".getBytes());
+        this.mockServer.verify();
+    }
+
+    @Test
+    void fetchFile_whenTheSandboxAnswers404_saysThereIsNoSuchFile() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.md"))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThatThrownBy(() -> this.client.fetchFile("vader-sandbox-a", "report.md"))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("no file named 'report.md'");
+    }
+
+    @Test
+    void fetchFile_whenTheSandboxFails_throwsSandboxExecutionException() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files/report.md"))
+            .andRespond(withServerError());
+
+        assertThatThrownBy(() -> this.client.fetchFile("vader-sandbox-a", "report.md"))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("report.md")
+            .hasMessageContaining("vader-sandbox-a");
+    }
+
+    @Test
     void isStaged_whenTheSandboxAnswers200_isTrue() {
         this.mockServer
             .expect(requestTo(

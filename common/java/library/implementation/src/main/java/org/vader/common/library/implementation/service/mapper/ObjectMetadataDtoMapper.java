@@ -20,6 +20,9 @@ public class ObjectMetadataDtoMapper
             to.setOriginalFilename(from.getOriginalFilename());
             to.setContentType(from.getContentType());
             to.setSize(from.getSize());
+            if (Objects.nonNull(from.getTaskAttempt())) {
+                to.setTaskAttemptId(from.getTaskAttempt().getId());
+            }
         }
         return to;
     }

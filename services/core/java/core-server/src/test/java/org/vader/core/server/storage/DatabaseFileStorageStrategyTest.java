@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
 import org.vader.common.model.vader.entity.FileContentEntity;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
+import org.vader.core.server.storage.model.ObjectUpload;
 
 class DatabaseFileStorageStrategyTest {
 
@@ -32,5 +34,19 @@ class DatabaseFileStorageStrategyTest {
         assertThatThrownBy(() -> this.strategy.retrieve(metadata))
             .isInstanceOf(FileStorageException.class)
             .hasMessageContaining(metadata.getId());
+    }
+
+    @Test
+    void store_keepsTheBytesInTheDatabaseAlongsideTheMetadata() {
+        var upload = new ObjectUpload(
+            "report.md", "text/markdown", 5, new ByteArrayResource("hello".getBytes()));
+
+        var metadata = this.strategy.store(upload);
+
+        assertThat(metadata.getFileContent().getData()).isEqualTo("hello".getBytes());
+        assertThat(metadata.getOriginalFilename()).isEqualTo("report.md");
+        assertThat(metadata.getContentType()).isEqualTo("text/markdown");
+        assertThat(metadata.getSize()).isEqualTo(5L);
+        assertThat(metadata.getObjectKey()).isNull();
     }
 }

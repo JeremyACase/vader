@@ -99,6 +99,16 @@ class WorkspaceCodeExecutor:
         """
         return self._safe_path(filename).is_file()
 
+    def workspace_file(self, filename: str) -> Path | None:
+        """The path of ``filename`` in the workspace, or ``None`` if no such file exists.
+
+        Lets core-server read back a file submitted code wrote -- e.g. a report or an edited
+        spreadsheet a task agent is saving to object storage -- through the same path-safety check
+        as staging.
+        """
+        path = self._safe_path(filename)
+        return path if path.is_file() else None
+
     def _stage_files(self, files: dict[str, str]) -> None:
         for filename, encoded_content in files.items():
             self.stage_file(filename, base64.b64decode(encoded_content))

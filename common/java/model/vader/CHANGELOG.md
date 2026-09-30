@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0]
+### Added
+- A stored object can record the task attempt that uploaded it as an output, alongside the
+  existing link to the client prompt it was attached to.
+
 ## [0.21.0]
 ### Added
 - Workflow synthesis is a queued LLM request kind, so it is serialized with every other LLM call.

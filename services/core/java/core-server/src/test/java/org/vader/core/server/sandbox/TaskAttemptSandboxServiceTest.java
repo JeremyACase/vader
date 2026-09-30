@@ -16,6 +16,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -29,6 +30,9 @@ import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
 import org.vader.core.server.sandbox.model.SandboxExecutionResult;
 import org.vader.core.server.sandbox.model.SandboxInfo;
+import org.vader.core.server.storage.ObjectDescriptor;
+import org.vader.core.server.storage.ObjectStorageService;
+import org.vader.core.server.storage.model.ObjectUpload;
 import org.vader.core.server.taskagent.UnknownAssignmentException;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 
@@ -40,6 +44,9 @@ class TaskAttemptSandboxServiceTest {
 
     @Mock
     private TaskAttemptRepository taskAttemptRepository;
+
+    @Mock
+    private ObjectStorageService objectStorageService;
 
     @InjectMocks
     private TaskAttemptSandboxService service;
@@ -135,6 +142,47 @@ class TaskAttemptSandboxServiceTest {
         when(this.taskAttemptRepository.findById(unknownId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> this.service.runCode(unknownId, "pass"))
+            .isInstanceOf(UnknownAssignmentException.class);
+    }
+
+    @Test
+    void uploadFile_storesTheWorkspaceFileAsAnOutputOfTheCallingAttempt() {
+        var bytes = "# Report".getBytes();
+        var expected = new ObjectDescriptor(
+            UUID.randomUUID().toString(), "report.md", "text/markdown", bytes.length);
+        when(this.sandboxService.fetchFile(this.sandboxName, "out/report.md")).thenReturn(bytes);
+        when(this.objectStorageService.storeTaskAttemptOutput(any(), any())).thenReturn(expected);
+
+        var result = this.service.uploadFile(this.attemptId, "out/report.md");
+
+        assertThat(result).isEqualTo(expected);
+        var upload = ArgumentCaptor.forClass(ObjectUpload.class);
+        var attempt = ArgumentCaptor.forClass(TaskAttemptEntity.class);
+        verify(this.objectStorageService)
+            .storeTaskAttemptOutput(upload.capture(), attempt.capture());
+        assertThat(upload.getValue().filename()).isEqualTo("report.md");
+        assertThat(upload.getValue().contentType()).isEqualTo("text/markdown");
+        assertThat(upload.getValue().size()).isEqualTo(bytes.length);
+        assertThat(attempt.getValue().getId()).isEqualTo(this.attemptId);
+    }
+
+    @Test
+    void uploadFile_whenTheFileIsMissing_storesNothing() {
+        when(this.sandboxService.fetchFile(this.sandboxName, "missing.md"))
+            .thenThrow(new SandboxExecutionException("There is no file named 'missing.md'", null));
+
+        assertThatThrownBy(() -> this.service.uploadFile(this.attemptId, "missing.md"))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("missing.md");
+        verify(this.objectStorageService, never()).storeTaskAttemptOutput(any(), any());
+    }
+
+    @Test
+    void uploadFile_forAnUnknownAttempt_throwsUnknownAssignment() {
+        var unknownId = UUID.randomUUID().toString();
+        when(this.taskAttemptRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> this.service.uploadFile(unknownId, "report.md"))
             .isInstanceOf(UnknownAssignmentException.class);
     }
 

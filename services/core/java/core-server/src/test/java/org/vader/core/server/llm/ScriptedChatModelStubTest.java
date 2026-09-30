@@ -165,6 +165,45 @@ class ScriptedChatModelStubTest {
     }
 
     @Test
+    void decomposition_ofTheUploadMarkerPrompt_plansOneTask() {
+        var executor = this.wiredWithTools(new DecompositionLlmExecutor());
+
+        var plan = executor.execute(new DecompositionRequest(
+            "Write a report. " + ScriptedChatModelStub.UPLOAD_SCRIPT_MARKER, null));
+
+        assertThat(plan.tasks()).singleElement()
+            .satisfies(task -> assertThat(task.title()).contains("upload"));
+    }
+
+    @Test
+    void inferenceTurn_ofTheUploadMarkerPrompt_writesTheReportThenUploadsItThenAnswers() {
+        var executor = this.wiredWithTools(new InferenceTurnLlmExecutor());
+        var task = message(ConversationRole.USER,
+            "Original request: write a report. " + ScriptedChatModelStub.UPLOAD_SCRIPT_MARKER);
+        var codeResult = new ConversationMessage(
+            ConversationRole.TOOL, "{\"exitCode\":0}", null, "scripted-call-1", "run_python_code");
+        var uploadResult = new ConversationMessage(
+            ConversationRole.TOOL, "{\"id\":\"x\"}", null, "scripted-call-2", "upload_object");
+
+        var first = executor.execute(List.of(task));
+        var second = executor.execute(List.of(task, codeResult));
+        var last = executor.execute(List.of(task, codeResult, uploadResult));
+
+        assertThat(first.toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("run_python_code");
+            assertThat(call.argumentsJson())
+                .contains(ScriptedChatModelStub.UPLOADED_REPORT_FILENAME)
+                .contains(ScriptedChatModelStub.UPLOADED_REPORT_CONTENT);
+        });
+        assertThat(second.toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("upload_object");
+            assertThat(call.argumentsJson()).contains(ScriptedChatModelStub.UPLOADED_REPORT_FILENAME);
+        });
+        assertThat(last.content()).isEqualTo(ScriptedChatModelStub.INFERENCE_ANSWER);
+        assertThat(last.toolCalls()).isEmpty();
+    }
+
+    @Test
     void requireTestMode_refusesEveryOtherMode() {
         var stub = new ScriptedChatModelStub();
         ReflectionTestUtils.setField(stub, "mode", VaderMode.PROD);

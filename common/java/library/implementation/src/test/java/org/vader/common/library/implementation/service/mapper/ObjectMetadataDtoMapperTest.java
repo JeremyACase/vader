@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
+import org.vader.common.model.vader.entity.TaskAttemptEntity;
 
 class ObjectMetadataDtoMapperTest {
 
@@ -41,6 +42,17 @@ class ObjectMetadataDtoMapperTest {
         assertThat(dto.getContentType()).isEqualTo("image/png");
         assertThat(dto.getSize()).isEqualTo(2048L);
         assertThat(dto.getModelType()).isEqualTo("ObjectMetadata");
+        assertThat(dto.getTaskAttemptId()).isNull();
+    }
+
+    @Test
+    void map_forAnObjectATaskAttemptUploaded_emitsOnlyTheAttemptsId() {
+        var attempt = new TaskAttemptEntity();
+        attempt.setId("22222222-2222-2222-2222-222222222222");
+        var entity = new ObjectMetadataEntity();
+        entity.setTaskAttempt(attempt);
+
+        assertThat(this.mapper.map(entity).getTaskAttemptId()).isEqualTo(attempt.getId());
     }
 
     @Test

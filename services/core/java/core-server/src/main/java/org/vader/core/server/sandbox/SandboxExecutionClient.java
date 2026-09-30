@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
@@ -31,7 +32,7 @@ public class SandboxExecutionClient {
         "http://{name}.{namespace}.svc.cluster.local:{port}/execute";
     private static final String HEALTH_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/health";
-    private static final String STAGE_FILE_URI =
+    private static final String WORKSPACE_FILE_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/workspace/files/{filename}";
 
     @Autowired
@@ -82,7 +83,7 @@ public class SandboxExecutionClient {
     public void stageFile(final String sandboxName, final String filename, final byte[] content) {
         try {
             this.sandboxExecutionRestClient.put()
-                .uri(STAGE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
+                .uri(WORKSPACE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(content)
                 .retrieve()
@@ -94,6 +95,38 @@ public class SandboxExecutionClient {
                 "Could not stage '" + filename + "' into sandbox '" + sandboxName + "': "
                     + describe(e), e);
         }
+    }
+
+    /**
+     * Reads a file's raw bytes back out of a sandbox's persistent workspace -- the reverse of
+     * {@link #stageFile}, for a file the sandbox's own code wrote.
+     *
+     * @param sandboxName the exact sandbox name
+     * @param filename the file's path relative to the sandbox's workspace
+     * @return the file's raw bytes
+     * @throws SandboxExecutionException if there is no such file, or the sandbox is unreachable
+     *     or returns an error
+     */
+    public byte[] fetchFile(final String sandboxName, final String filename) {
+        byte[] content;
+        try {
+            content = this.sandboxExecutionRestClient.get()
+                .uri(WORKSPACE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
+                .accept(MediaType.APPLICATION_OCTET_STREAM)
+                .retrieve()
+                .body(byte[].class);
+        } catch (IllegalArgumentException e) {
+            throw invalidSandboxName(sandboxName, e);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new SandboxExecutionException(
+                "There is no file named '" + filename + "' in the sandbox's working directory.",
+                e);
+        } catch (RestClientException e) {
+            throw new SandboxExecutionException(
+                "Could not read '" + filename + "' from sandbox '" + sandboxName + "': "
+                    + describe(e), e);
+        }
+        return Objects.requireNonNullElse(content, new byte[0]);
     }
 
     /**
@@ -110,7 +143,7 @@ public class SandboxExecutionClient {
         boolean staged;
         try {
             staged = Boolean.TRUE.equals(this.sandboxExecutionRestClient.head()
-                .uri(STAGE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
+                .uri(WORKSPACE_FILE_URI, sandboxName, this.namespace, EXEC_PORT, filename)
                 .exchange((request, response) -> response.getStatusCode().is2xxSuccessful()));
         } catch (IllegalArgumentException e) {
             throw invalidSandboxName(sandboxName, e);

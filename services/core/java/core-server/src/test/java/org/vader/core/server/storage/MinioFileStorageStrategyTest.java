@@ -7,14 +7,19 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
+import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
+import org.vader.core.server.storage.model.ObjectUpload;
 
 class MinioFileStorageStrategyTest {
 
@@ -65,5 +70,35 @@ class MinioFileStorageStrategyTest {
         assertThatThrownBy(() -> this.strategy.retrieve(metadata))
             .isInstanceOf(FileStorageException.class)
             .hasMessageContaining("diagram.png");
+    }
+
+    @Test
+    void store_uploadsUnderUniqueKeyAndRecordsWhereItWent() throws Exception {
+        when(this.minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
+        var upload = new ObjectUpload(
+            "report.md", "text/markdown", 5, new ByteArrayResource("hello".getBytes()));
+
+        var metadata = this.strategy.store(upload);
+
+        var captor = ArgumentCaptor.forClass(PutObjectArgs.class);
+        verify(this.minioClient).putObject(captor.capture());
+        assertThat(captor.getValue().bucket()).isEqualTo("vader-files");
+        assertThat(captor.getValue().object()).endsWith("-report.md");
+        assertThat(captor.getValue().contentType()).isEqualTo("text/markdown");
+        assertThat(metadata.getBucketName()).isEqualTo("vader-files");
+        assertThat(metadata.getObjectKey()).isEqualTo(captor.getValue().object());
+        assertThat(metadata.getSize()).isEqualTo(5L);
+        assertThat(metadata.getFileContent()).isNull();
+    }
+
+    @Test
+    void store_whenTheBucketIsMissing_createsItFirst() throws Exception {
+        when(this.minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(false);
+        var upload = new ObjectUpload(
+            "report.md", "text/markdown", 5, new ByteArrayResource("hello".getBytes()));
+
+        this.strategy.store(upload);
+
+        verify(this.minioClient).makeBucket(any(MakeBucketArgs.class));
     }
 }

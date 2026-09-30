@@ -19,6 +19,7 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.core.server.storage.interfaces.InterfaceFileStorageStrategy;
+import org.vader.core.server.storage.model.ObjectUpload;
 
 class ClientPromptIntakeServiceTest {
 
@@ -75,11 +76,15 @@ class ClientPromptIntakeServiceTest {
         dto.setFiles(List.of(new MockMultipartFile(
             "files", "notes.txt", "text/plain", "content".getBytes())));
         var stored = new ObjectMetadataEntity();
-        when(this.fileStorageStrategy.store(any())).thenReturn(List.of(stored));
+        when(this.fileStorageStrategy.store(any())).thenReturn(stored);
 
         this.service.accept(dto);
 
-        verify(this.fileStorageStrategy).store(dto.getFiles());
+        var upload = ArgumentCaptor.forClass(ObjectUpload.class);
+        verify(this.fileStorageStrategy).store(upload.capture());
+        assertThat(upload.getValue().filename()).isEqualTo("notes.txt");
+        assertThat(upload.getValue().contentType()).isEqualTo("text/plain");
+        assertThat(upload.getValue().size()).isEqualTo(7L);
         var saved = ArgumentCaptor.forClass(ClientPromptEntity.class);
         verify(this.clientPromptRepository).save(saved.capture());
         assertThat(saved.getValue().getFiles()).containsExactly(stored);

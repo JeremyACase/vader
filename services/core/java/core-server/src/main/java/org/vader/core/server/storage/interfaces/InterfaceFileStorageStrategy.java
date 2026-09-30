@@ -1,31 +1,30 @@
 package org.vader.core.server.storage.interfaces;
 
-import java.util.List;
 import org.springframework.core.io.Resource;
-import org.springframework.web.multipart.MultipartFile;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
+import org.vader.core.server.storage.model.ObjectUpload;
 
 /**
- * Strategy for persisting uploaded files, and reading them back, hiding where they actually
- * live.
+ * Strategy for persisting objects, and reading them back, hiding where they actually live.
  *
  * <p>Active implementation is selected at startup via {@code vader.storage.type}. The database
  * strategy is the default and requires no additional infrastructure. The MinIO strategy requires
- * a running MinIO instance and its connection properties. Callers of either method -- the object
- * storage REST endpoint and its MCP tool -- never need to know which one is active.</p>
+ * a running MinIO instance and its connection properties. Callers -- prompt intake, a task
+ * agent's upload, the object storage REST endpoint and its MCP tool -- never need to know which
+ * one is active.</p>
  */
 public interface InterfaceFileStorageStrategy {
 
     /**
-     * Stores the supplied files and returns one metadata entity per file.
+     * Stores one object's content and returns its metadata entity.
      *
-     * <p>The returned entities are not yet persisted; callers are responsible for attaching them
-     * to a {@link org.vader.common.model.vader.entity.ClientPromptEntity} before flushing.</p>
+     * <p>The returned entity is not yet persisted; callers attach it to its owner (a client
+     * prompt, or the task attempt that produced it) and save it themselves.</p>
      *
-     * @param files the uploaded files to store
-     * @return a metadata entity for each stored file, in the same order as the input list
+     * @param upload the object to store
+     * @return the metadata entity for the stored object
      */
-    List<ObjectMetadataEntity> store(List<MultipartFile> files);
+    ObjectMetadataEntity store(ObjectUpload upload);
 
     /**
      * Loads the complete content of a previously stored object.
