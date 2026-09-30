@@ -1,24 +1,11 @@
 use serde_json::Value;
 
-use crate::inference_gateway::{ConversationMessage, ConversationRole};
+use crate::conversation::{ConversationMessage, ConversationRole};
+use crate::prompts::{UNEXECUTED_CODE_NUDGE, UNRESOLVED_ERROR_NUDGE};
 
 /// The tool whose `code` argument counts as "executed" when checking a final answer for code the
 /// model never ran.
 const RUN_PYTHON_CODE_TOOL: &str = "run_python_code";
-
-/// Sent back when a final answer contains a fenced code block the model never executed. Small
-/// models often end a run with "here's the corrected approach, let's proceed" plus code they never
-/// ran -- reported as-is, that text is handed downstream as though the work were done.
-pub const UNEXECUTED_CODE_NUDGE: &str = "Your reply contains code that you have not run, so it \
-    is not a finished result yet: nothing in it has been executed. Run the code with \
-    run_python_code and base your answer on its output. If the code itself is the deliverable, \
-    reply again with the same final answer.";
-
-/// Sent back when a final answer follows a tool call that failed, with nothing succeeding since --
-/// whatever that call was doing is still undone, however confident the reply sounds.
-pub const UNRESOLVED_ERROR_NUDGE: &str = "Your last tool call failed and nothing has succeeded \
-    since, so the work it was doing is not done yet. Fix the problem and run it again. If the task \
-    is genuinely complete regardless, reply again with the same final answer.";
 
 /// Catches a final answer that describes work instead of reporting it -- code the model never
 /// ran, or a reply that follows an unresolved tool error -- and supplies a nudge to send back
@@ -156,7 +143,7 @@ fn without_whitespace(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference_gateway::ToolCall;
+    use crate::conversation::ToolCall;
 
     const CODE: &str = "import pandas as pd\ndf = pd.read_excel('data.xlsx')\ndf.head()";
 
@@ -185,13 +172,6 @@ mod tests {
 
     fn guard() -> UnfinishedAnswerGuard {
         UnfinishedAnswerGuard::new(2)
-    }
-
-    #[test]
-    fn nudge_messages_have_no_runs_of_spaces_from_line_wrapping() {
-        [UNEXECUTED_CODE_NUDGE, UNRESOLVED_ERROR_NUDGE]
-            .iter()
-            .for_each(|message| assert!(!message.contains("  "), "{message:?}"));
     }
 
     #[test]

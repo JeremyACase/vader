@@ -29,15 +29,17 @@ impl StallDetector {
     /// True once the most recent `max_repeats` recorded actions are all identical.
     pub fn is_stalled(&self) -> bool {
         let window = self.max_repeats as usize;
-        if window == 0 || self.history.len() < window {
-            return false;
-        }
-        let latest = self.history.back().expect("length checked above");
+        window > 0 && self.history.len() >= window && self.window_is_uniform(window)
+    }
+
+    /// Whether the last `window` recorded actions all match the most recent one.
+    fn window_is_uniform(&self, window: usize) -> bool {
+        let latest = self.history.back();
         self.history
             .iter()
             .rev()
             .take(window)
-            .all(|action| action == latest)
+            .all(|action| Some(action) == latest)
     }
 }
 
@@ -67,6 +69,13 @@ mod tests {
         stall_detector.record("read_file(a)".to_string());
         stall_detector.record("read_file(a)".to_string());
         assert!(stall_detector.is_stalled());
+    }
+
+    #[test]
+    fn a_zero_window_never_stalls() {
+        let mut stall_detector = StallDetector::new(0);
+        stall_detector.record("read_file(a)".to_string());
+        assert!(!stall_detector.is_stalled());
     }
 
     #[test]

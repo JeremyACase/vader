@@ -1,6 +1,6 @@
 use crate::assignment::{Assignment, AssignmentId};
 use crate::error::HarnessError;
-use crate::runner::HarnessOutcome;
+use crate::harness_outcome::HarnessOutcome;
 
 /// The harness's control-plane contract with `core-server`: fetch the work order, report
 /// liveness, and hand back the terminal outcome. Implemented by [`crate::core_server_adapter::CoreServerAdapter`];
