@@ -1,9 +1,9 @@
 use crate::assignment::AssignmentId;
+use crate::conversation::ToolCall;
 use crate::error::HarnessError;
-use crate::inference_gateway::ToolCall;
 
 /// One tool's raw result, ready to fold back into the conversation as a `Tool`
-/// [`crate::inference_gateway::ConversationMessage`].
+/// [`crate::conversation::ConversationMessage`].
 #[derive(Debug, Clone)]
 pub struct ToolResult {
     pub tool_call_id: String,

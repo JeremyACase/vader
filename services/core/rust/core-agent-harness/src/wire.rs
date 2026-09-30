@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+use crate::conversation::{ConversationMessage, ConversationRole, InferenceTurn, ToolCall};
+use crate::harness_outcome::{HarnessOutcome, STALLED_REASON, TIMED_OUT_REASON};
+use crate::tool_executor::ToolResult;
+
 /// Body of `POST /agent/assignments/{id}/heartbeat`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,4 +94,177 @@ pub struct ToolCallInvocationRequestBody {
 pub struct ToolCallInvocationResultBody {
     pub tool_call_id: String,
     pub result_json: String,
+}
+
+impl From<ConversationRole> for ConversationRoleBody {
+    fn from(role: ConversationRole) -> Self {
+        match role {
+            ConversationRole::System => Self::System,
+            ConversationRole::User => Self::User,
+            ConversationRole::Assistant => Self::Assistant,
+            ConversationRole::Tool => Self::Tool,
+        }
+    }
+}
+
+impl From<&ToolCall> for ToolCallBody {
+    fn from(tool_call: &ToolCall) -> Self {
+        Self {
+            id: tool_call.id.clone(),
+            name: tool_call.name.clone(),
+            arguments_json: tool_call.arguments_json.clone(),
+        }
+    }
+}
+
+impl From<ToolCallBody> for ToolCall {
+    fn from(body: ToolCallBody) -> Self {
+        Self {
+            id: body.id,
+            name: body.name,
+            arguments_json: body.arguments_json,
+        }
+    }
+}
+
+impl From<&ConversationMessage> for ConversationMessageBody {
+    fn from(message: &ConversationMessage) -> Self {
+        Self {
+            role: message.role.into(),
+            content: message.content.clone(),
+            tool_calls: message.tool_calls.iter().map(ToolCallBody::from).collect(),
+            tool_call_id: message.tool_call_id.clone(),
+            tool_name: message.tool_name.clone(),
+        }
+    }
+}
+
+impl From<InferenceResponseBody> for InferenceTurn {
+    fn from(body: InferenceResponseBody) -> Self {
+        Self {
+            content: body.content,
+            tool_calls: body.tool_calls.into_iter().map(ToolCall::from).collect(),
+            tokens_spent: body.tokens_spent,
+            finish_reason: body.finish_reason,
+        }
+    }
+}
+
+impl From<ToolCallInvocationResultBody> for ToolResult {
+    fn from(body: ToolCallInvocationResultBody) -> Self {
+        Self {
+            tool_call_id: body.tool_call_id,
+            result_json: body.result_json,
+        }
+    }
+}
+
+impl From<&HarnessOutcome> for ResultRequestBody {
+    fn from(outcome: &HarnessOutcome) -> Self {
+        match outcome {
+            HarnessOutcome::Succeeded { output } => Self {
+                status: "SUCCEEDED",
+                output: Some(output.clone()),
+                failure_reason: None,
+            },
+            HarnessOutcome::Failed { reason } => Self::failure("FAILED", reason),
+            HarnessOutcome::TimedOut => Self::failure("TIMED_OUT", TIMED_OUT_REASON),
+            HarnessOutcome::Stalled => Self::failure("STALLED", STALLED_REASON),
+        }
+    }
+}
+
+impl ResultRequestBody {
+    fn failure(status: &'static str, reason: &str) -> Self {
+        Self {
+            status,
+            output: None,
+            failure_reason: Some(reason.to_string()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn succeeded_outcome_carries_output_and_no_failure_reason() {
+        let body = ResultRequestBody::from(&HarnessOutcome::Succeeded {
+            output: "done".to_string(),
+        });
+        assert_eq!(body.status, "SUCCEEDED");
+        assert_eq!(body.output.as_deref(), Some("done"));
+        assert!(body.failure_reason.is_none());
+    }
+
+    #[test]
+    fn failed_outcome_carries_reason_and_no_output() {
+        let body = ResultRequestBody::from(&HarnessOutcome::Failed {
+            reason: "boom".to_string(),
+        });
+        assert_eq!(body.status, "FAILED");
+        assert!(body.output.is_none());
+        assert_eq!(body.failure_reason.as_deref(), Some("boom"));
+    }
+
+    #[test]
+    fn timed_out_and_stalled_outcomes_use_fixed_status_strings() {
+        assert_eq!(
+            ResultRequestBody::from(&HarnessOutcome::TimedOut).status,
+            "TIMED_OUT"
+        );
+        assert_eq!(
+            ResultRequestBody::from(&HarnessOutcome::Stalled).status,
+            "STALLED"
+        );
+    }
+
+    #[test]
+    fn tool_result_message_converts_to_its_wire_shape() {
+        let message = ConversationMessage::tool_result("call-1", "get_object_content", "{}");
+
+        let body = ConversationMessageBody::from(&message);
+
+        assert_eq!(body.role, ConversationRoleBody::Tool);
+        assert_eq!(body.tool_call_id.as_deref(), Some("call-1"));
+        assert_eq!(body.tool_name.as_deref(), Some("get_object_content"));
+        assert_eq!(body.content.as_deref(), Some("{}"));
+    }
+
+    #[test]
+    fn assistant_tool_calls_convert_to_their_wire_shape() {
+        let tool_call = ToolCall {
+            id: "call-1".to_string(),
+            name: "get_object_content".to_string(),
+            arguments_json: "{\"id\":\"abc\"}".to_string(),
+        };
+        let message = ConversationMessage::assistant_tool_calls(vec![tool_call]);
+
+        let body = ConversationMessageBody::from(&message);
+
+        assert_eq!(body.role, ConversationRoleBody::Assistant);
+        assert_eq!(body.tool_calls.len(), 1);
+        assert_eq!(body.tool_calls[0].name, "get_object_content");
+    }
+
+    #[test]
+    fn inference_response_converts_to_a_turn() {
+        let body = InferenceResponseBody {
+            content: None,
+            tool_calls: vec![ToolCallBody {
+                id: "call-1".to_string(),
+                name: "run_python_code".to_string(),
+                arguments_json: "{}".to_string(),
+            }],
+            tokens_spent: 42,
+            finish_reason: Some("length".to_string()),
+        };
+
+        let turn = InferenceTurn::from(body);
+
+        assert_eq!(turn.tool_calls[0].name, "run_python_code");
+        assert_eq!(turn.tokens_spent, 42);
+        assert!(turn.was_cut_off());
+    }
 }

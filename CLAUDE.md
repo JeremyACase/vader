@@ -210,8 +210,9 @@ implementation for these conventions:
 ### Rust
 
 Used for `core-agent-harness` (and any future latency/footprint-sensitive, single-purpose
-service). The same complexity and pattern-naming philosophy as Java applies, adapted to
-idiomatic Rust rather than transplanted literally:
+service). The same complexity and pattern-naming philosophy as Java applies. Naming and
+structure are adapted to idiomatic Rust; the complexity rules are not — they apply as strictly as
+in Java:
 
 - **Traits stand in for `Interface*`.** Rust's `trait` keyword already marks the role that
   Java's `Interface` prefix exists to signal, so trait names are **not** prefixed
@@ -222,18 +223,29 @@ idiomatic Rust rather than transplanted literally:
   or a trait default method, not inheritance.
 - **Newtypes for identifiers.** Wrap ids in single-field structs (`TaskId(Uuid)`,
   `AssignmentId(Uuid)`) rather than passing bare `Uuid`/`String` — the compiler then rejects a
-  task id accidentally passed where an assignment id is expected.
+  task id accidentally passed where an assignment id is expected. Keep the wrapped field private
+  and expose a getter, so an id can't be built from an arbitrary value.
 - **`Result<T, E>` and `?` are the guard-clause mechanism.** A function that can fail returns
   `Result`; propagate with `?` at the top of a function exactly like a Java guard-clause early
   return, then let the rest of the function run straight through to one value at the end.
   Never `.unwrap()`/`.expect()` outside tests or a case that is genuinely statically impossible
   (and comment why, at the call site, when it isn't obvious).
 - **No `continue`, and prefer iterator adapters to hand-written loops.** `.filter()`, `.map()`,
-  `.find()`, `.all()`, `.any()` usually eliminate the loop body branching entirely, which is a
-  more idiomatic way to hit the complexity target than Java's single-return discipline. Where a
-  loop is genuinely needed, keep the same rule: no `continue`, extract a helper instead of
-  nesting.
-- **Cyclomatic complexity** — same target as every other language here: 1–3 per function.
+  `.find()`, `.all()`, `.any()` usually eliminate the loop body branching entirely. They work
+  alongside the single-return rule, not in place of it. Where a loop is genuinely needed, keep
+  the same rule: no `continue`, extract a helper instead of nesting, and give the loop one exit
+  (`loop { if let Some(x) = self.step().await { break x; } }`, not a `break` in every arm).
+- **Cyclomatic complexity 1–3 and a single return are non-negotiable in Rust, exactly as in
+  Java.** Don't loosen them on the grounds that early `return`, multiple `break`s, or a large
+  `match` are "idiomatic Rust" or "more readable": encapsulation and single responsibility come
+  first. Each function does one thing and ends in one expression — an `if`/`else` or `match`
+  expression as the tail value, never `return` in one branch and a fall-through in the other.
+  The only early exits allowed are `?` guard clauses. When a function needs several branches,
+  several steps, or a `match` whose arms do real work, split it into named helpers, each doing
+  one of those things (e.g. `limit_outcome` → `budget_outcome` / `stall_outcome`; a
+  `respond_to_turn` that delegates each case). Prefer combinators that keep a function
+  single-expression — `bool::then`, `Option::or_else`, `Result::map`, `map_err` — over branching
+  by hand.
 - **`rustfmt` and `clippy -D warnings`** are this language's equivalent of checkstyle and must
   be clean on every build.
 - **`async fn` in traits (stable, no `async-trait` crate needed)** over generics

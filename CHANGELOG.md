@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.1]
+### Changed
+- **The agent harness is restructured for maintainability**, with no behavior change: it is now a
+  library behind a thin binary, its turn loop is split into small single-purpose steps, and task
+  and assignment ids can no longer be built from arbitrary values.
+
 ## [0.17.0]
 ### Changed
 - **The devops test mode runs Vader's real LLM code.** The chart's

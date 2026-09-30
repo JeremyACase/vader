@@ -5,6 +5,13 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1]
+### Changed
+- Internal restructuring with no change in behaviour: the crate is now a library behind a thin
+  binary, prompt text and the run's outcome type each have their own module, wire conversions
+  use the standard `From` trait, and task/assignment ids can no longer be built from an
+  arbitrary UUID. The turn loop is broken into single-purpose, single-exit steps.
+
 ## [0.4.0]
 ### Added
 - A final answer that contains code the model never ran, or that follows a failed tool call with

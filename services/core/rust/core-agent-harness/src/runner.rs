@@ -1,8 +1,11 @@
 use crate::assignment::{Assignment, AssignmentId};
 use crate::budget::HarnessBudget;
 use crate::control_plane::ControlPlane;
+use crate::conversation::{ConversationMessage, InferenceTurn, ToolCall};
 use crate::error::HarnessError;
-use crate::inference_gateway::{ConversationMessage, InferenceGateway, InferenceTurn, ToolCall};
+use crate::harness_outcome::HarnessOutcome;
+use crate::inference_gateway::InferenceGateway;
+use crate::prompts::{self, EMPTY_REPLY_NUDGE, TASK_INSTRUCTIONS};
 use crate::stall_detector::StallDetector;
 use crate::tool_executor::ToolExecutor;
 use crate::unfinished_answer_guard::UnfinishedAnswerGuard;
@@ -11,16 +14,6 @@ use crate::unfinished_answer_guard::UnfinishedAnswerGuard;
 /// [`UnfinishedAnswerGuard`]). Two covers the common "propose a fix, nudge, run it, hit another
 /// error, propose again" sequence; beyond that the answer goes to core-server's evaluator as-is.
 const MAX_UNFINISHED_ANSWER_NUDGES: u32 = 2;
-
-/// The terminal result of one harness run, reported back to `core-server` via
-/// [`ControlPlane::submit_result`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HarnessOutcome {
-    Succeeded { output: String },
-    Failed { reason: String },
-    TimedOut,
-    Stalled,
-}
 
 /// What one completed turn means for the run as a whole: the model produced its final answer, it
 /// requested tools (or needs a nudge) and the run should take another turn, or its reply was cut
@@ -31,55 +24,21 @@ enum TurnOutcome {
     CutOff,
 }
 
-/// Reported as the failure reason when a turn is cut off at the output token cap. Failing the
-/// attempt outright, rather than nudging, is deliberate: at temperature 0 the same conversation
-/// just runs into the same cap again, and a clear reason lets the reattempt decision (and a human
-/// reading the task) see exactly what went wrong instead of an empty reply or a generic stall.
-const OUTPUT_CAP_FAILURE_REASON: &str = "The model's reply was cut off at the output token cap \
-    before it finished, so its answer or tool call was incomplete and could not be used.";
-
-/// Frames the action-loop protocol for the model: call tools as needed, and a plain-text reply
-/// with no further tool calls is what ends the run. Without this, a model has no way to know that
-/// declining to call a tool is itself the signal to stop -- it would otherwise be indistinguishable
-/// from simply not having tried yet.
-///
-/// Explicitly forbids asking a clarifying question as the final reply: nothing in this loop ever
-/// reads a response back to the model, so a question is never answered -- it just gets reported
-/// as though it were the finished result. The user message that follows always carries the
-/// background (the original request, any attached files, and any prerequisite tasks' results)
-/// that a lone task description wouldn't otherwise include, specifically so the model has what it
-/// needs to avoid needing to ask in the first place.
-///
-/// Says nothing about creating or staging into a sandbox: `core-server` provisions the attempt's
-/// own sandbox and stages every attached file into it on the first `run_python_code` call, so
-/// the model never has a sandbox name to carry between calls (and get wrong).
-const TASK_INSTRUCTIONS: &str = "You are an autonomous agent completing one task from a larger \
-    workflow. No human is available to answer follow-up questions during this run -- you must \
-    gather anything you need yourself, using your available tools, rather than asking a \
-    clarifying question. The next message gives you the task plus background: the original \
-    request, any files attached to it, and the results of any prerequisite tasks. If a file is \
-    mentioned, do not assume you already know what it contains: every attached file is already \
-    in your Python working directory, so inspect it with run_python_code, opening it by exactly \
-    the filename you are given. Wait for each tool result before relying on it in a later call. \
-    When you have fully completed the task, reply \
-    with your final answer as plain text and do not call any more tools; that reply is what ends \
-    this run and is treated as your finished result, not a question. Never end the run by asking \
-    a question or requesting clarification -- if something is genuinely still missing after using \
-    your tools, state your best attempt and explain what was missing instead.";
-
-/// Sent back to the model when it ends a turn with neither tool calls nor any text. Small local
-/// models occasionally return a completely empty message; treating that as the final answer
-/// would report the task `Succeeded` with no output at all, so the run is nudged to keep going
-/// instead. A model that keeps answering blank is still bounded: every blank turn fingerprints
-/// identically, so the stall detector ends the run as `Stalled` rather than looping forever.
-const EMPTY_REPLY_NUDGE: &str = "Your last reply was empty -- it contained no text and no tool \
-    calls. Continue the task: call a tool if you still need information, or reply with your \
-    final answer as plain text.";
+impl TurnOutcome {
+    /// The run's outcome if this turn ends it; `Continuing` is the only turn that doesn't.
+    fn into_harness_outcome(self) -> Option<HarnessOutcome> {
+        match self {
+            Self::Finished(output) => Some(HarnessOutcome::Succeeded { output }),
+            Self::Continuing => None,
+            Self::CutOff => Some(HarnessOutcome::cut_off()),
+        }
+    }
+}
 
 /// Drives the turn loop for exactly one [`crate::assignment::Assignment`]: call the inference
 /// gateway a turn at a time -- invoking any tool calls it requests via [`ToolExecutor`] and
 /// folding the results back into the conversation -- heartbeat and check the budget/stall
-/// detector after each turn, then submit the terminal outcome.
+/// detector before each turn, then submit the terminal outcome.
 ///
 /// Generic over all three collaborators (rather than `dyn ControlPlane` / `dyn InferenceGateway`
 /// / `dyn ToolExecutor`) -- the harness has a small, closed set of implementations (the real
@@ -116,68 +75,89 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
     /// outcome to the control plane before returning it. Takes the already-fetched work order
     /// rather than fetching it itself, so a caller that also needs it up front (e.g. to size the
     /// budget from the assignment's own bounds) doesn't pay for a second round trip.
-    ///
-    /// Each iteration takes one inference turn against the running conversation (seeded with the
-    /// assignment's context and objective): a turn with no tool calls is the model's final
-    /// answer and ends the run;
-    /// a turn requesting tools has each one invoked via [`ToolExecutor`], with the calls and their
-    /// results folded back into the conversation for the next turn. The budget and stall-detector
-    /// checks below run before every turn, so a model that never converges is bounded the same way
-    /// regardless of how many tool round trips it takes along the way.
     pub async fn run(&mut self, assignment: Assignment) -> Result<HarnessOutcome, HarnessError> {
         let assignment_id = assignment.assignment_id;
-        let mut messages = vec![
-            ConversationMessage::system(TASK_INSTRUCTIONS),
-            ConversationMessage::user(format!(
-                "{}\n\nYour task: {}",
-                assignment.context, assignment.objective
-            )),
-        ];
-
-        let outcome = loop {
-            if self.budget.is_exhausted() {
-                log::warn!("assignment {assignment_id:?}: budget exhausted, ending run");
-                break HarnessOutcome::TimedOut;
-            }
-            if self.stall_detector.is_stalled() {
-                log::warn!("assignment {assignment_id:?}: stall detected, ending run");
-                break HarnessOutcome::Stalled;
-            }
-            match self.take_turn(assignment_id, &mut messages).await {
-                Ok(TurnOutcome::Finished(output)) => {
-                    log::info!("assignment {assignment_id:?}: model produced a final answer");
-                    break HarnessOutcome::Succeeded { output };
-                }
-                Ok(TurnOutcome::Continuing) => {}
-                Ok(TurnOutcome::CutOff) => {
-                    break HarnessOutcome::Failed {
-                        reason: OUTPUT_CAP_FAILURE_REASON.to_string(),
-                    };
-                }
-                Err(error) => {
-                    log::error!("assignment {assignment_id:?}: turn failed: {error}");
-                    break HarnessOutcome::Failed {
-                        reason: error.to_string(),
-                    };
-                }
-            }
-        };
-
-        log::info!("assignment {assignment_id:?}: reporting outcome {outcome:?}");
-        self.control_plane
-            .submit_result(assignment_id, &outcome)
-            .await?;
-        Ok(outcome)
+        let mut messages = opening_messages(&assignment);
+        let outcome = self.drive_to_outcome(assignment_id, &mut messages).await;
+        self.report(assignment_id, &outcome).await.map(|()| outcome)
     }
 
-    /// Takes one inference turn and, if it requested tools, invokes them and appends the exchange
-    /// to `messages` -- never propagates an error out of `run` itself; the caller turns any `Err`
-    /// here into a reported [`HarnessOutcome::Failed`].
+    /// Takes steps until one of them ends the run. The budget and stall-detector checks run
+    /// before every turn, so a model that never converges is bounded the same way regardless of
+    /// how many tool round trips it takes along the way.
+    async fn drive_to_outcome(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+    ) -> HarnessOutcome {
+        loop {
+            if let Some(outcome) = self.step(assignment_id, messages).await {
+                break outcome;
+            }
+        }
+    }
+
+    /// One iteration of the loop: ends the run if a limit has tripped, otherwise takes a turn.
+    async fn step(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+    ) -> Option<HarnessOutcome> {
+        match self.limit_outcome(assignment_id) {
+            Some(outcome) => Some(outcome),
+            None => self.play_turn(assignment_id, messages).await,
+        }
+    }
+
+    /// The outcome that ends the run because a hard limit tripped, if one has.
+    fn limit_outcome(&self, assignment_id: AssignmentId) -> Option<HarnessOutcome> {
+        self.budget_outcome(assignment_id)
+            .or_else(|| self.stall_outcome(assignment_id))
+    }
+
+    fn budget_outcome(&self, assignment_id: AssignmentId) -> Option<HarnessOutcome> {
+        self.budget.is_exhausted().then(|| {
+            log::warn!("assignment {assignment_id:?}: budget exhausted, ending run");
+            HarnessOutcome::TimedOut
+        })
+    }
+
+    fn stall_outcome(&self, assignment_id: AssignmentId) -> Option<HarnessOutcome> {
+        self.stall_detector.is_stalled().then(|| {
+            log::warn!("assignment {assignment_id:?}: stall detected, ending run");
+            HarnessOutcome::Stalled
+        })
+    }
+
+    /// Takes one turn and says whether it ended the run. A turn that errors ends the run as
+    /// [`HarnessOutcome::Failed`] rather than propagating, so the failure is still reported.
+    async fn play_turn(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+    ) -> Option<HarnessOutcome> {
+        match self.take_turn(assignment_id, messages).await {
+            Ok(turn_outcome) => turn_outcome.into_harness_outcome(),
+            Err(error) => Some(failed_turn(assignment_id, error)),
+        }
+    }
+
     async fn take_turn(
         &mut self,
         assignment_id: AssignmentId,
         messages: &mut Vec<ConversationMessage>,
     ) -> Result<TurnOutcome, HarnessError> {
+        let turn = self.request_turn(assignment_id, messages).await?;
+        self.respond_to_turn(assignment_id, messages, turn).await
+    }
+
+    /// Requests one inference turn and records it against the budget, stall detector and
+    /// heartbeat.
+    async fn request_turn(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &[ConversationMessage],
+    ) -> Result<InferenceTurn, HarnessError> {
         log::debug!(
             "assignment {assignment_id:?}: requesting a turn ({} message(s) so far)",
             messages.len()
@@ -186,30 +166,63 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             .inference_gateway
             .complete_turn(assignment_id, messages)
             .await?;
-        self.budget.record_turn(turn.tokens_spent);
-        self.stall_detector.record(fingerprint_of(&turn));
-        self.heartbeat(assignment_id).await;
+        self.record_turn(assignment_id, &turn).await;
+        Ok(turn)
+    }
 
-        let outcome = if turn.was_cut_off() {
+    async fn record_turn(&mut self, assignment_id: AssignmentId, turn: &InferenceTurn) {
+        self.budget.record_turn(turn.tokens_spent);
+        self.stall_detector.record(turn.fingerprint());
+        self.heartbeat(assignment_id).await;
+    }
+
+    /// Decides what a completed turn means: unusable if cut off, a final answer (or a nudge) if
+    /// it called no tools, otherwise a tool exchange to fold into the conversation.
+    async fn respond_to_turn(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+        turn: InferenceTurn,
+    ) -> Result<TurnOutcome, HarnessError> {
+        if turn.was_cut_off() {
             log::warn!("assignment {assignment_id:?}: reply was cut off at the output token cap");
-            TurnOutcome::CutOff
+            Ok(TurnOutcome::CutOff)
         } else if turn.tool_calls.is_empty() {
-            final_answer_or_nudge(
-                assignment_id,
-                messages,
-                turn.content,
-                &mut self.unfinished_answer_guard,
-            )
+            Ok(self.final_answer_or_nudge(assignment_id, messages, turn.content))
         } else {
-            log::debug!(
-                "assignment {assignment_id:?}: model requested {} tool call(s)",
-                turn.tool_calls.len()
-            );
             self.append_tool_exchange(assignment_id, messages, turn.tool_calls)
-                .await?;
-            TurnOutcome::Continuing
-        };
-        Ok(outcome)
+                .await
+                .map(|()| TurnOutcome::Continuing)
+        }
+    }
+
+    /// A turn with no tool calls is the model's final answer -- unless it is blank (see
+    /// [`EMPTY_REPLY_NUDGE`]), in which case the model is nudged to continue instead.
+    fn final_answer_or_nudge(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+        content: Option<String>,
+    ) -> TurnOutcome {
+        match content.filter(|content| !content.trim().is_empty()) {
+            Some(answer) => self.finished_or_nudged(assignment_id, messages, answer),
+            None => nudge_past_empty_reply(assignment_id, messages),
+        }
+    }
+
+    /// Accepts a non-blank answer as final unless the guard flags it as unfinished; then the
+    /// answer is replayed into the conversation, followed by the nudge, so the model sees what it
+    /// said and why it was sent back.
+    fn finished_or_nudged(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+        answer: String,
+    ) -> TurnOutcome {
+        match self.unfinished_answer_guard.review(&answer, messages) {
+            None => finished(assignment_id, answer),
+            Some(nudge) => nudge_past_unfinished_answer(assignment_id, messages, answer, nudge),
+        }
     }
 
     /// Invokes every tool call a turn requested, in order, and appends the assistant's request
@@ -220,25 +233,49 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         messages: &mut Vec<ConversationMessage>,
         tool_calls: Vec<ToolCall>,
     ) -> Result<(), HarnessError> {
-        let mut tool_results = Vec::with_capacity(tool_calls.len());
-        for tool_call in &tool_calls {
-            log::debug!(
-                "assignment {assignment_id:?}: invoking tool {}",
-                tool_call.name
-            );
-            let result = self
-                .tool_executor
-                .invoke_tool(assignment_id, tool_call)
-                .await?;
-            tool_results.push(ConversationMessage::tool_result(
-                result.tool_call_id,
-                tool_call.name.clone(),
-                result.result_json,
-            ));
-        }
+        let tool_results = self.invoke_tool_calls(assignment_id, &tool_calls).await?;
         messages.push(ConversationMessage::assistant_tool_calls(tool_calls));
         messages.extend(tool_results);
         Ok(())
+    }
+
+    /// Invokes each tool call in order, stopping at the first that fails.
+    async fn invoke_tool_calls(
+        &self,
+        assignment_id: AssignmentId,
+        tool_calls: &[ToolCall],
+    ) -> Result<Vec<ConversationMessage>, HarnessError> {
+        log::debug!(
+            "assignment {assignment_id:?}: model requested {} tool call(s)",
+            tool_calls.len()
+        );
+        let mut tool_results = Vec::with_capacity(tool_calls.len());
+        for tool_call in tool_calls {
+            tool_results.push(self.invoke_tool_call(assignment_id, tool_call).await?);
+        }
+        Ok(tool_results)
+    }
+
+    /// Invokes one tool call and wraps its result as the `Tool` message that answers it.
+    async fn invoke_tool_call(
+        &self,
+        assignment_id: AssignmentId,
+        tool_call: &ToolCall,
+    ) -> Result<ConversationMessage, HarnessError> {
+        log::debug!(
+            "assignment {assignment_id:?}: invoking tool {}",
+            tool_call.name
+        );
+        self.tool_executor
+            .invoke_tool(assignment_id, tool_call)
+            .await
+            .map(|result| {
+                ConversationMessage::tool_result(
+                    result.tool_call_id,
+                    tool_call.name.clone(),
+                    result.result_json,
+                )
+            })
     }
 
     /// Reports liveness and progress. A failure here is logged and otherwise ignored: it's a
@@ -256,82 +293,82 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             log::warn!("assignment {assignment_id:?}: heartbeat failed (continuing): {error}");
         }
     }
-}
 
-/// A turn with no tool calls is the model's final answer -- unless it is blank (see
-/// [`EMPTY_REPLY_NUDGE`]) or looks unfinished (see [`UnfinishedAnswerGuard`]), in which case the
-/// model is nudged to continue instead.
-fn final_answer_or_nudge(
-    assignment_id: AssignmentId,
-    messages: &mut Vec<ConversationMessage>,
-    content: Option<String>,
-    unfinished_answer_guard: &mut UnfinishedAnswerGuard,
-) -> TurnOutcome {
-    match content.filter(|content| !content.trim().is_empty()) {
-        Some(answer) => {
-            finished_or_nudged(assignment_id, messages, answer, unfinished_answer_guard)
-        }
-        None => {
-            log::warn!("assignment {assignment_id:?}: model returned an empty reply, nudging it");
-            messages.push(ConversationMessage::user(EMPTY_REPLY_NUDGE));
-            TurnOutcome::Continuing
-        }
+    async fn report(
+        &self,
+        assignment_id: AssignmentId,
+        outcome: &HarnessOutcome,
+    ) -> Result<(), HarnessError> {
+        log::info!("assignment {assignment_id:?}: reporting outcome {outcome:?}");
+        self.control_plane
+            .submit_result(assignment_id, outcome)
+            .await
     }
 }
 
-/// Accepts a non-blank answer as final unless the guard flags it as unfinished; then the answer
-/// is replayed into the conversation, followed by the nudge, so the model sees what it said and
-/// why it was sent back.
-fn finished_or_nudged(
+/// Seeds the conversation: the loop protocol, then the task with its background.
+fn opening_messages(assignment: &Assignment) -> Vec<ConversationMessage> {
+    vec![
+        ConversationMessage::system(TASK_INSTRUCTIONS),
+        ConversationMessage::user(prompts::task_message(
+            &assignment.context,
+            &assignment.objective,
+        )),
+    ]
+}
+
+fn failed_turn(assignment_id: AssignmentId, error: HarnessError) -> HarnessOutcome {
+    log::error!("assignment {assignment_id:?}: turn failed: {error}");
+    HarnessOutcome::Failed {
+        reason: error.to_string(),
+    }
+}
+
+fn finished(assignment_id: AssignmentId, answer: String) -> TurnOutcome {
+    log::info!("assignment {assignment_id:?}: model produced a final answer");
+    TurnOutcome::Finished(answer)
+}
+
+fn nudge_past_empty_reply(
+    assignment_id: AssignmentId,
+    messages: &mut Vec<ConversationMessage>,
+) -> TurnOutcome {
+    log::warn!("assignment {assignment_id:?}: model returned an empty reply, nudging it");
+    messages.push(ConversationMessage::user(EMPTY_REPLY_NUDGE));
+    TurnOutcome::Continuing
+}
+
+fn nudge_past_unfinished_answer(
     assignment_id: AssignmentId,
     messages: &mut Vec<ConversationMessage>,
     answer: String,
-    unfinished_answer_guard: &mut UnfinishedAnswerGuard,
+    nudge: &str,
 ) -> TurnOutcome {
-    match unfinished_answer_guard.review(&answer, messages) {
-        None => TurnOutcome::Finished(answer),
-        Some(nudge) => {
-            log::warn!("assignment {assignment_id:?}: final answer looks unfinished, nudging it");
-            messages.push(ConversationMessage::assistant_text(answer));
-            messages.push(ConversationMessage::user(nudge));
-            TurnOutcome::Continuing
-        }
-    }
-}
-
-/// The stall detector's fingerprint for one turn: the tool call(s) it requested (name +
-/// arguments), or its final text when it made none. Two turns that both call the same tool with
-/// the same arguments -- or both answer with the same text -- fingerprint identically.
-fn fingerprint_of(turn: &InferenceTurn) -> String {
-    if turn.tool_calls.is_empty() {
-        return turn.content.clone().unwrap_or_default();
-    }
-    turn.tool_calls
-        .iter()
-        .map(|call| format!("{}({})", call.name, call.arguments_json))
-        .collect::<Vec<_>>()
-        .join(";")
+    log::warn!("assignment {assignment_id:?}: final answer looks unfinished, nudging it");
+    messages.push(ConversationMessage::assistant_text(answer));
+    messages.push(ConversationMessage::user(nudge));
+    TurnOutcome::Continuing
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::assignment::TaskId;
-    use crate::inference_gateway::ConversationRole;
+    use crate::conversation::ConversationRole;
+    use crate::harness_outcome::OUTPUT_CAP_FAILURE_REASON;
+    use crate::prompts::UNEXECUTED_CODE_NUDGE;
     use crate::tool_executor::ToolResult;
-    use crate::unfinished_answer_guard::UNEXECUTED_CODE_NUDGE;
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::time::{Duration, Instant};
-    use uuid::Uuid;
 
     fn assignment_id() -> AssignmentId {
-        AssignmentId(Uuid::from_u128(1))
+        AssignmentId::parse("00000000-0000-0000-0000-000000000001").unwrap()
     }
 
     fn assignment() -> Assignment {
         Assignment {
-            task_id: TaskId(Uuid::from_u128(2)),
+            task_id: TaskId::parse("00000000-0000-0000-0000-000000000002").unwrap(),
             assignment_id: assignment_id(),
             objective: "summarize the uploaded spreadsheet".to_string(),
             context: "Original request from the user:\nAnalyze the attached file.".to_string(),
@@ -467,17 +504,6 @@ mod tests {
             tokens_spent: 5,
             finish_reason: Some("stop".to_string()),
         }
-    }
-
-    #[test]
-    fn model_facing_messages_have_no_runs_of_spaces_from_line_wrapping() {
-        [
-            TASK_INSTRUCTIONS,
-            EMPTY_REPLY_NUDGE,
-            OUTPUT_CAP_FAILURE_REASON,
-        ]
-        .iter()
-        .for_each(|message| assert!(!message.contains("  "), "{message:?}"));
     }
 
     fn cut_off_turn() -> InferenceTurn {
