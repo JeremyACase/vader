@@ -1,7 +1,7 @@
 /// Every way a harness run can fail outright -- i.e. never reach a normal
-/// [`crate::runner::HarnessOutcome`] to report at all (budget exhaustion and stalling are not
-/// here: those are legitimate terminal outcomes, reported via `submit_result` like success or
-/// failure, not error conditions).
+/// [`crate::harness_outcome::HarnessOutcome`] to report at all (budget exhaustion and stalling
+/// are not here: those are legitimate terminal outcomes, reported via `submit_result` like
+/// success or failure, not error conditions).
 ///
 /// Deliberately flat (no nested causes beyond `#[source]`) so a failure can be reported back to
 /// `core-server` as a short, stable string.

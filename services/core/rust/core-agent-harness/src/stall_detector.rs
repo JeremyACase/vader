@@ -29,15 +29,14 @@ impl StallDetector {
     /// True once the most recent `max_repeats` recorded actions are all identical.
     pub fn is_stalled(&self) -> bool {
         let window = self.max_repeats as usize;
-        if window == 0 || self.history.len() < window {
-            return false;
-        }
-        let latest = self.history.back().expect("length checked above");
-        self.history
-            .iter()
-            .rev()
-            .take(window)
-            .all(|action| action == latest)
+        window > 0
+            && self.history.len() >= window
+            && self
+                .history
+                .iter()
+                .rev()
+                .take(window)
+                .all(|action| Some(action) == self.history.back())
     }
 }
 

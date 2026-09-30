@@ -5,6 +5,13 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+### Changed
+- Internal restructuring with no behaviour change. The crate is now a library behind a thin
+  binary. Conversation types, the run outcome and all model-facing text each have their own
+  module. Wire conversions use the standard `From` trait, and task and assignment ids can no
+  longer be built from, or unwrapped to, a bare UUID outside their own module.
+
 ## [0.4.0]
 ### Added
 - A final answer that contains code the model never ran, or that follows a failed tool call with

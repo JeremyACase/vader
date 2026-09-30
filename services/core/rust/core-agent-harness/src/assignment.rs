@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -5,14 +7,17 @@ use crate::error::HarnessError;
 
 /// Identifies which node of a `TaskGraph` this harness is responsible for. Stable across
 /// retries: a task may be attempted more than once, but its `TaskId` never changes.
+///
+/// The wrapped UUID is private so the only ways in are [`TaskId::parse`] and deserialization,
+/// and the compiler rejects a `TaskId` wherever an [`AssignmentId`] is expected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TaskId(pub Uuid);
+pub struct TaskId(Uuid);
 
 /// Identifies exactly one dispatch of a [`TaskId`] to a harness. `core-server` mints a fresh
 /// `AssignmentId` per attempt, so a heartbeat or result carrying a stale id can be rejected
 /// instead of corrupting a newer attempt's state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct AssignmentId(pub Uuid);
+pub struct AssignmentId(Uuid);
 
 impl TaskId {
     /// Parses a `TaskId` from its `TASK_ID` environment/string representation.
@@ -22,6 +27,10 @@ impl TaskId {
             source,
         })?;
         Ok(Self(id))
+    }
+
+    pub fn uuid(&self) -> Uuid {
+        self.0
     }
 }
 
@@ -33,6 +42,22 @@ impl AssignmentId {
             source,
         })?;
         Ok(Self(id))
+    }
+
+    pub fn uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
+impl fmt::Display for TaskId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl fmt::Display for AssignmentId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
     }
 }
 

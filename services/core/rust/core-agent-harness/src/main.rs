@@ -1,24 +1,12 @@
-mod assignment;
-mod budget;
-mod control_plane;
-mod core_server_adapter;
-mod error;
-mod inference_gateway;
-mod runner;
-mod stall_detector;
-mod tool_executor;
-mod unfinished_answer_guard;
-mod wire;
-
 use std::time::{Duration, Instant};
 
-use assignment::{AssignmentId, TaskId};
-use budget::HarnessBudget;
-use control_plane::ControlPlane;
-use core_server_adapter::CoreServerAdapter;
-use error::HarnessError;
-use runner::AgentHarnessRunner;
-use stall_detector::StallDetector;
+use vader_core_agent_harness::assignment::{AssignmentId, TaskId};
+use vader_core_agent_harness::budget::HarnessBudget;
+use vader_core_agent_harness::control_plane::ControlPlane;
+use vader_core_agent_harness::core_server_adapter::CoreServerAdapter;
+use vader_core_agent_harness::error::HarnessError;
+use vader_core_agent_harness::runner::AgentHarnessRunner;
+use vader_core_agent_harness::stall_detector::StallDetector;
 
 // The stall detector has no server-provided equivalent -- it is purely a local backstop, so its
 // window stays a fixed local constant regardless of what a given assignment dispatches.

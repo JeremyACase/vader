@@ -1,8 +1,11 @@
 use crate::assignment::{Assignment, AssignmentId};
 use crate::budget::HarnessBudget;
 use crate::control_plane::ControlPlane;
+use crate::conversation::{ConversationMessage, InferenceTurn, ToolCall};
 use crate::error::HarnessError;
-use crate::inference_gateway::{ConversationMessage, InferenceGateway, InferenceTurn, ToolCall};
+use crate::harness_outcome::HarnessOutcome;
+use crate::inference_gateway::InferenceGateway;
+use crate::prompts::{EMPTY_REPLY_NUDGE, OUTPUT_CAP_FAILURE_REASON, TASK_INSTRUCTIONS};
 use crate::stall_detector::StallDetector;
 use crate::tool_executor::ToolExecutor;
 use crate::unfinished_answer_guard::UnfinishedAnswerGuard;
@@ -12,16 +15,6 @@ use crate::unfinished_answer_guard::UnfinishedAnswerGuard;
 /// error, propose again" sequence; beyond that the answer goes to core-server's evaluator as-is.
 const MAX_UNFINISHED_ANSWER_NUDGES: u32 = 2;
 
-/// The terminal result of one harness run, reported back to `core-server` via
-/// [`ControlPlane::submit_result`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HarnessOutcome {
-    Succeeded { output: String },
-    Failed { reason: String },
-    TimedOut,
-    Stalled,
-}
-
 /// What one completed turn means for the run as a whole: the model produced its final answer, it
 /// requested tools (or needs a nudge) and the run should take another turn, or its reply was cut
 /// off at the output token cap and is unusable.
@@ -30,51 +23,6 @@ enum TurnOutcome {
     Continuing,
     CutOff,
 }
-
-/// Reported as the failure reason when a turn is cut off at the output token cap. Failing the
-/// attempt outright, rather than nudging, is deliberate: at temperature 0 the same conversation
-/// just runs into the same cap again, and a clear reason lets the reattempt decision (and a human
-/// reading the task) see exactly what went wrong instead of an empty reply or a generic stall.
-const OUTPUT_CAP_FAILURE_REASON: &str = "The model's reply was cut off at the output token cap \
-    before it finished, so its answer or tool call was incomplete and could not be used.";
-
-/// Frames the action-loop protocol for the model: call tools as needed, and a plain-text reply
-/// with no further tool calls is what ends the run. Without this, a model has no way to know that
-/// declining to call a tool is itself the signal to stop -- it would otherwise be indistinguishable
-/// from simply not having tried yet.
-///
-/// Explicitly forbids asking a clarifying question as the final reply: nothing in this loop ever
-/// reads a response back to the model, so a question is never answered -- it just gets reported
-/// as though it were the finished result. The user message that follows always carries the
-/// background (the original request, any attached files, and any prerequisite tasks' results)
-/// that a lone task description wouldn't otherwise include, specifically so the model has what it
-/// needs to avoid needing to ask in the first place.
-///
-/// Says nothing about creating or staging into a sandbox: `core-server` provisions the attempt's
-/// own sandbox and stages every attached file into it on the first `run_python_code` call, so
-/// the model never has a sandbox name to carry between calls (and get wrong).
-const TASK_INSTRUCTIONS: &str = "You are an autonomous agent completing one task from a larger \
-    workflow. No human is available to answer follow-up questions during this run -- you must \
-    gather anything you need yourself, using your available tools, rather than asking a \
-    clarifying question. The next message gives you the task plus background: the original \
-    request, any files attached to it, and the results of any prerequisite tasks. If a file is \
-    mentioned, do not assume you already know what it contains: every attached file is already \
-    in your Python working directory, so inspect it with run_python_code, opening it by exactly \
-    the filename you are given. Wait for each tool result before relying on it in a later call. \
-    When you have fully completed the task, reply \
-    with your final answer as plain text and do not call any more tools; that reply is what ends \
-    this run and is treated as your finished result, not a question. Never end the run by asking \
-    a question or requesting clarification -- if something is genuinely still missing after using \
-    your tools, state your best attempt and explain what was missing instead.";
-
-/// Sent back to the model when it ends a turn with neither tool calls nor any text. Small local
-/// models occasionally return a completely empty message; treating that as the final answer
-/// would report the task `Succeeded` with no output at all, so the run is nudged to keep going
-/// instead. A model that keeps answering blank is still bounded: every blank turn fingerprints
-/// identically, so the stall detector ends the run as `Stalled` rather than looping forever.
-const EMPTY_REPLY_NUDGE: &str = "Your last reply was empty -- it contained no text and no tool \
-    calls. Continue the task: call a tool if you still need information, or reply with your \
-    final answer as plain text.";
 
 /// Drives the turn loop for exactly one [`crate::assignment::Assignment`]: call the inference
 /// gateway a turn at a time -- invoking any tool calls it requests via [`ToolExecutor`] and
@@ -304,34 +252,34 @@ fn finished_or_nudged(
 /// the same arguments -- or both answer with the same text -- fingerprint identically.
 fn fingerprint_of(turn: &InferenceTurn) -> String {
     if turn.tool_calls.is_empty() {
-        return turn.content.clone().unwrap_or_default();
+        turn.content.clone().unwrap_or_default()
+    } else {
+        turn.tool_calls
+            .iter()
+            .map(|call| format!("{}({})", call.name, call.arguments_json))
+            .collect::<Vec<_>>()
+            .join(";")
     }
-    turn.tool_calls
-        .iter()
-        .map(|call| format!("{}({})", call.name, call.arguments_json))
-        .collect::<Vec<_>>()
-        .join(";")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::assignment::TaskId;
-    use crate::inference_gateway::ConversationRole;
+    use crate::conversation::ConversationRole;
+    use crate::prompts::UNEXECUTED_CODE_NUDGE;
     use crate::tool_executor::ToolResult;
-    use crate::unfinished_answer_guard::UNEXECUTED_CODE_NUDGE;
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::time::{Duration, Instant};
-    use uuid::Uuid;
 
     fn assignment_id() -> AssignmentId {
-        AssignmentId(Uuid::from_u128(1))
+        AssignmentId::parse("00000000-0000-0000-0000-000000000001").expect("a valid UUID")
     }
 
     fn assignment() -> Assignment {
         Assignment {
-            task_id: TaskId(Uuid::from_u128(2)),
+            task_id: TaskId::parse("00000000-0000-0000-0000-000000000002").expect("a valid UUID"),
             assignment_id: assignment_id(),
             objective: "summarize the uploaded spreadsheet".to_string(),
             context: "Original request from the user:\nAnalyze the attached file.".to_string(),
@@ -467,17 +415,6 @@ mod tests {
             tokens_spent: 5,
             finish_reason: Some("stop".to_string()),
         }
-    }
-
-    #[test]
-    fn model_facing_messages_have_no_runs_of_spaces_from_line_wrapping() {
-        [
-            TASK_INSTRUCTIONS,
-            EMPTY_REPLY_NUDGE,
-            OUTPUT_CAP_FAILURE_REASON,
-        ]
-        .iter()
-        .for_each(|message| assert!(!message.contains("  "), "{message:?}"));
     }
 
     fn cut_off_turn() -> InferenceTurn {
