@@ -3,6 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.0]
+### Added
+- **Queue messages can be inspected over REST.** A read-only endpoint summarizes every
+  inbox/outbox queue by status and pages or fetches its individual messages, payload included.
+  It is a plain controller rather than a DAO controller, so queue messages (LLM prompts among
+  them) never become MCP tools offered to agents.
+
 ## [0.30.0]
 ### Changed
 - **Event publishing goes through one facade.** Every domain event now leaves through a single

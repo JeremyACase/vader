@@ -125,6 +125,38 @@ spec:
           [ "$BP_STATUS" = "400" ] || { echo "❌ unknown model type: expected 400, got $BP_STATUS"; exit 1; }
           echo "✅ backpressure endpoint reports ingress/egress and rejects unknown types"
 
+          echo "== Queue inspection endpoint =="
+          QUEUE_URL="$SERVER/vader/core-server/queue"
+          QUEUES=$(curl -s --max-time 10 "$QUEUE_URL" || true)
+          echo "🔍 $QUEUES"
+          for QUEUE in ClientPrompt TaskAssignment TaskAttemptReview LlmRequest; do
+            echo "$QUEUES" | grep -q "\"name\":\"$QUEUE\"" \
+              || { echo "❌ queue summary missing $QUEUE"; exit 1; }
+          done
+          echo "$QUEUES" | grep -q '"statusCounts"' || { echo "❌ queue summary missing statusCounts"; exit 1; }
+
+          # The prompt just submitted must be on the client-prompt queue, and fetchable in full.
+          MESSAGES=$(curl -s --max-time 10 "$QUEUE_URL/ClientPrompt/message?page=0&size=10" || true)
+          echo "🔍 $MESSAGES"
+          ROW=$(echo "$MESSAGES" | tr '{' '\n' | grep "\"subject\":\"$ID\"" || true)
+          [ -n "$ROW" ] || { echo "❌ no client-prompt queue message for prompt $ID"; exit 1; }
+          MESSAGE_ID=$(echo "$ROW" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+          MESSAGE=$(curl -s --max-time 10 "$QUEUE_URL/ClientPrompt/message/$MESSAGE_ID" || true)
+          echo "🔍 $MESSAGE"
+          echo "$MESSAGE" | grep -q "\"clientPromptId\":\"$ID\"" \
+            || { echo "❌ queue message $MESSAGE_ID does not carry prompt $ID"; exit 1; }
+          # Its workflow exists, so the inbox has claimed it; marking it processed may lag by a beat.
+          echo "$MESSAGE" | grep -Eq '"status":"(CLAIMED|PROCESSED)"' \
+            || { echo "❌ queue message $MESSAGE_ID was neither claimed nor processed"; exit 1; }
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "$QUEUE_URL/Bogus/message?page=0&size=10" || true)
+          [ "$STATUS" = "400" ] || { echo "❌ unknown queue: expected 400, got $STATUS"; exit 1; }
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "$QUEUE_URL/ClientPrompt/message?page=0&size=10&status=BOGUS" || true)
+          [ "$STATUS" = "400" ] || { echo "❌ unknown status: expected 400, got $STATUS"; exit 1; }
+          echo "✅ queue inspection lists queues and messages and rejects unknown queues/statuses"
+
           echo "== Validation: 6 files should be rejected with 400 =="
           i=1; while [ $i -le 6 ]; do printf "content %d" $i > "/tmp/excess-file-$i.txt"; i=$((i+1)); done
           BODY_FILE=$(mktemp)

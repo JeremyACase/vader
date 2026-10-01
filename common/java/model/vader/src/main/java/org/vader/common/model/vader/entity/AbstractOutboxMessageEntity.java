@@ -13,8 +13,8 @@ import java.time.OffsetDateTime;
  * <p>A concrete subclass adds a reference to the payload it carries (e.g. a client prompt). The
  * outbox writes rows here in {@code PENDING}; the inbox claims them ({@code CLAIMED}) and settles
  * them to {@code PROCESSED} or {@code FAILED}. These rows are intentionally not exposed through a
- * DAO controller -- callers observe the queue via the back pressure endpoint, not by querying
- * individual messages.</p>
+ * DAO controller, which would also publish them as MCP tools to orchestration agents; operators
+ * inspect them read-only through core-server's queue inspection endpoint instead.</p>
  */
 @Entity
 public abstract class AbstractOutboxMessageEntity extends AbstractModelEntity {

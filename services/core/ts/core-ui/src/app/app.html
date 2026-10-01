@@ -97,6 +97,10 @@
         </aside>
       }
 
+      @if (activeNavId() === 'system') {
+        <app-system-view />
+      }
+
       @if (activeNavId() === 'workflows') {
         <aside class="card viz-panel">
           @if (selectedWorkflow(); as workflow) {

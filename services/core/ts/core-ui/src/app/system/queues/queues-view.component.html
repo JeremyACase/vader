@@ -1,0 +1,112 @@
+<section class="queues-view">
+  <header class="view-head">
+    <h1>Queues</h1>
+    <p class="muted">Every inbox/outbox queue, in the order work flows through them. Pick a queue to
+      see its messages, then a message to see its status and data. Updates live.</p>
+  </header>
+
+  @if (isUnreachable()) {
+    <p class="err">⚠️ Could not reach core-server's queue endpoint. Retrying…</p>
+  } @else if (isLoading()) {
+    <p class="muted">Loading queues…</p>
+  }
+
+  <div class="queue-cards" role="tablist" aria-label="Queues">
+    @for (queue of queues(); track queue.name) {
+      <button
+        type="button"
+        role="tab"
+        class="queue-card"
+        [class.active]="queue.name === activeQueueName()"
+        [attr.aria-selected]="queue.name === activeQueueName()"
+        [title]="description(queue.name)"
+        (click)="selectQueue(queue.name)">
+        <span class="queue-name">{{label(queue.name)}}</span>
+        <span class="queue-stats">
+          <span class="stat">
+            <span class="stat-value">{{queue.statusCounts.PENDING}}</span>
+            <span class="stat-label">waiting</span>
+          </span>
+          <span class="stat">
+            <span class="stat-value">{{queue.statusCounts.CLAIMED}}<span class="stat-of">/{{queue.maxOpenMessages}}</span></span>
+            <span class="stat-label">in flight</span>
+          </span>
+          <span class="stat" [class.has-failures]="queue.statusCounts.FAILED > 0">
+            <span class="stat-value">{{queue.statusCounts.FAILED}}</span>
+            <span class="stat-label">failed</span>
+          </span>
+        </span>
+        <span class="status-bar" aria-hidden="true">
+          @for (segment of segments(queue); track segment.status) {
+            <span class="segment" [attr.data-status]="segment.status" [style.flex-grow]="segment.percent"></span>
+          }
+        </span>
+        <span class="hint">{{queue.statusCounts.PROCESSED}} processed</span>
+      </button>
+    }
+  </div>
+
+  @if (activeQueueName(); as queueName) {
+    <div class="queue-body">
+      <section class="card message-list">
+        <h2>{{label(queueName)}}</h2>
+        <p class="hint">{{description(queueName)}}</p>
+
+        <div class="filters" role="group" aria-label="Filter by status">
+          <button type="button" class="chip" [class.active]="statusFilter() === null" (click)="toggleStatus(null)">
+            All <span class="chip-count">{{count(null)}}</span>
+          </button>
+          @for (status of statuses; track status) {
+            <button
+              type="button"
+              class="chip"
+              [attr.data-status]="status"
+              [class.active]="statusFilter() === status"
+              [title]="statusMeaning[status]"
+              (click)="toggleStatus(status)">
+              {{status}} <span class="chip-count">{{count(status)}}</span>
+            </button>
+          }
+        </div>
+
+        @if (!messagePage().content.length) {
+          <p class="muted empty">No messages{{statusFilter() ? ' in ' + statusFilter() : ''}}.</p>
+        }
+        <ul class="rows">
+          @for (row of messagePage().content; track row.id) {
+            <li>
+              <button
+                type="button"
+                class="row"
+                [class.selected]="isSelected(row.id)"
+                (click)="selectMessage(row.id)">
+                <span class="status-badge" [attr.data-status]="row.status">{{row.status}}</span>
+                <span class="row-subject">{{subject(row)}}</span>
+                @if (row.attempts > 1) {
+                  <span class="row-claims" title="Claimed {{row.attempts}} times">×{{row.attempts}}</span>
+                }
+                <span class="row-time">{{row.createdAt | date: 'MMM d, HH:mm:ss'}}</span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        @if (messagePage().totalElements > pageSize) {
+          <div class="pagination">
+            <button type="button" (click)="previousPage()" [disabled]="!canGoPrevious()">◂ Newer</button>
+            <span class="hint">Page {{page() + 1}} of {{totalPages()}}</span>
+            <button type="button" (click)="nextPage()" [disabled]="!canGoNext()">Older ▸</button>
+          </div>
+        }
+      </section>
+
+      <section class="card message-detail">
+        @if (selectedMessageId(); as messageId) {
+          <app-queue-message-detail [queue]="queueName" [messageId]="messageId" />
+        } @else {
+          <p class="muted">Select a message to see its status and data.</p>
+        }
+      </section>
+    </div>
+  }
+</section>

@@ -9,6 +9,7 @@ import { ClientPromptService } from './client-prompt.service';
 import { BackPressure, OrchestratorError, Workflow } from './client-prompt.model';
 import { NavItem } from './nav-rail/nav-item.model';
 import { NavRailComponent } from './nav-rail/nav-rail.component';
+import { SystemViewComponent } from './system/system-view.component';
 import { PendingWorkflowRegistry } from './workflow-updates/pending-workflow.registry';
 import { WorkflowDetailComponent } from './workflow-panel/workflow-detail.component';
 import { WorkflowPanelComponent } from './workflow-panel/workflow-panel.component';
@@ -18,7 +19,13 @@ const BACKPRESSURE_POLL_INTERVAL_MS = 5000;
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ReactiveFormsModule, NavRailComponent, WorkflowPanelComponent, WorkflowDetailComponent],
+  imports: [
+    ReactiveFormsModule,
+    NavRailComponent,
+    WorkflowPanelComponent,
+    WorkflowDetailComponent,
+    SystemViewComponent
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
@@ -30,7 +37,8 @@ export class App {
 
   readonly navItems: NavItem[] = [
     { id: 'workflows', label: 'Workflows', icon: 'workflows' },
-    { id: 'prompt', label: 'Prompt', icon: 'prompt' }
+    { id: 'prompt', label: 'Prompt', icon: 'prompt' },
+    { id: 'system', label: 'System', icon: 'system' }
   ];
 
   /** Which nav-rail item's panel is open, if any. Clicking the already-active item closes it. */

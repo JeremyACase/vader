@@ -2,6 +2,8 @@ package org.vader.core.server.messaging;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -35,6 +37,15 @@ public interface OutboxMessageRepository<M extends AbstractOutboxMessageEntity>
      * @return the match count
      */
     long countByStatus(OutboxMessageStatus status);
+
+    /**
+     * Returns one page of the messages in the given status.
+     *
+     * @param status the status to match
+     * @param pageable the page, size and sort
+     * @return the page of matching messages
+     */
+    Page<M> findByStatus(OutboxMessageStatus status, Pageable pageable);
 
     /**
      * Atomically claims one message: flips it from {@code pending} to {@code claimed} only if it

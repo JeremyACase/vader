@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.vader.common.model.vader.queue.BackPressure;
 
 /**
- * Read-only view of the back pressure on the service's inbox/outbox queues. The individual queue
- * messages are not exposed; callers observe queue load here instead.
+ * Read-only view of the back pressure on the service's inbox/outbox queues. Individual queue
+ * messages are inspected through {@code QueueInspectionController} instead.
  */
 @RestController
 @RequestMapping("/vader/core-server/backpressure")
