@@ -26,7 +26,6 @@ class BackpressureSamplerTest {
 
         this.sampler = new BackpressureSampler();
         ReflectionTestUtils.setField(this.sampler, "registry", this.registry);
-        ReflectionTestUtils.setField(this.sampler, "sampleIntervalMs", 30_000L);
     }
 
     @Test
@@ -46,8 +45,8 @@ class BackpressureSamplerTest {
         this.sampler.sample();
         this.sampler.sample();
 
-        // (8 - 5) delta over a 30s interval -> 6 per minute
-        assertThat(this.sampler.ratePerMinuteFor(MODEL_TYPE)).isEqualTo(6f);
+        // (8 - 5) delta over the 15s interval -> 12 per minute
+        assertThat(this.sampler.ratePerMinuteFor(MODEL_TYPE)).isEqualTo(12f);
     }
 
     @Test
@@ -58,8 +57,8 @@ class BackpressureSamplerTest {
         this.sampler.sample();
         this.sampler.sample();
 
-        // window keeps only the last two: (4 - 9) over 30s -> -10 per minute
-        assertThat(this.sampler.ratePerMinuteFor(MODEL_TYPE)).isEqualTo(-10f);
+        // window keeps only the last two: (4 - 9) over 15s -> -20 per minute
+        assertThat(this.sampler.ratePerMinuteFor(MODEL_TYPE)).isEqualTo(-20f);
     }
 
     @Test

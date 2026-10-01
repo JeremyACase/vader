@@ -2,7 +2,6 @@ package org.vader.core.server.intake;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.task.TaskExecutor;
@@ -27,6 +26,10 @@ public class ClientPromptInbox extends AbstractInbox<ClientPromptOutboxMessageEn
 
     private static final String CLIENT_PROMPT = "ClientPrompt";
 
+    // Decomposition is LLM-bound and every LLM call is serialized through the single-worker
+    // LlmRequestQueue, so a second concurrent prompt would only wait on that same worker.
+    private static final int MAX_CONCURRENCY = 1;
+
     @Autowired
     private ClientPromptOutboxMessageRepository messageRepository;
 
@@ -40,9 +43,6 @@ public class ClientPromptInbox extends AbstractInbox<ClientPromptOutboxMessageEn
     @Qualifier("clientPromptInboxExecutor")
     private TaskExecutor executor;
 
-    @Value("${vader.inbox.client-prompt.max-concurrency:1}")
-    private int maxConcurrency;
-
     @Override
     public String queuedModelType() {
         return CLIENT_PROMPT;
@@ -50,7 +50,7 @@ public class ClientPromptInbox extends AbstractInbox<ClientPromptOutboxMessageEn
 
     @Override
     public int maxOpenMessages() {
-        return this.maxConcurrency;
+        return MAX_CONCURRENCY;
     }
 
     @Override
@@ -66,7 +66,7 @@ public class ClientPromptInbox extends AbstractInbox<ClientPromptOutboxMessageEn
     /**
      * Scheduled safety-net drain.
      */
-    @Scheduled(fixedDelayString = "${vader.inbox.client-prompt.poll-interval-ms:1000}")
+    @Scheduled(fixedDelay = SAFETY_NET_DRAIN_INTERVAL_MS)
     public void scheduledDrain() {
         this.drain();
     }

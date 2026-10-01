@@ -35,6 +35,9 @@ public class TaskAttemptReaper {
     private static final List<TaskAttemptStatus> OPEN_STATUSES = List.of(
         TaskAttemptStatus.PENDING, TaskAttemptStatus.DISPATCHED, TaskAttemptStatus.RUNNING);
 
+    // Small next to the deadline-plus-grace silence it detects, so it adds little to reap latency.
+    private static final long POLL_INTERVAL_MS = 30_000L;
+
     @Autowired
     private TaskAttemptRepository taskAttemptRepository;
 
@@ -50,7 +53,7 @@ public class TaskAttemptReaper {
     /**
      * Reaps every attempt that has gone silent for longer than the allowed window.
      */
-    @Scheduled(fixedDelayString = "${vader.agent-harness.reaper.poll-interval-ms:30000}")
+    @Scheduled(fixedDelay = POLL_INTERVAL_MS)
     public void reap() {
         var staleBefore = OffsetDateTime.now().minusSeconds(this.staleAfterSeconds());
         var stale = this.taskAttemptRepository.findStale(OPEN_STATUSES, staleBefore);

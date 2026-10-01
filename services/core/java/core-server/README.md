@@ -34,8 +34,8 @@ Code is organized by feature package (`intake`, `orchestration`, `workflow`, `re
 
 Prompt intake is decoupled from decomposition via an inbox/outbox: `ClientPromptOutbox` writes a
 `PENDING` message; `ClientPromptInbox` claims it (`CLAIMED`), decomposes, and settles it
-(`PROCESSED`/`FAILED`), each step in its own transaction. The inbox drains on a fixed schedule
-(`vader.inbox.client-prompt.poll-interval-ms`) and immediately after each enqueue commits.
+(`PROCESSED`/`FAILED`), each step in its own transaction. The inbox drains on a fixed one-second
+safety-net schedule and immediately after each enqueue commits.
 `vader.scheduling.enabled=false` disables the pollers (used in tests).
 
 Backpressure on any inbox/outbox queue is exposed over REST (`GET /backpressure`,

@@ -42,6 +42,9 @@ public class LlmRequestQueue {
 
     private static final String QUEUED_MODEL_TYPE = "LlmRequest";
 
+    // How often a blocked caller re-checks its own request. Small next to any LLM call's latency.
+    private static final long RESULT_POLL_INTERVAL_MS = 100L;
+
     @Autowired
     private LlmRequestOutboxMessageRepository messageRepository;
 
@@ -56,9 +59,6 @@ public class LlmRequestQueue {
 
     @Autowired
     private LlmExecutorRegistry executorRegistry;
-
-    @Value("${vader.llm.request-queue.result-poll-interval-ms:100}")
-    private long resultPollIntervalMs;
 
     @Value("${vader.llm.request-queue.stall-timeout-seconds:60}")
     private long stallTimeoutSeconds;
@@ -126,7 +126,7 @@ public class LlmRequestQueue {
         var message = this.fetchFresh(messageId);
         while (isStillOpen(message)
                 && this.stillHasPatience(waitStarted, overallDeadline, message)) {
-            sleep(this.resultPollIntervalMs);
+            sleep(RESULT_POLL_INTERVAL_MS);
             message = this.fetchFresh(messageId);
         }
         return this.resultOf(messageId, message, waitStarted);

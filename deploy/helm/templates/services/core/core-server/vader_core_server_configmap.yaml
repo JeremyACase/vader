@@ -142,7 +142,6 @@ data:
       # When an evaluator judges an attempt real but unfinished progress, its remaining steps run
       # as runtime subtasks and the task succeeds once they all do.
       task-decomposition:
-        enabled: {{ .Values.vader.taskDecomposition.enabled }}
         max-depth: {{ .Values.vader.taskDecomposition.maxDepth }}
         max-subtasks: {{ .Values.vader.taskDecomposition.maxSubtasks }}
       storage:
@@ -161,24 +160,14 @@ data:
       scheduling:
         enabled: {{ .Values.vader.scheduling.enabled }}
       inbox:
-        client-prompt:
-          poll-interval-ms: {{ .Values.vader.inbox.clientPrompt.pollIntervalMs }}
-          max-concurrency: {{ .Values.vader.inbox.clientPrompt.maxConcurrency }}
         task-assignment:
-          poll-interval-ms: {{ .Values.vader.inbox.taskAssignment.pollIntervalMs }}
           max-concurrency: {{ .Values.vader.inbox.taskAssignment.maxConcurrency }}
         task-attempt-review:
-          poll-interval-ms: {{ .Values.vader.inbox.taskAttemptReview.pollIntervalMs }}
-          max-concurrency: {{ .Values.vader.inbox.taskAttemptReview.maxConcurrency }}
           llm-retry-interval-ms: {{ .Values.vader.inbox.taskAttemptReview.llmRetryIntervalMs }}
       llm:
         request-queue:
-          drain-poll-interval-ms: {{ .Values.vader.llm.requestQueue.drainPollIntervalMs }}
-          result-poll-interval-ms: {{ .Values.vader.llm.requestQueue.resultPollIntervalMs }}
           stall-timeout-seconds: {{ .Values.vader.llm.requestQueue.stallTimeoutSeconds }}
           max-wait-seconds: {{ .Values.vader.llm.requestQueue.maxWaitSeconds }}
-      backpressure:
-        sample-interval-ms: {{ .Values.vader.backpressure.sampleIntervalMs }}
       mcp:
         database-query:
           enabled: {{ .Values.vader.mcp.databaseQuery.enabled }}
@@ -208,9 +197,7 @@ data:
             # create_sandbox blocks until the sandbox answers through its Service (or this budget
             # is spent) so a caller that immediately stages a file or runs code right after
             # create_sandbox returns doesn't race the sandbox's startup.
-            ready-poll-max-attempts: {{ .Values.vader.operators.pythonSandbox.sandbox.readyPollMaxAttempts }}
-            ready-poll-interval-ms: {{ .Values.vader.operators.pythonSandbox.sandbox.readyPollIntervalMs }}
-            connect-timeout-seconds: {{ .Values.vader.operators.pythonSandbox.sandbox.connectTimeoutSeconds }}
+            ready-timeout-seconds: {{ .Values.vader.operators.pythonSandbox.sandbox.readyTimeoutSeconds }}
             resources:
               requests:
                 cpu: {{ .Values.vader.operators.pythonSandbox.sandbox.resources.requests.cpu }}
@@ -234,9 +221,7 @@ data:
         max-tokens: {{ .Values.vader.agentHarness.maxTokens }}
         deadline-seconds: {{ .Values.vader.agentHarness.deadlineSeconds }}
         max-attempts-per-task: {{ .Values.vader.agentHarness.maxAttemptsPerTask }}
-        ttl-seconds-after-finished: {{ .Values.vader.agentHarness.ttlSecondsAfterFinished }}
         reaper:
-          poll-interval-ms: {{ .Values.vader.agentHarness.reaper.pollIntervalMs }}
           grace-period-seconds: {{ .Values.vader.agentHarness.reaper.gracePeriodSeconds }}
         resources:
           requests:

@@ -98,10 +98,10 @@ vader:
   # instead of failing the whole task. Each subtask runs as its own agent; the task succeeds once
   # they all do, with a result rolled up from theirs.
   taskDecomposition:
-    # false turns every would-be decomposition into a plain failure (and the usual retry).
-    enabled: true
     # A task this many levels deep or deeper cannot decompose further. 1 means only the planner's
-    # own tasks decompose; their subtasks cannot, which bounds the extra work per task.
+    # own tasks decompose; their subtasks cannot, which bounds the extra work per task. 0 turns
+    # decomposition off: every would-be decomposition becomes a plain failure (and the usual
+    # retry).
     maxDepth: 1
     # Steps the evaluator lists beyond this many are dropped.
     maxSubtasks: 3
@@ -134,44 +134,18 @@ vader:
     # sampler). Turned off in unit/integration tests so they drive the inbox deterministically.
     enabled: true
   inbox:
-    clientPrompt:
-      # How often the inbox polls for pending prompt messages. A newly accepted prompt is also
-      # drained immediately on enqueue, so this is mostly a safety net (e.g. after a restart).
-      pollIntervalMs: 1000
-      # Max prompts decomposed concurrently; also reported as egress.maxOpenMessages on the
-      # backpressure endpoint.
-      maxConcurrency: 1
     taskAssignment:
-      # How often the inbox polls for task assignments ready to dispatch. A newly-enqueued
-      # assignment is also drained immediately, so this is mostly a safety net.
-      pollIntervalMs: 1000
       # Max assignments dispatched (Jobs created) concurrently. This throttles the *dispatch*
       # rate, not how many harness Jobs may run at once -- see agentHarness.maxAttemptsPerTask
       # and the scheduler for the actual concurrency the task graph produces.
       maxConcurrency: 5
     taskAttemptReview:
-      # How often the inbox polls for terminal attempts awaiting review. A newly-enqueued review
-      # is also drained immediately, so this is mostly a safety net.
-      pollIntervalMs: 1000
-      # Max attempts reviewed (evaluator verdict, then orchestrator reattempt decision if failed)
-      # concurrently. Kept at 1 by default since both steps make LLM calls already serialized
-      # through the single-worker requestQueue below -- raising this would only mean more callers
-      # queued up waiting for that same worker, not more actual parallelism.
-      maxConcurrency: 1
       # When a review can't reach the LLM (unreachable, or the LLM queue timed out), it is retried
       # at this interval for as long as the outage lasts, and its workflow reads AWAITING_LLM
       # meanwhile -- never a fabricated verdict, and never a silent hang in RUNNING.
       llmRetryIntervalMs: 30000
   llm:
     requestQueue:
-      # How often LlmRequestInbox polls for pending LLM requests. Much shorter than the other
-      # inboxes' 1000ms default: this is the only path by which a replica other than the one that
-      # enqueued a request (or the one already mid-request for an earlier one) ever notices a
-      # freed claim slot, so it directly adds to how long every blocked caller waits.
-      drainPollIntervalMs: 200
-      # How often a caller blocked in LlmRequestQueue re-checks whether its own request has been
-      # processed yet.
-      resultPollIntervalMs: 100
       # A caller gives up once no request on the queue -- anywhere, by any replica -- has been
       # claimed for this long. This, not maxWaitSeconds, is the real patience control: a deep but
       # healthy queue keeps a caller waiting indefinitely (up to maxWaitSeconds) as long as it
@@ -182,9 +156,6 @@ vader:
       # that never actually stops moving (but never keeps up either) cannot block a caller
       # forever.
       maxWaitSeconds: 1800
-  backpressure:
-    # How often queue depth is sampled to derive ingress.queueRatePerMinute.
-    sampleIntervalMs: 15000
   mcp:
     databaseQuery:
       # When true, core-server exposes read-only vader-database query tools
@@ -237,17 +208,12 @@ vader:
         # Ceiling on how long a single run_python_code call may run inside the sandbox, in
         # seconds -- enforced by the sandbox server itself regardless of what a caller requests.
         execTimeoutSeconds: 30
-        # create_sandbox waits for the sandbox to become ready before returning, retrying up to
-        # this many times (readyPollMaxAttempts * readyPollIntervalMs = the total wait budget).
-        # Ready means the pod passed its readiness probe *and* answers through its Service, which
-        # lags the probe briefly. Otherwise a caller that stages a file or runs code right after
-        # create_sandbox returns can race the sandbox's startup and get a connection error.
-        readyPollMaxAttempts: 30
-        readyPollIntervalMs: 500
-        # How long core-server waits to open a connection to a sandbox before giving up. Bounds
-        # connecting only, never a code run itself, so a sandbox that stops responding can't
-        # stall the readiness wait above indefinitely.
-        connectTimeoutSeconds: 5
+        # create_sandbox waits up to this many seconds for the sandbox to become ready before
+        # returning. Ready means the pod passed its readiness probe *and* answers through its
+        # Service, which lags the probe briefly. Otherwise a caller that stages a file or runs
+        # code right after create_sandbox returns can race the sandbox's startup and get a
+        # connection error.
+        readyTimeoutSeconds: 15
         resources:
           requests:
             cpu: 100m
@@ -278,13 +244,10 @@ vader:
     # A task whose attempt ends FAILED / TIMED_OUT / STALLED is retried (a fresh TaskAttempt, a
     # fresh Job) until this many attempts are spent, then treated as permanently failed.
     maxAttemptsPerTask: 3
-    # How long a finished Job (and its logs) stick around before Kubernetes garbage-collects it.
-    ttlSecondsAfterFinished: 3600
     reaper:
-      # How often to scan for stuck attempts (dispatched-but-never-started, or gone silent) --
+      # The reaper scans for stuck attempts (dispatched-but-never-started, or gone silent) --
       # crash, OOM kill, network partition, or a Job that never scheduled at all. A harness has
       # no way to report its own death, so this is the only thing that notices.
-      pollIntervalMs: 30000
       # An open attempt is reaped once this many seconds pass with no sign of life (last
       # heartbeat, or dispatch time, or creation time) beyond deadlineSeconds -- i.e. the total
       # allowed silence is deadlineSeconds + gracePeriodSeconds, covering scheduling/image-pull

@@ -347,15 +347,12 @@ compress it further, not to add structure.
 | `spring.ai.ollama.chat.options.num-ctx` (Helm: `vader.orchestrator.local.contextTokens`) | `16384` (Helm) | Ollama's context window per call. The prompt budget is this minus `num-predict`; a longer prompt is silently cut from the front, so it must comfortably exceed `num-predict` (the chart refuses to render otherwise) |
 | `vader.orchestrator.local.request-timeout-seconds` | `300` | Read timeout on every Ollama HTTP call (decomposition, inference turns, evaluation, reattempt decisions, synthesis) -- the JDK HTTP client Spring auto-detects has none of its own, so an unbounded call would otherwise wedge the single-worker `LlmRequestQueue` forever |
 | `vader.orchestrator.max-task-plan-revisions` | `1` | How many times a freshly-decomposed `TaskPlan` may be sent back for revision (a structural problem -- dangling dependency, dependency cycle -- or the refinement critique flags it) before the last plan is used anyway rather than blocking the prompt indefinitely |
-| `vader.task-decomposition.enabled` | `true` | Lets the evaluator split an attempt's real-but-unfinished work into runtime subtasks (the task succeeds once they all do) instead of failing it. `false` makes every such verdict a plain failure |
-| `vader.task-decomposition.max-depth` | `1` | A task at this depth or deeper cannot decompose; `1` means only the planner's own tasks can, never their subtasks |
+| `vader.task-decomposition.max-depth` | `1` | Lets the evaluator split an attempt's real-but-unfinished work into runtime subtasks (the task succeeds once they all do) instead of failing it. A task at this depth or deeper cannot decompose: `1` means only the planner's own tasks can, never their subtasks; `0` turns decomposition off, making every such verdict a plain failure |
 | `vader.task-decomposition.max-subtasks` | `3` | Remaining steps an evaluator lists beyond this many are dropped |
 | `vader.operators.enabled` | `true` | Master switch for Kubernetes operators. Set to `false` where no cluster is reachable (unit/integration test runs, CI) |
 | `vader.operators.python-sandbox.enabled` | `true` | Python sandbox operator |
 | `vader.operators.python-sandbox.sandbox.exec-timeout-seconds` | `30` | Ceiling on one `run_python_code` call, enforced by `core-python-sandbox-server` itself regardless of what a caller requests |
-| `vader.operators.python-sandbox.sandbox.ready-poll-max-attempts` | `30` | How many times `create_sandbox` re-checks pod readiness before giving up and returning whatever phase it last saw |
-| `vader.operators.python-sandbox.sandbox.ready-poll-interval-ms` | `500` | Delay between those readiness checks -- together with the attempt cap, the total wait budget `create_sandbox` blocks for so a caller staging a file or running code immediately after doesn't race the pod's own startup. Ready means the pod's readiness probe passed *and* the sandbox answers `/health` through its Service, which lags the probe briefly |
-| `vader.operators.python-sandbox.sandbox.connect-timeout-seconds` | `5` | Connect timeout on every core-server → sandbox HTTP call; bounds connecting only, never a code run, so an unresponsive sandbox can't stall the readiness wait |
+| `vader.operators.python-sandbox.sandbox.ready-timeout-seconds` | `15` | How long `create_sandbox` blocks waiting for the sandbox to be ready, so a caller staging a file or running code immediately after doesn't race the pod's own startup; on timeout it returns whatever phase it last saw. Ready means the pod's readiness probe passed *and* the sandbox answers `/health` through its Service, which lags the probe briefly |
 | `vader.mcp.database-query.enabled` | `true` | Expose DB query tools over MCP |
 | `vader.mcp.backpressure.enabled` | `false` | Expose inbox/outbox backpressure tools over MCP -- an ops-debugging surface, not something task-execution agents need |
 | `vader.storage.type` | `database` | `database` or `minio`; picks the `InterfaceFileStorageStrategy` backing both upload and the object-storage download endpoint/tool |
@@ -366,23 +363,13 @@ compress it further, not to add structure.
 | `vader.dao.max-page-size` | `100` | Cap on query page size |
 | `vader.kubernetes.namespace` | `default` | Namespace operators manage resources in |
 | `vader.scheduling.enabled` | `true` | Master switch for the background pollers (inbox drain, backpressure sampler) |
-| `vader.inbox.client-prompt.poll-interval-ms` | `1000` | Scheduled client-prompt inbox drain cadence |
-| `vader.inbox.client-prompt.max-concurrency` | `1` | Max concurrent prompt decompositions; also `egress.maxOpenMessages` |
-| `vader.backpressure.sample-interval-ms` | `15000` | Queue-depth sampling cadence feeding `queueRatePerMinute` |
 | `vader.operators.agent-harness.enabled` | `true` | Agent-harness operator (creates one Job per dispatched `TaskAttempt`) |
-| `vader.inbox.task-assignment.poll-interval-ms` | `1000` | Scheduled task-assignment inbox drain cadence |
 | `vader.inbox.task-assignment.max-concurrency` | `5` | Max assignments *dispatched* concurrently — throttles Job creation, not how many harness Jobs may run at once |
 | `vader.agent-harness.max-turns` | `20` | Turn cap handed to each harness, enforced server-side |
 | `vader.agent-harness.max-tokens` | `200000` | Token cap handed to each harness, enforced server-side |
 | `vader.agent-harness.deadline-seconds` | `600` | Wall-clock deadline handed to each harness; also the Job's `activeDeadlineSeconds` |
 | `vader.agent-harness.max-attempts-per-task` | `3` | Hard ceiling on attempts per task, checked by `OrchestratorAgentService.decideReattempt` before it even consults the reattempt-decision strategy |
-| `vader.inbox.task-attempt-review.poll-interval-ms` | `1000` | Scheduled attempt-review inbox drain cadence -- evaluates a newly-terminal attempt and, on failure, asks the orchestrator whether it's worth re-attempting |
-| `vader.inbox.task-attempt-review.max-concurrency` | `1` | Max attempts reviewed concurrently; kept low since both review steps' LLM calls are already serialized through the single-worker `LlmRequestQueue` |
 | `vader.inbox.task-attempt-review.llm-retry-interval-ms` | `30000` | How often a review that couldn't reach the LLM (unreachable, or the LLM queue timed out) is retried. It retries for as long as the outage lasts; meanwhile its workflow reads `AWAITING_LLM`, returning to `RUNNING` once the LLM answers. Any other review failure is not retried |
-| `vader.agent-harness.ttl-seconds-after-finished` | `3600` | Backstop only: `AgentHarnessJobCleanupListener` deletes a finished Job as soon as its `TaskAttempt` settles, regardless of this value; Kubernetes only reaches this TTL if that explicit delete didn't run |
-| `vader.agent-harness.reaper.poll-interval-ms` | `30000` | How often to scan for attempts a harness will never report back on |
 | `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |
-| `vader.llm.request-queue.drain-poll-interval-ms` | `200` | `LlmRequestInbox`'s scheduled drain cadence -- the only path by which a replica other than the enqueuer (or one already mid-request) notices a freed claim slot, so this directly adds to every blocked caller's wait |
-| `vader.llm.request-queue.result-poll-interval-ms` | `100` | How often a caller blocked in `LlmRequestQueue` re-checks whether its own request has been processed |
 | `vader.llm.request-queue.stall-timeout-seconds` | `60` | The real patience control: a caller gives up once no request on the queue, anywhere, by any replica, has been claimed for this long. A deep-but-healthy queue does not trip this -- only a genuinely stuck backend does |
 | `vader.llm.request-queue.max-wait-seconds` | `1800` | Absolute backstop regardless of stall detection, so a queue that never stalls but also never keeps up cannot block a caller forever |

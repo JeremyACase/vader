@@ -4,7 +4,6 @@ import java.time.OffsetDateTime;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.task.TaskExecutor;
@@ -37,6 +36,10 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
 
     private static final String TASK_ATTEMPT_REVIEW = "TaskAttemptReview";
 
+    // Both review steps' LLM calls are serialized through the single-worker LlmRequestQueue, so a
+    // second concurrent review would only wait on that same worker.
+    private static final int MAX_CONCURRENCY = 1;
+
     @Autowired
     private TaskAttemptReviewOutboxMessageRepository messageRepository;
 
@@ -53,9 +56,6 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
     @Qualifier("taskAttemptReviewInboxExecutor")
     private TaskExecutor executor;
 
-    @Value("${vader.inbox.task-attempt-review.max-concurrency:1}")
-    private int maxConcurrency;
-
     @Override
     public String queuedModelType() {
         return TASK_ATTEMPT_REVIEW;
@@ -63,7 +63,7 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
 
     @Override
     public int maxOpenMessages() {
-        return this.maxConcurrency;
+        return MAX_CONCURRENCY;
     }
 
     @Override
@@ -103,7 +103,7 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
     /**
      * Scheduled safety-net drain.
      */
-    @Scheduled(fixedDelayString = "${vader.inbox.task-attempt-review.poll-interval-ms:1000}")
+    @Scheduled(fixedDelay = SAFETY_NET_DRAIN_INTERVAL_MS)
     public void scheduledDrain() {
         this.drain();
     }

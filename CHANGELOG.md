@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0]
+### Removed
+- **The chart exposes fewer knobs.** Values that only tuned internal timings or duplicated
+  another setting are gone: the inbox, LLM-queue, backpressure and reaper poll intervals, the
+  client-prompt and attempt-review concurrency, the sandbox connect timeout, the harness Job TTL
+  and `taskDecomposition.enabled` (set `maxDepth: 0` instead). The sandbox readiness wait is now a
+  single `readyTimeoutSeconds`. Operational, security and feature switches are unchanged.
+
 ## [0.20.0]
 ### Added
 - **The UI can inspect the inbox/outbox queues.** A new System section in the nav rail opens a

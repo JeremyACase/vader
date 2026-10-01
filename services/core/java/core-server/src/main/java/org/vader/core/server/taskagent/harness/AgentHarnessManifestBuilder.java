@@ -26,6 +26,9 @@ public class AgentHarnessManifestBuilder {
     private static final String CONTAINER_NAME = "harness";
     private static final long RUN_AS_USER = 1000L;
 
+    // Backstop only: AgentHarnessJobCleanupListener deletes a Job as soon as its attempt settles.
+    private static final int TTL_SECONDS_AFTER_FINISHED = 3600;
+
     @Value("${vader.agent-harness.image:jeremyacase/vader-core-agent-harness:latest}")
     private String image;
 
@@ -44,9 +47,6 @@ public class AgentHarnessManifestBuilder {
 
     @Value("${vader.agent-harness.deadline-seconds:600}")
     private long deadlineSeconds;
-
-    @Value("${vader.agent-harness.ttl-seconds-after-finished:3600}")
-    private int ttlSecondsAfterFinished;
 
     @Value("${vader.agent-harness.resources.requests.cpu:50m}")
     private String cpuRequest;
@@ -87,7 +87,7 @@ public class AgentHarnessManifestBuilder {
             .endMetadata()
             .withNewSpec()
                 .withBackoffLimit(0)
-                .withTtlSecondsAfterFinished(this.ttlSecondsAfterFinished)
+                .withTtlSecondsAfterFinished(TTL_SECONDS_AFTER_FINISHED)
                 .withActiveDeadlineSeconds(this.deadlineSeconds)
                 .withNewTemplate()
                     .withNewMetadata()

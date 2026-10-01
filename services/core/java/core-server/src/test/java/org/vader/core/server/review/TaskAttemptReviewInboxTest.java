@@ -43,7 +43,6 @@ class TaskAttemptReviewInboxTest {
         ReflectionTestUtils.setField(this.inbox, "processor", this.processor);
         ReflectionTestUtils.setField(this.inbox, "reviewService", this.reviewService);
         ReflectionTestUtils.setField(this.inbox, "retryService", this.retryService);
-        ReflectionTestUtils.setField(this.inbox, "maxConcurrency", 1);
     }
 
     private static TaskAttemptReviewOutboxMessageEntity reviewMessage() {

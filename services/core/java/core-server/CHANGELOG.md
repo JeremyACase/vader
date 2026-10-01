@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0]
+### Removed
+- **Fewer tunable knobs.** Internal polling cadences (inbox safety-net drains, LLM queue drain
+  and result polling, backpressure sampling, the reaper's scan), the sandbox connect timeout, the
+  harness Job TTL backstop, and the prompt-decomposition and attempt-review concurrency (both
+  bound by the single LLM worker anyway) are now fixed rather than configurable.
+  `vader.task-decomposition.enabled` is gone, since `max-depth=0` already turns decomposition
+  off, and the sandbox readiness wait is one `ready-timeout-seconds` budget instead of an attempt
+  count and an interval.
+
 ## [0.31.0]
 ### Added
 - **Queue messages can be inspected over REST.** A read-only endpoint summarizes every
