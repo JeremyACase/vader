@@ -3,13 +3,13 @@ package org.vader.core.server.taskagent;
 import java.time.OffsetDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.taskagent.harness.AgentHarnessSpec;
 import org.vader.core.server.taskagent.model.AssignmentResponse;
 import org.vader.core.server.taskagent.model.HeartbeatRequest;
@@ -35,7 +35,7 @@ public class TaskAttemptLifecycleService {
     private TaskAttemptRepository taskAttemptRepository;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
 
     @Autowired
     private TaskUpdateService taskUpdateService;
@@ -183,7 +183,8 @@ public class TaskAttemptLifecycleService {
         this.taskAttemptRepository.save(attempt);
 
         var workflowId = attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow().getId();
-        this.eventPublisher.publishEvent(new TaskAttemptSettledEvent(workflowId, attempt.getId()));
+        this.eventPublishingFacade.publish(
+            new TaskAttemptSettledEvent(workflowId, attempt.getId()));
     }
 
     private static boolean isTerminal(final TaskAttemptStatus status) {

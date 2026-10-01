@@ -5,10 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 import org.vader.core.server.taskagent.harness.AgentHarnessJobCleanupListener;
 import org.vader.core.server.workflow.TaskAttemptSettledEvent;
 
@@ -45,7 +44,7 @@ public class TaskAttemptSandboxCleanupListener {
      *
      * @param event the settlement notification
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onTaskAttemptSettled(final TaskAttemptSettledEvent event) {
         this.executor.execute(() -> this.deleteSandbox(event.assignmentId()));
     }

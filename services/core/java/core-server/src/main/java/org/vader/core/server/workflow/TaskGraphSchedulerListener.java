@@ -2,23 +2,21 @@ package org.vader.core.server.workflow;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * Bridges workflow/task-attempt domain events to {@link TaskGraphScheduler#evaluate}.
  *
- * <p>A separate bean from {@link TaskGraphScheduler} because Spring rejects a method that is both
- * {@code @Transactional} and a {@code @TransactionalEventListener}, and a self-call would skip the
- * transactional proxy anyway.</p>
+ * <p>A separate bean from {@link TaskGraphScheduler} because a self-call would skip the
+ * transactional proxy.</p>
  *
- * <p>Hands {@code evaluate} to a dedicated executor rather than calling it directly: an
- * {@code AFTER_COMMIT} listener runs on the committing thread, whose stale {@code EntityManager}
- * is still bound, so a direct {@code @Transactional} call would join that finished transaction
- * and lose its writes. {@code ClientPromptInbox} and {@code TaskAssignmentInbox} hop threads for
- * the same reason.</p>
+ * <p>Hands {@code evaluate} to a dedicated executor rather than calling it directly: events are
+ * delivered after commit but on the committing thread (see {@code EventPublishingFacade}), whose
+ * stale {@code EntityManager} is still bound, so a direct {@code @Transactional} call would join
+ * that finished transaction and lose its writes. {@code ClientPromptInbox} and
+ * {@code TaskAssignmentInbox} hop threads for the same reason.</p>
  */
 @Service
 public class TaskGraphSchedulerListener {
@@ -35,7 +33,7 @@ public class TaskGraphSchedulerListener {
      *
      * @param event the decomposition notification
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onWorkflowDecomposed(final WorkflowDecomposedEvent event) {
         this.executor.execute(() -> this.scheduler.evaluate(event.workflowId()));
     }
@@ -45,7 +43,7 @@ public class TaskGraphSchedulerListener {
      *
      * @param event the settlement notification
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onTaskAttemptSettled(final TaskAttemptSettledEvent event) {
         this.executor.execute(() -> this.scheduler.evaluate(event.workflowId()));
     }

@@ -22,7 +22,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
 import org.vader.common.library.implementation.service.mapper.TaskGraphDtoToEntityMapper;
@@ -32,6 +31,7 @@ import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.intake.ClientPromptRepository;
 import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementRequest;
@@ -52,7 +52,7 @@ class OrchestratorAgentServiceTest {
     private ClientPromptRepository clientPromptRepository;
     private WorkflowRepository workflowRepository;
     private TaskPlanDtoToEntityMapper taskPlanDtoToEntityMapper;
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
     private TaskUpdateService taskUpdateService;
     private LlmRequestQueue requestQueue;
     private OrchestratorAgentService service;
@@ -63,7 +63,7 @@ class OrchestratorAgentServiceTest {
         this.clientPromptRepository = mock(ClientPromptRepository.class);
         this.workflowRepository = mock(WorkflowRepository.class);
         this.taskPlanDtoToEntityMapper = mock(TaskPlanDtoToEntityMapper.class);
-        this.eventPublisher = mock(ApplicationEventPublisher.class);
+        this.eventPublishingFacade = mock(EventPublishingFacade.class);
         this.taskUpdateService = mock(TaskUpdateService.class);
         this.requestQueue = mock(LlmRequestQueue.class);
         // Default: always approved, so tests that don't care about refinement take the
@@ -97,7 +97,7 @@ class OrchestratorAgentServiceTest {
         ReflectionTestUtils.setField(
             built, "clientPromptRepository", this.clientPromptRepository);
         ReflectionTestUtils.setField(built, "workflowRepository", this.workflowRepository);
-        ReflectionTestUtils.setField(built, "eventPublisher", this.eventPublisher);
+        ReflectionTestUtils.setField(built, "eventPublishingFacade", this.eventPublishingFacade);
         ReflectionTestUtils.setField(built, "taskUpdateService", this.taskUpdateService);
         return built;
     }
@@ -181,7 +181,7 @@ class OrchestratorAgentServiceTest {
         assertThat(workflow.getTaskPlan().getTaskGraph().getTaskPlan())
             .isSameAs(workflow.getTaskPlan());
         verify(this.workflowRepository).save(any());
-        verify(this.eventPublisher).publishEvent(new WorkflowDecomposedEvent(workflow.getId()));
+        verify(this.eventPublishingFacade).publish(new WorkflowDecomposedEvent(workflow.getId()));
     }
 
     @Test

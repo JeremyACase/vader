@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0]
+### Changed
+- **Event publishing goes through one facade.** Every domain event now leaves through a single
+  entry point that holds it until its transaction commits and hands it to a pluggable delivery
+  strategy chosen by `vader.events.type`. Only `local` exists today, delivering in-process to a
+  single replica exactly as before; the seam is there so a broker-backed strategy can later reach
+  every replica without touching publishers or listeners. The Helm chart refuses to render
+  `local` alongside more than one core-server replica or autoscaling.
+
 ## [0.29.0]
 ### Added
 - **Task agents can upload files to object storage.** A new `upload_object` tool saves a file

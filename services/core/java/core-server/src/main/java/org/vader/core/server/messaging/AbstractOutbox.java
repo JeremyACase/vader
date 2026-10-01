@@ -3,7 +3,6 @@ package org.vader.core.server.messaging;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.library.implementation.service.builder.VaderIngressResponseBuilder;
@@ -11,6 +10,7 @@ import org.vader.common.model.vader.IngressResponse;
 import org.vader.common.model.vader.entity.AbstractModelEntity;
 import org.vader.common.model.vader.entity.AbstractOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.core.server.events.EventPublishingFacade;
 
 /**
  * Shared behaviour for an outbox: build a {@code PENDING} message for a payload, persist it in a
@@ -33,7 +33,7 @@ public abstract class AbstractOutbox<
     private VaderIngressResponseBuilder ingressResponseBuilder;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
 
     @Override
     @Transactional
@@ -43,7 +43,7 @@ public abstract class AbstractOutbox<
         this.repository().save(message);
         this.logger.info("Enqueued {} outbox message {} for payload {}",
             this.queuedModelType(), message.getId(), payload.getId());
-        this.eventPublisher.publishEvent(new OutboxMessageEnqueuedEvent(this.queuedModelType()));
+        this.eventPublishingFacade.publish(new OutboxMessageEnqueuedEvent(this.queuedModelType()));
         return this.ingressResponseBuilder.buildIngressResponseFrom(payload);
     }
 

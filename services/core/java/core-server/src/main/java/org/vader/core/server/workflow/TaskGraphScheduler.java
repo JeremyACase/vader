@@ -41,9 +41,8 @@ import org.vader.core.server.taskagent.TaskAssignmentOutbox;
  * safe on this thread.</p>
  *
  * <p>{@link TaskGraphSchedulerListener} reacts to {@link WorkflowDecomposedEvent} and
- * {@link TaskAttemptSettledEvent} and calls {@link #evaluate} on this separate bean, because
- * Spring rejects a method that is both {@code @Transactional} and a
- * {@code @TransactionalEventListener}.</p>
+ * {@link TaskAttemptSettledEvent} and calls {@link #evaluate} on this separate bean, because a
+ * self-call would skip the transactional proxy.</p>
  */
 @Service
 public class TaskGraphScheduler {

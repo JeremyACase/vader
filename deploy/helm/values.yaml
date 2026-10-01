@@ -118,6 +118,14 @@ vader:
       accessKey: ""
       secretKey: ""
       bucket: vader-files
+  events:
+    # Allowable values are:
+    #   local - deliver domain events in-process, to this replica's listeners only (default;
+    #           requires no additional infrastructure). Only correct for a single core-server
+    #           replica, so the chart refuses to render it alongside more than one replica or
+    #           autoscaling.
+    # (A broker-backed type that reaches every replica can be added here later.)
+    type: local
   dao:
     # Upper bound on the page size any dynamic query (REST or MCP) may request.
     maxPageSize: 100

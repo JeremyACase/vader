@@ -6,7 +6,6 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
@@ -15,6 +14,7 @@ import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.intake.ClientPromptRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
 import org.vader.core.server.workflow.WorkflowDecomposedEvent;
@@ -54,7 +54,7 @@ public class OrchestratorAgentService {
     private TaskUpdateService taskUpdateService;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
 
     /**
      * Decomposes a persisted client prompt into a persisted task plan under a new workflow.
@@ -85,7 +85,7 @@ public class OrchestratorAgentService {
             saved.getTaskPlan().getId(),
             saved.getTaskPlan().getTaskGraph().getTasks().size());
         this.recordTaskCreatedUpdates(saved.getTaskPlan().getTaskGraph().getTasks());
-        this.eventPublisher.publishEvent(new WorkflowDecomposedEvent(saved.getId()));
+        this.eventPublishingFacade.publish(new WorkflowDecomposedEvent(saved.getId()));
         return saved;
     }
 

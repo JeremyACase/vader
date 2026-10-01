@@ -7,7 +7,6 @@ import java.time.Instant;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -15,6 +14,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
 import org.vader.core.server.messaging.OutboxMessageEnqueuedEvent;
 
@@ -46,7 +46,7 @@ public class LlmRequestQueue {
     private LlmRequestOutboxMessageRepository messageRepository;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -115,7 +115,7 @@ public class LlmRequestQueue {
             message.setRequestJson(requestJson);
             message.setStatus(OutboxMessageStatus.PENDING);
             this.messageRepository.save(message);
-            this.eventPublisher.publishEvent(new OutboxMessageEnqueuedEvent(QUEUED_MODEL_TYPE));
+            this.eventPublishingFacade.publish(new OutboxMessageEnqueuedEvent(QUEUED_MODEL_TYPE));
             return message.getId();
         });
     }

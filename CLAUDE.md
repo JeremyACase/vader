@@ -37,6 +37,7 @@ packages, never the reverse.
 | `backpressure` | Queue-depth sampling, endpoint and tools |
 | `llm` | Infrastructure: the LLM request queue/inbox, executor registry, chat-model config |
 | `messaging` | Infrastructure: the inbox/outbox base classes and queue-message processing |
+| `events` | Infrastructure: `EventPublishingFacade`, the one way to publish a domain event, and its delivery strategies |
 | `mcp` | Infrastructure: MCP tool registry, tool audiences, tool-call logging |
 | `operators` | Infrastructure: the Kubernetes operator base classes and client |
 | `config`, `web` | App-wide config and `VaderMode`; the global REST exception handler |
@@ -361,6 +362,7 @@ compress it further, not to add structure.
 | `vader.mcp.object-storage.enabled` | `true` | Expose `get_object_content` (base64 object retrieval) over MCP |
 | `vader.mcp.object-storage.max-inline-bytes` | `2097152` | Objects over this size are rejected by `get_object_content` with the REST download URL instead of being inlined |
 | `vader.mcp.task-update.enabled` | `true` | Expose `post_task_update` over MCP -- a task-execution agent leaving an interim progress note against its own task; never a pass/fail/timeout verdict, and never against another task regardless of what the calling model supplies |
+| `vader.events.type` | `local` | Picks the `InterfaceEventPublishingStrategy` behind `EventPublishingFacade`. `local` delivers in-process to this replica's listeners only, so the Helm chart refuses to render it with more than one core-server replica or with autoscaling enabled. No broker-backed strategy exists yet |
 | `vader.dao.max-page-size` | `100` | Cap on query page size |
 | `vader.kubernetes.namespace` | `default` | Namespace operators manage resources in |
 | `vader.scheduling.enabled` | `true` | Master switch for the background pollers (inbox drain, backpressure sampler) |
