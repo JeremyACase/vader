@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0]
+### Added
+- Mappers for every queue message type, carrying lifecycle fields and payload references.
+
 ## [0.19.0]
 ### Changed
 - The object-metadata mapper carries the id of the task attempt that uploaded the object.

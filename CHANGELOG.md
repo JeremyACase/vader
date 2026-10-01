@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0]
+### Added
+- **The UI can inspect the inbox/outbox queues.** A new System section in the nav rail opens a
+  Queues view showing every queue in pipeline order with live waiting, in-flight and failed
+  counts. Picking a queue lists its messages, filterable by status, and picking a message shows
+  its lifecycle, any failure reason, and the data it carries, including full LLM requests and
+  responses. The messages are served read-only over REST and are deliberately not exposed as MCP
+  tools.
+
 ## [0.19.0]
 ### Changed
 - **core-server publishes events through a pluggable delivery layer.** Events are still held

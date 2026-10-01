@@ -1,0 +1,23 @@
+<div class="system-view">
+  <app-nav-rail
+    variant="secondary"
+    ariaLabel="System tools"
+    [items]="tools"
+    [activeId]="activeToolId()"
+    (itemClicked)="toggleTool($event)" />
+
+  <div class="tool">
+    @switch (activeToolId()) {
+      @case ('queues') {
+        <app-queues-view />
+      }
+      @default {
+        <section class="card tool-placeholder">
+          <h1>System</h1>
+          <p class="muted">Choose a system tool on the left. <strong>Queues</strong> shows every
+            inbox/outbox queue and lets you inspect each message on it.</p>
+        </section>
+      }
+    }
+  </div>
+</div>

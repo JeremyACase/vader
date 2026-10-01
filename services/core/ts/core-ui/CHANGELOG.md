@@ -3,6 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0]
+### Added
+- A System section in the nav rail holds system tools, starting with Queues: every inbox/outbox
+  queue as a live card of waiting, in-flight and failed counts, a status-filterable list of its
+  messages, and a detail pane with each message's lifecycle timeline, failure reason, and payload
+  (the prompt text, the task attempt, or the LLM request and response).
+
 ## [0.18.0]
 ### Changed
 - Task graph nodes are coloured by the evaluator's latest verdict instead of the agent's own

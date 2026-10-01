@@ -1,5 +1,4 @@
 - expose the queue in the UI and allow it to be inspectedd
-- Undo the event publishing stuff that the Application is doing; or add a strategy to make it publish either locally or across replicas
 - a chronological log of events for a workflow
 
 - allow ollama operator to be able to create new, specialized LLM's

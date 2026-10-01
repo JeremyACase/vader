@@ -39,3 +39,18 @@ describe('NavRailComponent', () => {
     expect(emitted).toBe('workflows');
   });
 });
+
+describe('NavRailComponent secondary variant', () => {
+  it('labels itself and drops the full-height primary styling', () => {
+    TestBed.configureTestingModule({ imports: [NavRailComponent] });
+    const fixture = TestBed.createComponent(NavRailComponent);
+    fixture.componentRef.setInput('items', [{ id: 'queues', label: 'Queues', icon: 'queues' }]);
+    fixture.componentRef.setInput('variant', 'secondary');
+    fixture.componentRef.setInput('ariaLabel', 'System tools');
+    fixture.detectChanges();
+
+    const nav = (fixture.nativeElement as HTMLElement).querySelector('nav') as HTMLElement;
+    expect(nav.getAttribute('aria-label')).toBe('System tools');
+    expect(nav.classList).toContain('secondary');
+  });
+});

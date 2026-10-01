@@ -1,0 +1,90 @@
+@if (message(); as m) {
+  <header class="detail-head">
+    <span class="status-badge" [attr.data-status]="m.status">{{m.status}}</span>
+    <span class="muted">{{statusMeaning()}}</span>
+  </header>
+  <p class="message-id"><span class="hint">{{m.modelType}}</span> <code>{{m.id}}</code></p>
+
+  <ol class="timeline">
+    @for (step of steps(); track step.label) {
+      <li class="step" [attr.data-state]="step.state">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="step-label">{{step.label}}</span>
+        <span class="step-at">{{step.at ? (step.at | date: 'MMM d, HH:mm:ss') : '—'}}</span>
+        @if (step.note) {
+          <span class="step-note">{{step.note}}</span>
+        }
+      </li>
+    }
+  </ol>
+
+  <dl class="facts">
+    <dt>Claims</dt>
+    <dd>{{m.attempts}}</dd>
+    @if (deferredUntil(); as until) {
+      <dt>Deferred until</dt>
+      <dd>{{until | date: 'MMM d, HH:mm:ss'}} <span class="hint">(LLM unreachable; retried then)</span></dd>
+    }
+  </dl>
+
+  @if (m.failureReason) {
+    <section class="failure">
+      <h3>Failure reason</h3>
+      <pre>{{m.failureReason}}</pre>
+    </section>
+  }
+
+  @if (clientPromptId(); as promptId) {
+    <section class="payload">
+      <h3>Client prompt <code>{{promptId}}</code></h3>
+      @if (promptText(); as text) {
+        <blockquote class="prompt-text">{{text}}</blockquote>
+      } @else {
+        <p class="hint">Loading prompt text…</p>
+      }
+    </section>
+  }
+
+  @if (taskAttemptId(); as attemptId) {
+    <section class="payload">
+      <h3>Task attempt <code>{{attemptId}}</code></h3>
+      @if (taskAttempt(); as attempt) {
+        <dl class="facts">
+          <dt>Status</dt>
+          <dd><span class="status-badge" [attr.data-status]="attempt.status">{{attempt.status}}</span></dd>
+          <dt>Attempt</dt>
+          <dd>#{{attempt.attemptNumber}}</dd>
+          <dt>Task</dt>
+          <dd><code>{{attempt.taskId}}</code></dd>
+          <dt>Usage</dt>
+          <dd>{{attempt.turnsUsed}} turns · {{attempt.tokensUsed}} tokens</dd>
+          @if (attempt.failureReason) {
+            <dt>Attempt failure</dt>
+            <dd>{{attempt.failureReason}}</dd>
+          }
+        </dl>
+      } @else {
+        <p class="hint">Loading task attempt…</p>
+      }
+    </section>
+  }
+
+  @if (llmRequest(); as request) {
+    <section class="payload">
+      <h3>LLM request <span class="kind">{{request.kind}}</span></h3>
+      <pre class="json">{{requestJson()}}</pre>
+    </section>
+    <section class="payload">
+      <h3>LLM response</h3>
+      @if (request.responseJson) {
+        <pre class="json">{{responseJson()}}</pre>
+      } @else {
+        <p class="hint">No response yet.</p>
+      }
+    </section>
+  }
+} @else if (message() === null) {
+  <p class="muted">This message no longer exists.</p>
+} @else {
+  <p class="muted">Loading message…</p>
+}

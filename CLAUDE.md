@@ -36,7 +36,7 @@ packages, never the reverse.
 | `query` | The dynamic DAO query API (`query.dao` holds the per-entity controllers) and its tools |
 | `backpressure` | Queue-depth sampling, endpoint and tools |
 | `llm` | Infrastructure: the LLM request queue/inbox, executor registry, chat-model config |
-| `messaging` | Infrastructure: the inbox/outbox base classes and queue-message processing |
+| `messaging` | Infrastructure: the inbox/outbox base classes, queue-message processing, and read-only queue inspection (each queue's inspection adapter lives with its feature) |
 | `events` | Infrastructure: `EventPublishingFacade`, the one way to publish a domain event, and its delivery strategies |
 | `mcp` | Infrastructure: MCP tool registry, tool audiences, tool-call logging |
 | `operators` | Infrastructure: the Kubernetes operator base classes and client |

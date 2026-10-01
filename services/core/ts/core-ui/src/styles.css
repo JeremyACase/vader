@@ -69,13 +69,15 @@ button:disabled {
 }
 
 .status-badge[data-status="RUNNING"],
-.status-badge[data-status="DISPATCHED"] {
+.status-badge[data-status="DISPATCHED"],
+.status-badge[data-status="CLAIMED"] {
   background: #1f2f4f;
   color: #7fa8ff;
 }
 
 .status-badge[data-status="SUCCEEDED"],
-.status-badge[data-status="COMPLETED"] {
+.status-badge[data-status="COMPLETED"],
+.status-badge[data-status="PROCESSED"] {
   background: #163b2c;
   color: #6fcf97;
 }
