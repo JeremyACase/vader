@@ -56,9 +56,6 @@ public class TaskDecompositionSaga {
     @Autowired
     private TaskUpdateService taskUpdateService;
 
-    @Value("${vader.task-decomposition.enabled:true}")
-    private boolean enabled;
-
     @Value("${vader.task-decomposition.max-depth:1}")
     private int maxDepth;
 
@@ -66,14 +63,14 @@ public class TaskDecompositionSaga {
     private int maxSubtasks;
 
     /**
-     * Whether a task may be decomposed at all: decomposition is enabled and the task is shallower
-     * than the depth cap (with the default cap of 1, only plan-level tasks decompose).
+     * Whether a task may be decomposed at all: the task is shallower than the depth cap (with the
+     * default cap of 1, only plan-level tasks decompose; a cap of 0 turns decomposition off).
      *
      * @param task the task whose attempt the evaluator wants to decompose
      * @return {@code true} if it may be decomposed
      */
     public boolean canDecompose(final TaskEntity task) {
-        return this.enabled && this.maxSubtasks > 0 && task.depth() < this.maxDepth;
+        return this.maxSubtasks > 0 && task.depth() < this.maxDepth;
     }
 
     /**

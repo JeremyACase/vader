@@ -45,9 +45,8 @@ class PythonSandboxServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(this.service, "namespace", "vader");
-        // Zeroed so awaitReady's retry loop, when it runs, does not actually sleep in tests.
-        ReflectionTestUtils.setField(this.service, "readyPollIntervalMs", 0L);
-        ReflectionTestUtils.setField(this.service, "readyPollMaxAttempts", 3);
+        // The shortest budget: two retries at the fixed 500ms poll interval.
+        ReflectionTestUtils.setField(this.service, "readyTimeoutSeconds", 1L);
         // Reachable by default; the tests of the Service-routing gap override this.
         lenient().when(this.executionClient.isReachable(any())).thenReturn(true);
     }
@@ -75,7 +74,7 @@ class PythonSandboxServiceTest {
         var info = this.service.create("My Box");
 
         assertThat(info.phase()).isEqualTo("Pending");
-        verify(this.operator, times(4)).reconcile(any(PythonSandboxSpec.class));
+        verify(this.operator, times(3)).reconcile(any(PythonSandboxSpec.class));
     }
 
     @Test
@@ -123,15 +122,15 @@ class PythonSandboxServiceTest {
     }
 
     @Test
-    void create_givesUpAfterTheMaxAttemptsAndReturnsWhateverPhaseItLastSaw() {
+    void create_givesUpOnceTheReadyTimeoutIsSpentAndReturnsWhateverPhaseItLastSaw() {
         when(this.operator.reconcile(any(PythonSandboxSpec.class)))
             .thenReturn(new ManagedResource("vader-sandbox-my-box", "vader", "Pending", Map.of()));
 
         var info = this.service.create("My Box");
 
         assertThat(info.phase()).isEqualTo("Pending");
-        // The initial reconcile, plus one retry per configured attempt (readyPollMaxAttempts=3).
-        verify(this.operator, times(4)).reconcile(any(PythonSandboxSpec.class));
+        // The initial reconcile, plus one retry per 500ms poll in the 1s budget.
+        verify(this.operator, times(3)).reconcile(any(PythonSandboxSpec.class));
     }
 
     @Test

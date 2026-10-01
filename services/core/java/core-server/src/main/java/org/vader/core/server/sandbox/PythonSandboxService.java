@@ -48,14 +48,13 @@ public class PythonSandboxService {
     // reconcile() returns once the Deployment/Service are created, not once the pod serves
     // traffic, so create_sandbox waits until the readiness probe passes and the sandbox answers
     // through its Service (see withReachability); otherwise the caller's next call races the
-    // pod's startup. The default budget (30 x 500ms) covers the probe timing set in
+    // pod's startup. The default 15s budget covers the probe timing set in
     // PythonSandboxManifestBuilder plus Service routing lag.
-    @Value("${vader.operators.python-sandbox.sandbox.ready-poll-max-attempts:30}")
-    private int readyPollMaxAttempts;
+    @Value("${vader.operators.python-sandbox.sandbox.ready-timeout-seconds:15}")
+    private long readyTimeoutSeconds;
 
-    @Value("${vader.operators.python-sandbox.sandbox.ready-poll-interval-ms:500}")
-    private long readyPollIntervalMs;
-
+    private static final long READY_POLL_INTERVAL_MS = 500L;
+    private static final long MILLIS_PER_SECOND = 1000L;
     private static final String RUNNING_PHASE = "Running";
     private static final String PENDING_PHASE = "Pending";
 
@@ -89,10 +88,11 @@ public class PythonSandboxService {
 
     private ManagedResource awaitReady(
             final PythonSandboxSpec spec, final ManagedResource initial) {
+        var maxAttempts = this.readyTimeoutSeconds * MILLIS_PER_SECOND / READY_POLL_INTERVAL_MS;
         var managed = this.withReachability(initial);
         var attempts = 0;
-        while (!RUNNING_PHASE.equals(managed.phase()) && attempts < this.readyPollMaxAttempts) {
-            sleep(this.readyPollIntervalMs);
+        while (!RUNNING_PHASE.equals(managed.phase()) && attempts < maxAttempts) {
+            sleep(READY_POLL_INTERVAL_MS);
             managed = this.withReachability(this.operator.reconcile(spec));
             attempts++;
         }

@@ -63,7 +63,6 @@ class LlmRequestQueueTest {
         ReflectionTestUtils.setField(this.queue, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(this.queue, "transactionManager", transactionManager);
         ReflectionTestUtils.setField(this.queue, "executorRegistry", executorRegistry);
-        ReflectionTestUtils.setField(this.queue, "resultPollIntervalMs", 5L);
         ReflectionTestUtils.setField(this.queue, "stallTimeoutSeconds", 30L);
         ReflectionTestUtils.setField(this.queue, "maxWaitSeconds", 60L);
         ReflectionTestUtils.invokeMethod(this.queue, "init");

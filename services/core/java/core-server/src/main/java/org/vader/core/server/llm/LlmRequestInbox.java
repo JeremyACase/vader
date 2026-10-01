@@ -34,6 +34,8 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
 
     private static final String LLM_REQUEST = "LlmRequest";
 
+    private static final long DRAIN_INTERVAL_MS = 200L;
+
     @Autowired
     private LlmRequestOutboxMessageRepository messageRepository;
 
@@ -106,7 +108,7 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
      * Scheduled drain, much more frequent than other inboxes': it is how other replicas notice a
      * freed slot, so its interval adds directly to every blocked caller's wait.
      */
-    @Scheduled(fixedDelayString = "${vader.llm.request-queue.drain-poll-interval-ms:200}")
+    @Scheduled(fixedDelay = DRAIN_INTERVAL_MS)
     public void scheduledDrain() {
         this.drain();
     }

@@ -7,7 +7,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -23,21 +22,19 @@ public class BackpressureSampler {
 
     private static final int WINDOW = 2;
     private static final float MILLIS_PER_MINUTE = 60_000f;
+    private static final long SAMPLE_INTERVAL_MS = 15_000L;
 
     private static final Logger logger = LoggerFactory.getLogger(BackpressureSampler.class);
 
     @Autowired
     private BackpressureRegistry registry;
 
-    @Value("${vader.backpressure.sample-interval-ms:15000}")
-    private long sampleIntervalMs;
-
     private final Map<String, Deque<Long>> samplesByModelType = new ConcurrentHashMap<>();
 
     /**
      * Records one depth sample for every registered queue.
      */
-    @Scheduled(fixedRateString = "${vader.backpressure.sample-interval-ms:15000}")
+    @Scheduled(fixedRate = SAMPLE_INTERVAL_MS)
     public void sample() {
         for (var modelType : this.registry.names()) {
             var depth = this.registry.require(modelType).queuedRecordCount();
@@ -70,7 +67,7 @@ public class BackpressureSampler {
                 return 0f;
             }
             var delta = samples.getLast() - samples.getFirst();
-            return delta * (MILLIS_PER_MINUTE / this.sampleIntervalMs);
+            return delta * (MILLIS_PER_MINUTE / SAMPLE_INTERVAL_MS);
         }
     }
 }

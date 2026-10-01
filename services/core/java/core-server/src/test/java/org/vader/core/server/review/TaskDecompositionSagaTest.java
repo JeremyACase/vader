@@ -47,7 +47,6 @@ class TaskDecompositionSagaTest {
         ReflectionTestUtils.setField(
             this.saga, "taskAttemptRepository", this.taskAttemptRepository);
         ReflectionTestUtils.setField(this.saga, "taskUpdateService", this.taskUpdateService);
-        ReflectionTestUtils.setField(this.saga, "enabled", true);
         ReflectionTestUtils.setField(this.saga, "maxDepth", 1);
         ReflectionTestUtils.setField(this.saga, "maxSubtasks", 3);
         when(this.taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -94,8 +93,8 @@ class TaskDecompositionSagaTest {
     }
 
     @Test
-    void canDecompose_isFalseWhenDisabled() {
-        ReflectionTestUtils.setField(this.saga, "enabled", false);
+    void canDecompose_isFalseForEveryTaskWhenMaxDepthIsZero() {
+        ReflectionTestUtils.setField(this.saga, "maxDepth", 0);
 
         assertThat(this.saga.canDecompose(task("analyze"))).isFalse();
     }

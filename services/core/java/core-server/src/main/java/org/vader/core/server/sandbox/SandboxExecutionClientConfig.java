@@ -2,7 +2,6 @@ package org.vader.core.server.sandbox;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -19,8 +18,7 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class SandboxExecutionClientConfig {
 
-    @Value("${vader.operators.python-sandbox.sandbox.connect-timeout-seconds:5}")
-    private long connectTimeoutSeconds;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
 
     /**
      * Builds the client pinned to HTTP/1.1, with a connect timeout.
@@ -39,7 +37,7 @@ public class SandboxExecutionClientConfig {
     public RestClient sandboxExecutionRestClient() {
         var httpClient = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(this.connectTimeoutSeconds))
+            .connectTimeout(CONNECT_TIMEOUT)
             .build();
         return RestClient.builder()
             .requestFactory(new JdkClientHttpRequestFactory(httpClient))

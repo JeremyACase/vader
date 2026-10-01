@@ -87,7 +87,7 @@ public class TaskAssignmentInbox extends AbstractInbox<TaskAssignmentOutboxMessa
     /**
      * Scheduled safety-net drain.
      */
-    @Scheduled(fixedDelayString = "${vader.inbox.task-assignment.poll-interval-ms:1000}")
+    @Scheduled(fixedDelay = SAFETY_NET_DRAIN_INTERVAL_MS)
     public void scheduledDrain() {
         this.drain();
     }

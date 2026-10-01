@@ -31,6 +31,12 @@ import org.vader.core.server.backpressure.InterfaceQueueBackpressure;
 public abstract class AbstractInbox<M extends AbstractOutboxMessageEntity>
     implements InterfaceInbox<M>, InterfaceQueueBackpressure {
 
+    /**
+     * Cadence of a subclass's scheduled safety-net drain. Each inbox also drains immediately on
+     * enqueue, so this tick only catches messages left behind (e.g. by a restart).
+     */
+    protected static final long SAFETY_NET_DRAIN_INTERVAL_MS = 1000L;
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final AtomicBoolean draining = new AtomicBoolean(false);
