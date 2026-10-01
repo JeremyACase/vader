@@ -4,11 +4,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 import org.vader.common.model.vader.entity.TaskAssignmentOutboxMessageEntity;
 import org.vader.core.server.messaging.AbstractInbox;
 import org.vader.core.server.messaging.OutboxMessageEnqueuedEvent;
@@ -98,7 +97,7 @@ public class TaskAssignmentInbox extends AbstractInbox<TaskAssignmentOutboxMessa
      *
      * @param event the enqueue notification
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onEnqueued(final OutboxMessageEnqueuedEvent event) {
         if (TASK_ASSIGNMENT.equals(event.modelType())) {
             this.executor.execute(this::drain);

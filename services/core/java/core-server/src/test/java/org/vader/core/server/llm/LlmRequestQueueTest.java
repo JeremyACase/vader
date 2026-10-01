@@ -13,7 +13,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
@@ -21,6 +20,7 @@ import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.common.model.vader.entity.LlmRequestOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.messaging.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.review.EvaluationLlmExecutor;
 import org.vader.core.server.review.model.EvaluationRequest;
@@ -37,13 +37,13 @@ class LlmRequestQueueTest {
         "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
 
     private LlmRequestOutboxMessageRepository messageRepository;
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
     private LlmRequestQueue queue;
 
     @BeforeEach
     void setUp() {
         this.messageRepository = mock(LlmRequestOutboxMessageRepository.class);
-        this.eventPublisher = mock(ApplicationEventPublisher.class);
+        this.eventPublishingFacade = mock(EventPublishingFacade.class);
         var transactionManager = mock(PlatformTransactionManager.class);
         when(transactionManager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
 
@@ -58,7 +58,8 @@ class LlmRequestQueueTest {
 
         this.queue = new LlmRequestQueue();
         ReflectionTestUtils.setField(this.queue, "messageRepository", this.messageRepository);
-        ReflectionTestUtils.setField(this.queue, "eventPublisher", this.eventPublisher);
+        ReflectionTestUtils.setField(
+            this.queue, "eventPublishingFacade", this.eventPublishingFacade);
         ReflectionTestUtils.setField(this.queue, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(this.queue, "transactionManager", transactionManager);
         ReflectionTestUtils.setField(this.queue, "executorRegistry", executorRegistry);
@@ -99,8 +100,8 @@ class LlmRequestQueueTest {
         assertThat(messageCaptor.getValue().getKind()).isEqualTo(LlmRequestKind.INFERENCE_TURN);
         assertThat(messageCaptor.getValue().getStatus()).isEqualTo(OutboxMessageStatus.PENDING);
         assertThat(messageCaptor.getValue().getRequestJson()).contains("hi");
-        verify(this.eventPublisher)
-            .publishEvent(new OutboxMessageEnqueuedEvent("LlmRequest"));
+        verify(this.eventPublishingFacade)
+            .publish(new OutboxMessageEnqueuedEvent("LlmRequest"));
     }
 
     @Test

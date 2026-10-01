@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0]
+### Changed
+- **core-server publishes events through a pluggable delivery layer.** Events are still held
+  until their transaction commits and delivered in-process, so a single-replica release behaves
+  exactly as before; the new `vader.events.type` value (only `local` for now) is the seam a
+  broker such as Kafka will plug into to reach every replica. Because `local` cannot reach other
+  replicas, the chart now refuses to render it with more than one core-server replica or with
+  autoscaling enabled -- any values file that sets either will need a single replica until a
+  broker-backed type exists.
+
 ## [0.18.0]
 ### Added
 - **Task agents can save their work to object storage.** An agent can upload a file it wrote or

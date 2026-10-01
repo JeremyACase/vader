@@ -12,7 +12,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
@@ -22,6 +21,7 @@ import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.llm.OrchestratorUnavailableException;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskAttemptSettledEvent;
@@ -34,7 +34,7 @@ class TaskAttemptReviewServiceTest {
 
     private TaskAttemptRepository taskAttemptRepository;
     private TaskUpdateService taskUpdateService;
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
     private EvaluatorAgentService evaluatorAgentService;
     private ReattemptDecisionService reattemptDecisionService;
     private TaskAttemptReviewRetryService retryService;
@@ -44,7 +44,7 @@ class TaskAttemptReviewServiceTest {
     void setUp() {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
         this.taskUpdateService = mock(TaskUpdateService.class);
-        this.eventPublisher = mock(ApplicationEventPublisher.class);
+        this.eventPublishingFacade = mock(EventPublishingFacade.class);
         this.evaluatorAgentService = mock(EvaluatorAgentService.class);
         this.reattemptDecisionService = mock(ReattemptDecisionService.class);
         this.retryService = mock(TaskAttemptReviewRetryService.class);
@@ -53,7 +53,8 @@ class TaskAttemptReviewServiceTest {
         ReflectionTestUtils.setField(
             this.service, "taskAttemptRepository", this.taskAttemptRepository);
         ReflectionTestUtils.setField(this.service, "taskUpdateService", this.taskUpdateService);
-        ReflectionTestUtils.setField(this.service, "eventPublisher", this.eventPublisher);
+        ReflectionTestUtils.setField(
+            this.service, "eventPublishingFacade", this.eventPublishingFacade);
         ReflectionTestUtils.setField(
             this.service, "evaluatorAgentService", this.evaluatorAgentService);
         ReflectionTestUtils.setField(
@@ -154,7 +155,7 @@ class TaskAttemptReviewServiceTest {
         this.service.review(ATTEMPT_ID);
 
         var eventCaptor = ArgumentCaptor.forClass(TaskAttemptSettledEvent.class);
-        verify(this.eventPublisher).publishEvent(eventCaptor.capture());
+        verify(this.eventPublishingFacade).publish(eventCaptor.capture());
         assertThat(eventCaptor.getValue().workflowId()).isEqualTo(WORKFLOW_ID);
         assertThat(eventCaptor.getValue().assignmentId()).isEqualTo(ATTEMPT_ID);
     }
@@ -185,6 +186,6 @@ class TaskAttemptReviewServiceTest {
         assertThatThrownBy(() -> this.service.review(ATTEMPT_ID))
             .isInstanceOf(OrchestratorUnavailableException.class);
         verify(this.retryService, never()).resumeIfNoLongerWaiting(any());
-        verify(this.eventPublisher, never()).publishEvent(any());
+        verify(this.eventPublishingFacade, never()).publish(any());
     }
 }

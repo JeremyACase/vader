@@ -9,12 +9,12 @@ import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.library.implementation.service.builder.VaderIngressResponseBuilder;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ClientPromptOutboxMessageEntity;
 import org.vader.common.model.vader.entity.OutboxMessageStatus;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.messaging.OutboxMessageEnqueuedEvent;
 
 class ClientPromptOutboxTest {
@@ -22,18 +22,19 @@ class ClientPromptOutboxTest {
     private static final String PROMPT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 
     private ClientPromptOutboxMessageRepository messageRepository;
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
     private ClientPromptOutbox outbox;
 
     @BeforeEach
     void setUp() {
         this.messageRepository = mock(ClientPromptOutboxMessageRepository.class);
-        this.eventPublisher = mock(ApplicationEventPublisher.class);
+        this.eventPublishingFacade = mock(EventPublishingFacade.class);
         this.outbox = new ClientPromptOutbox();
         ReflectionTestUtils.setField(this.outbox, "messageRepository", this.messageRepository);
         ReflectionTestUtils.setField(
             this.outbox, "ingressResponseBuilder", new VaderIngressResponseBuilder());
-        ReflectionTestUtils.setField(this.outbox, "eventPublisher", this.eventPublisher);
+        ReflectionTestUtils.setField(
+            this.outbox, "eventPublishingFacade", this.eventPublishingFacade);
         when(this.messageRepository.save(any())).thenAnswer(call -> call.getArgument(0));
     }
 
@@ -60,8 +61,8 @@ class ClientPromptOutboxTest {
     void enqueue_announcesTheEnqueueForTheClientPromptModelType() {
         this.outbox.enqueue(prompt());
 
-        verify(this.eventPublisher)
-            .publishEvent(new OutboxMessageEnqueuedEvent("ClientPrompt"));
+        verify(this.eventPublishingFacade)
+            .publish(new OutboxMessageEnqueuedEvent("ClientPrompt"));
     }
 
     @Test

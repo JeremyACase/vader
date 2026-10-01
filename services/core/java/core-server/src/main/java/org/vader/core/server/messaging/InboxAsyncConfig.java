@@ -7,10 +7,11 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
- * Executors for "after commit, hand off to a fresh thread": an {@code AFTER_COMMIT} listener runs
- * on the committing thread with its stale {@code EntityManager} still bound, so a
- * {@code @Transactional} method called directly from it joins that finished transaction and its
- * writes are lost. Running the follow-up on one of these executors starts a clean transaction.
+ * Executors for "after commit, hand off to a fresh thread": an event listener runs on the
+ * committing thread (see {@code EventPublishingFacade}) with its stale {@code EntityManager}
+ * still bound, so a {@code @Transactional} method called directly from it joins that finished
+ * transaction and its writes are lost. Running the follow-up on one of these executors starts a
+ * clean transaction.
  *
  * <p>Always registered, independent of {@code vader.scheduling.enabled}: the handoff is needed
  * whether or not scheduled polling is on.</p>

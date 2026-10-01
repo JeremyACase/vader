@@ -1,13 +1,13 @@
 package org.vader.core.server.review;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
+import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskAttemptSettledEvent;
 import org.vader.core.server.workflow.TaskUpdateService;
@@ -37,7 +37,7 @@ public class TaskAttemptReviewService {
     private TaskUpdateService taskUpdateService;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private EventPublishingFacade eventPublishingFacade;
 
     @Autowired
     private TaskAttemptReviewRetryService retryService;
@@ -103,6 +103,7 @@ public class TaskAttemptReviewService {
 
     private void publishSettled(final TaskAttemptEntity attempt) {
         var workflowId = attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow().getId();
-        this.eventPublisher.publishEvent(new TaskAttemptSettledEvent(workflowId, attempt.getId()));
+        this.eventPublishingFacade.publish(
+            new TaskAttemptSettledEvent(workflowId, attempt.getId()));
     }
 }
