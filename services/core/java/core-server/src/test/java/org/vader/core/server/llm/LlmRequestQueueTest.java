@@ -34,7 +34,8 @@ import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 class LlmRequestQueueTest {
 
     private static final EvaluationRequest EVALUATION_REQUEST = new EvaluationRequest(
-        "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
+        "user request", "objective", List.of(), "title", "description",
+        TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
 
     private LlmRequestOutboxMessageRepository messageRepository;
     private EventPublishingFacade eventPublishingFacade;
@@ -130,7 +131,7 @@ class LlmRequestQueueTest {
 
         var answer = this.queue.submit(
             WorkflowSynthesisLlmExecutor.class,
-            new WorkflowSynthesisRequest("prompt", "objective", List.of()));
+            new WorkflowSynthesisRequest("prompt", "objective", List.of(), List.of()));
 
         assertThat(answer).isEqualTo("Quarterly sales by region.");
     }

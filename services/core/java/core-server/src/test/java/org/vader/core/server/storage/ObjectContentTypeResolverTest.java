@@ -12,6 +12,21 @@ class ObjectContentTypeResolverTest {
         assertThat(ObjectContentTypeResolver.forFilename("REPORT.MD")).isEqualTo("text/markdown");
         assertThat(ObjectContentTypeResolver.forFilename("config.yml"))
             .isEqualTo("application/yaml");
+        assertThat(ObjectContentTypeResolver.forFilename("server.py")).isEqualTo("text/x-python");
+    }
+
+    @Test
+    void isText_acceptsTextAndTextBasedApplicationTypes() {
+        assertThat(ObjectContentTypeResolver.isText("text/x-python")).isTrue();
+        assertThat(ObjectContentTypeResolver.isText("application/json")).isTrue();
+        assertThat(ObjectContentTypeResolver.isText("application/yaml")).isTrue();
+    }
+
+    @Test
+    void isText_rejectsBinaryAndUnknownTypes() {
+        assertThat(ObjectContentTypeResolver.isText("image/png")).isFalse();
+        assertThat(ObjectContentTypeResolver.isText("application/octet-stream")).isFalse();
+        assertThat(ObjectContentTypeResolver.isText(null)).isFalse();
     }
 
     @Test

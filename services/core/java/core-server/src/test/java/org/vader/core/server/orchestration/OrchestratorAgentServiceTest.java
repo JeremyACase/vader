@@ -28,12 +28,14 @@ import org.vader.common.library.implementation.service.mapper.TaskGraphDtoToEnti
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
+import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.intake.ClientPromptRepository;
 import org.vader.core.server.llm.LlmRequestQueue;
+import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementRequest;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementVerdict;
 import org.vader.core.server.workflow.TaskUpdateService;
@@ -107,14 +109,14 @@ class OrchestratorAgentServiceTest {
     }
 
     private void assertRejected(final String orchestratorResponse, final String expectedFragment) {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(orchestratorResponse);
 
         assertThatThrownBy(() -> this.service.decompose(PROMPT_ID))
             .isInstanceOf(OrchestratorResponseException.class)
             .hasMessageContaining(expectedFragment);
 
-        verify(this.taskPlanAdapter).decompose(any(ClientPrompt.class), any());
+        verify(this.taskPlanAdapter).decompose(any(ClientPrompt.class), any(), any());
         verifyNoInteractions(this.workflowRepository, this.taskPlanDtoToEntityMapper);
     }
 
@@ -168,7 +170,7 @@ class OrchestratorAgentServiceTest {
             realMapper, "taskGraphDtoToEntityMapper", new TaskGraphDtoToEntityMapper());
         var wired = buildService(realMapper);
 
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(VALID_RESPONSE);
         when(this.workflowRepository.save(any())).thenAnswer(call -> call.getArgument(0));
 
@@ -185,13 +187,32 @@ class OrchestratorAgentServiceTest {
     }
 
     @Test
+    void decompose_passesTheAttachedFilesNamesAndTypesToThePlanner() {
+        var file = new ObjectMetadataEntity();
+        file.setOriginalFilename("Finances.xlsx");
+        file.setContentType("application/vnd.ms-excel");
+        this.clientPromptRepository.findById(PROMPT_ID).orElseThrow().getFiles().add(file);
+        var realMapper = new TaskPlanDtoToEntityMapper();
+        ReflectionTestUtils.setField(
+            realMapper, "taskGraphDtoToEntityMapper", new TaskGraphDtoToEntityMapper());
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
+            .thenReturn(VALID_RESPONSE);
+        when(this.workflowRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        buildService(realMapper).decompose(PROMPT_ID);
+
+        verify(this.taskPlanAdapter).decompose(any(ClientPrompt.class),
+            eq(List.of(new AttachedFile("Finances.xlsx", "application/vnd.ms-excel"))), isNull());
+    }
+
+    @Test
     void decompose_recordsCreatedUpdateForEveryTaskAuthoredBySystem() {
         var realMapper = new TaskPlanDtoToEntityMapper();
         ReflectionTestUtils.setField(
             realMapper, "taskGraphDtoToEntityMapper", new TaskGraphDtoToEntityMapper());
         var wired = buildService(realMapper);
 
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(VALID_RESPONSE);
         when(this.workflowRepository.save(any())).thenAnswer(call -> call.getArgument(0));
 
@@ -213,7 +234,7 @@ class OrchestratorAgentServiceTest {
         var danglingResponse = "{\"objective\":\"ship it\",\"taskGraph\":{\"tasks\":"
             + "[{\"id\":\"11111111-1111-1111-1111-111111111111\",\"title\":\"t\","
             + "\"description\":\"d\",\"dependsOnTaskIds\":[\"missing\"]}]}}";
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(danglingResponse, VALID_RESPONSE);
         when(this.workflowRepository.save(any())).thenAnswer(call -> call.getArgument(0));
 
@@ -231,7 +252,7 @@ class OrchestratorAgentServiceTest {
         var promptCaptor = ArgumentCaptor.forClass(ClientPrompt.class);
         var guidanceCaptor = ArgumentCaptor.forClass(String.class);
         verify(this.taskPlanAdapter, times(2))
-            .decompose(promptCaptor.capture(), guidanceCaptor.capture());
+            .decompose(promptCaptor.capture(), any(), guidanceCaptor.capture());
         assertThat(guidanceCaptor.getAllValues().get(0)).isNull();
         assertThat(guidanceCaptor.getAllValues().get(1)).contains("unknown task id 'missing'");
         assertThat(promptCaptor.getAllValues().get(1).getText())
@@ -251,7 +272,7 @@ class OrchestratorAgentServiceTest {
             + "\"description\":\"open it\"},"
             + "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"title\":\"Identify Key Data\","
             + "\"description\":\"find patterns\"}]}}";
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(sequentialPlanWithNoEdges);
         when(this.requestQueue.submit(
             eq(TaskPlanRefinementLlmExecutor.class), any(TaskPlanRefinementRequest.class)))
@@ -263,7 +284,7 @@ class OrchestratorAgentServiceTest {
         var workflow = wired.decompose(PROMPT_ID);
 
         // Applied directly -- the planner is never asked to regenerate the plan to add it.
-        verify(this.taskPlanAdapter, times(1)).decompose(any(ClientPrompt.class), any());
+        verify(this.taskPlanAdapter, times(1)).decompose(any(ClientPrompt.class), any(), any());
         var tasks = workflow.getTaskPlan().getTaskGraph().getTasks();
         var identify = tasks.stream()
             .filter(task -> task.getTitle().equals("Identify Key Data")).findFirst().orElseThrow();
@@ -279,7 +300,7 @@ class OrchestratorAgentServiceTest {
             realMapper, "taskGraphDtoToEntityMapper", new TaskGraphDtoToEntityMapper());
         var wired = buildService(realMapper);
 
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(VALID_RESPONSE);
         when(this.requestQueue.submit(
             eq(TaskPlanRefinementLlmExecutor.class), any(TaskPlanRefinementRequest.class)))
@@ -292,7 +313,7 @@ class OrchestratorAgentServiceTest {
 
         assertThat(workflow.getTaskPlan().getObjective()).isEqualTo("ship it");
         verify(this.taskPlanAdapter, times(2))
-            .decompose(any(ClientPrompt.class), any());
+            .decompose(any(ClientPrompt.class), any(), any());
         verify(this.requestQueue, times(2)).submit(
             eq(TaskPlanRefinementLlmExecutor.class), any(TaskPlanRefinementRequest.class));
     }
@@ -308,7 +329,7 @@ class OrchestratorAgentServiceTest {
         // the plan the refinement critique keeps flagging is still usable, unlike a dangling
         // dependency, which the entity mapper would refuse to persist no matter how many
         // revisions ran.
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn(VALID_RESPONSE);
         when(this.requestQueue.submit(
             eq(TaskPlanRefinementLlmExecutor.class), any(TaskPlanRefinementRequest.class)))
@@ -321,7 +342,7 @@ class OrchestratorAgentServiceTest {
         // maxTaskPlanRevisions is 1 (set in buildService): the initial decomposition, plus one
         // revision attempt, both still flagged -- proceeds anyway rather than throwing or
         // looping forever.
-        verify(this.taskPlanAdapter, times(2)).decompose(any(ClientPrompt.class), any());
+        verify(this.taskPlanAdapter, times(2)).decompose(any(ClientPrompt.class), any(), any());
         verify(this.requestQueue, times(2)).submit(
             eq(TaskPlanRefinementLlmExecutor.class), any(TaskPlanRefinementRequest.class));
     }

@@ -85,7 +85,8 @@ class OrchestratorAgentServiceIntegrationTest {
 
     @Test
     void decompose_persistsTheDecompositionUnderWorkflowAndLinksThePlanBackToIt() {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any())).thenReturn(VALID_PLAN);
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
+            .thenReturn(VALID_PLAN);
 
         var saved = this.orchestratorAgentService.decompose(
             persistedPrompt("Help me ship onboarding").getId());
@@ -119,7 +120,7 @@ class OrchestratorAgentServiceIntegrationTest {
 
     @Test
     void decompose_whenResponseFailsSchema_throwsAndPersistsNoWorkflow() {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn("{\"objective\":\"no task graph here\"}");
 
         var promptId = persistedPrompt("whatever").getId();

@@ -170,7 +170,9 @@ public class TaskGraphScheduler {
         var failed = subtasks.stream()
             .filter(subtask -> progress.get(subtask.getId()).state() == TaskState.DONE_FAILED)
             .findFirst();
-        var allSucceeded = subtasks.stream()
+        // A decomposition always spawns at least one subtask, so finding none means they failed
+        // to load -- never that there was nothing left to do.
+        var allSucceeded = !subtasks.isEmpty() && subtasks.stream()
             .allMatch(subtask -> progress.get(subtask.getId()).state()
                 == TaskState.DONE_SUCCEEDED);
         failed.ifPresent(subtask -> this.taskDecompositionSaga.compensate(attempt, subtask));

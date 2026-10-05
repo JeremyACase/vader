@@ -15,6 +15,7 @@ import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.llm.OrchestratorUnavailableException;
+import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 import org.vader.core.server.orchestration.model.LlmTaskPlan;
 
@@ -48,15 +49,19 @@ public class LlmTaskPlanAdapter {
      * Decomposes a client prompt into a task plan.
      *
      * @param clientPrompt the prompt to decompose, whose text is passed to the model verbatim
+     * @param attachedFiles the files attached to the prompt, by name and type only
      * @param revisionGuidance why the previous plan for this same prompt was rejected, for the
      *     model to correct; {@code null} on the first attempt
      * @return the task plan, as JSON
      */
-    public String decompose(final ClientPrompt clientPrompt, final String revisionGuidance) {
+    public String decompose(
+            final ClientPrompt clientPrompt, final List<AttachedFile> attachedFiles,
+            final String revisionGuidance) {
         try {
             var plan = this.requestQueue.submit(
                 DecompositionLlmExecutor.class,
-                new DecompositionRequest(clientPrompt.getText(), revisionGuidance));
+                new DecompositionRequest(
+                    clientPrompt.getText(), attachedFiles, revisionGuidance));
             return this.toTaskPlanJson(plan);
         } catch (OrchestratorResponseException | OrchestratorUnavailableException e) {
             throw e;

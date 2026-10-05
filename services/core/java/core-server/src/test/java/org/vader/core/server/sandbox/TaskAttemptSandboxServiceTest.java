@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
@@ -48,6 +49,9 @@ class TaskAttemptSandboxServiceTest {
     @Mock
     private ObjectStorageService objectStorageService;
 
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     @InjectMocks
     private TaskAttemptSandboxService service;
 
@@ -60,6 +64,7 @@ class TaskAttemptSandboxServiceTest {
         this.attemptId = UUID.randomUUID().toString();
         this.sandboxName = TaskAttemptSandboxNaming.resolve(this.attemptId);
         this.clientPrompt = new ClientPromptEntity();
+        this.service.init();
         // Lenient: delete() never looks the attempt up.
         lenient().when(this.taskAttemptRepository.findById(this.attemptId))
             .thenReturn(Optional.of(attemptFor(this.attemptId, this.clientPrompt)));
@@ -119,6 +124,19 @@ class TaskAttemptSandboxServiceTest {
         order.verify(this.sandboxService).ensureReady(this.sandboxName);
         order.verify(this.sandboxService)
             .stageObjectIfAbsent(this.sandboxName, file.getId(), "EP_Tactics.xlsx");
+        order.verify(this.sandboxService).runCode(anyString(), any());
+    }
+
+    @Test
+    void runCode_resolvesAttachedFilesInATransactionThatEndsBeforeTheSandboxIsTouched() {
+        when(this.sandboxService.ensureReady(this.sandboxName))
+            .thenReturn(sandboxIn(this.sandboxName, "Running"));
+
+        this.service.runCode(this.attemptId, "pass");
+
+        var order = inOrder(this.transactionManager, this.sandboxService);
+        order.verify(this.transactionManager).commit(any());
+        order.verify(this.sandboxService).ensureReady(this.sandboxName);
         order.verify(this.sandboxService).runCode(anyString(), any());
     }
 

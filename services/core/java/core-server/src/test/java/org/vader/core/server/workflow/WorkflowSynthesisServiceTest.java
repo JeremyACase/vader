@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,22 +22,27 @@ import org.vader.common.model.vader.entity.TaskGraphEntity;
 import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.llm.LlmRequestQueue;
+import org.vader.core.server.workflow.model.DeliveredFile;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 
 class WorkflowSynthesisServiceTest {
 
     private TaskAttemptRepository taskAttemptRepository;
+    private DeliveredFileListBuilder deliveredFileListBuilder;
     private LlmRequestQueue requestQueue;
     private WorkflowSynthesisService service;
 
     @BeforeEach
     void setUp() {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
+        this.deliveredFileListBuilder = mock(DeliveredFileListBuilder.class);
         this.requestQueue = mock(LlmRequestQueue.class);
 
         this.service = new WorkflowSynthesisService();
         ReflectionTestUtils.setField(
             this.service, "taskAttemptRepository", this.taskAttemptRepository);
+        ReflectionTestUtils.setField(
+            this.service, "deliveredFileListBuilder", this.deliveredFileListBuilder);
         ReflectionTestUtils.setField(this.service, "requestQueue", this.requestQueue);
     }
 
@@ -131,5 +137,40 @@ class WorkflowSynthesisServiceTest {
         var result = this.service.synthesize(workflowWithTasks(succeededTask));
 
         assertThat(result).isEqualTo("Completed 1 of 1 tasks.");
+    }
+
+    @Test
+    void synthesize_passesDeliveredFilesToTheModelAndListsThemAfterTheAnswer() {
+        var task = task("t1", "Write the server");
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("t1"))
+            .thenReturn(Optional.of(attempt(TaskAttemptStatus.SUCCEEDED, "Wrote server.py.")));
+        var file = new DeliveredFile(
+            "server.py", "/vader/core-server/object-storage/o1/content", "print('hi')");
+        when(this.deliveredFileListBuilder.build(any())).thenReturn(List.of(file));
+        when(this.requestQueue.submit(
+            eq(WorkflowSynthesisLlmExecutor.class), any())).thenReturn("Here is your server.");
+
+        var result = this.service.synthesize(workflowWithTasks(task));
+
+        assertThat(result).isEqualTo("Here is your server.\n\nFiles:\n"
+            + "- server.py: /vader/core-server/object-storage/o1/content");
+        var captor = ArgumentCaptor.forClass(WorkflowSynthesisRequest.class);
+        verify(this.requestQueue).submit(eq(WorkflowSynthesisLlmExecutor.class), captor.capture());
+        assertThat(captor.getValue().deliveredFiles()).containsExactly(file);
+    }
+
+    @Test
+    void synthesize_whenListingFilesFails_stillAnswersWithoutAFilesList() {
+        var task = task("t1", "Write the server");
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("t1"))
+            .thenReturn(Optional.of(attempt(TaskAttemptStatus.SUCCEEDED, "Wrote server.py.")));
+        when(this.deliveredFileListBuilder.build(any()))
+            .thenThrow(new RuntimeException("storage unreachable"));
+        when(this.requestQueue.submit(
+            eq(WorkflowSynthesisLlmExecutor.class), any())).thenReturn("Here is your server.");
+
+        var result = this.service.synthesize(workflowWithTasks(task));
+
+        assertThat(result).isEqualTo("Here is your server.");
     }
 }

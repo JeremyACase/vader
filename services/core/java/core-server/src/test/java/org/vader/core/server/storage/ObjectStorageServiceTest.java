@@ -9,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -105,5 +107,29 @@ class ObjectStorageServiceTest {
         assertThat(stored.getTaskAttempt()).isSameAs(attempt);
         assertThat(descriptor.id()).isEqualTo(ID);
         assertThat(descriptor.filename()).isEqualTo("diagram.png");
+    }
+
+    @Test
+    void describeTaskAttemptOutputs_describesEveryUploadWithoutTouchingTheStrategy() {
+        when(this.repository.findByTaskAttemptIdOrderByCreatedAtAsc("attempt-1"))
+            .thenReturn(List.of(metadata()));
+
+        var descriptors = this.service.describeTaskAttemptOutputs("attempt-1");
+
+        assertThat(descriptors).singleElement().satisfies(descriptor -> {
+            assertThat(descriptor.id()).isEqualTo(ID);
+            assertThat(descriptor.filename()).isEqualTo("diagram.png");
+        });
+        verifyNoInteractions(this.storageStrategy);
+    }
+
+    @Test
+    void retrieveText_decodesTheContentAsUtf8() {
+        var entity = metadata();
+        when(this.repository.findById(ID)).thenReturn(Optional.of(entity));
+        when(this.storageStrategy.retrieve(entity)).thenReturn(
+            new ByteArrayResource("print('héllo')".getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(this.service.retrieveText(ID)).isEqualTo("print('héllo')");
     }
 }

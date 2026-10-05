@@ -10,12 +10,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.library.implementation.service.mapper.ClientPromptDtoMapper;
 import org.vader.common.library.implementation.service.mapper.TaskPlanDtoToEntityMapper;
+import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.intake.ClientPromptRepository;
+import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.workflow.TaskUpdateService;
 import org.vader.core.server.workflow.WorkflowDecomposedEvent;
 import org.vader.core.server.workflow.WorkflowRepository;
@@ -69,7 +71,8 @@ public class OrchestratorAgentService {
 
         var clientPrompt = this.clientPromptRepository.findById(clientPromptId).orElseThrow();
         var promptDto = this.clientPromptDtoMapper.map(clientPrompt);
-        var taskPlanDto = this.taskPlanRefinementService.refine(promptDto);
+        var taskPlanDto = this.taskPlanRefinementService.refine(
+            promptDto, attachedFilesOf(clientPrompt));
 
         var workflow = new WorkflowEntity();
         workflow.setClientPrompt(clientPrompt);
@@ -87,6 +90,12 @@ public class OrchestratorAgentService {
         this.recordTaskCreatedUpdates(saved.getTaskPlan().getTaskGraph().getTasks());
         this.eventPublishingFacade.publish(new WorkflowDecomposedEvent(saved.getId()));
         return saved;
+    }
+
+    private static List<AttachedFile> attachedFilesOf(final ClientPromptEntity clientPrompt) {
+        return clientPrompt.getFiles().stream()
+            .map(file -> new AttachedFile(file.getOriginalFilename(), file.getContentType()))
+            .toList();
     }
 
     /**

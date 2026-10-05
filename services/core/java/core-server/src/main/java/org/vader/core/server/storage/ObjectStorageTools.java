@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Base64;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,9 +31,6 @@ import org.vader.core.server.storage.model.EncodedObjectContent;
     havingValue = "true",
     matchIfMissing = true)
 public class ObjectStorageTools {
-
-    private static final Set<String> ADDITIONAL_TEXT_CONTENT_TYPES = Set.of(
-        "application/json", "application/xml", "application/x-yaml", "application/yaml");
 
     @Autowired
     private ObjectStorageService objectStorageService;
@@ -78,7 +74,7 @@ public class ObjectStorageTools {
     private Object fetchOrReject(final String objectMetadataId) {
         var descriptor = this.objectStorageService.describe(objectMetadataId);
         Object result;
-        if (!isTextContentType(descriptor.contentType())) {
+        if (!ObjectContentTypeResolver.isText(descriptor.contentType())) {
             result = Map.of(
                 "error", "'" + descriptor.filename() + "' has content type '"
                     + descriptor.contentType() + "', which get_object_content refuses to inline "
@@ -99,12 +95,6 @@ public class ObjectStorageTools {
                 base64Of(content.resource()));
         }
         return result;
-    }
-
-    private static boolean isTextContentType(final String contentType) {
-        return contentType != null
-            && (contentType.startsWith("text/")
-                || ADDITIONAL_TEXT_CONTENT_TYPES.contains(contentType));
     }
 
     private String base64Of(final Resource resource) {

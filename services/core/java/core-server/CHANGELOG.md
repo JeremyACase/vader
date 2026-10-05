@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0]
+### Added
+- Workflows now hand files back to the user. A request for a script, report or document is
+  planned to end with the file saved to object storage, preferring the standard library over
+  installing packages, and the final answer shows small text files in full for copy/paste and
+  lists every uploaded file with its download path.
+### Fixed
+- Plans are carried out and judged more faithfully. A decomposed task now waits for its subtasks
+  instead of completing at once; agents and the evaluator see the whole plan, so each attempt is
+  done and judged on its own task's share; and the planner knows which files are attached and
+  that its agents can't ask the user anything. Harness inference and tool calls no longer hold a
+  database connection while waiting on the LLM or a sandbox, so long calls can't drain the pool.
+
 ## [0.32.0]
 ### Removed
 - **Fewer tunable knobs.** Internal polling cadences (inbox safety-net drains, LLM queue drain

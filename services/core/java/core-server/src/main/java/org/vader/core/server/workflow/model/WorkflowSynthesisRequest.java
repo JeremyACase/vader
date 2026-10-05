@@ -10,7 +10,11 @@ import java.util.List;
  * @param promptText the original client prompt
  * @param objective the task plan's stated objective
  * @param taskOutcomes every task's contribution, in task-graph order
+ * @param deliveredFiles every file the tasks uploaded for the user, possibly empty
  */
 public record WorkflowSynthesisRequest(
-    String promptText, String objective, List<TaskOutcome> taskOutcomes) {
+    String promptText,
+    String objective,
+    List<TaskOutcome> taskOutcomes,
+    List<DeliveredFile> deliveredFiles) {
 }

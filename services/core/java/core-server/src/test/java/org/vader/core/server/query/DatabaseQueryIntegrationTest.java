@@ -67,7 +67,8 @@ class DatabaseQueryIntegrationTest {
     }
 
     private void submitPrompt() throws Exception {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any())).thenReturn(PLAN);
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
+            .thenReturn(PLAN);
         this.mockMvc.perform(multipart("/vader/core-server/client-prompt")
                 .param("text", "Plan a birthday party"))
             .andExpect(status().isAccepted());

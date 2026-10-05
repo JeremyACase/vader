@@ -5,6 +5,13 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2]
+### Changed
+- The agent is told its task is one step of a plan it can now see, and to leave the rest of the
+  request to the plan's other tasks. A failed tool call outside its task is dropped rather than
+  retried until it works. A task that produces a file for the user is told to upload it, since
+  its sandbox is discarded when the run ends.
+
 ## [0.4.1]
 ### Changed
 - Internal restructuring with no change in behaviour: the crate is now a library behind a thin

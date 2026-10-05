@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.1]
+### Fixed
+- Entity equality now holds between a lazily-loaded proxy and the entity it stands for, so
+  comparing an entity reached through a lazy association no longer silently fails to match.
+
 ## [0.23.0]
 ### Added
 - Queue messages have DTOs, so their lifecycle and payload can be served to clients.

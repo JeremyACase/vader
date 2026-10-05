@@ -1,5 +1,9 @@
 package org.vader.core.server.storage;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +75,42 @@ public class ObjectStorageService {
         var saved = this.repository.save(metadata);
         return new ObjectDescriptor(
             saved.getId(), saved.getOriginalFilename(), saved.getContentType(), saved.getSize());
+    }
+
+    /**
+     * Describes every object one task attempt uploaded, without touching their content.
+     *
+     * @param taskAttemptId the uploading attempt's id
+     * @return each upload's id, filename, content type, and size, oldest first
+     */
+    @Transactional(readOnly = true)
+    public List<ObjectDescriptor> describeTaskAttemptOutputs(final String taskAttemptId) {
+        return this.repository.findByTaskAttemptIdOrderByCreatedAtAsc(taskAttemptId).stream()
+            .map(metadata -> new ObjectDescriptor(
+                metadata.getId(),
+                metadata.getOriginalFilename(),
+                metadata.getContentType(),
+                metadata.getSize()))
+            .toList();
+    }
+
+    /**
+     * Loads a text object's full content as a UTF-8 string. The caller is responsible for
+     * checking the object is text and small enough to hold in memory.
+     *
+     * @param objectMetadataId the {@code ObjectMetadata} id
+     * @return the object's content
+     * @throws ObjectNotFoundException if no object exists with that id
+     * @throws FileStorageException if the content could not be read
+     */
+    @Transactional(readOnly = true)
+    public String retrieveText(final String objectMetadataId) {
+        var resource = this.storageStrategy.retrieve(findOrThrow(objectMetadataId));
+        try (InputStream in = resource.getInputStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new FileStorageException("Could not read object content as text", e);
+        }
     }
 
     private ObjectMetadataEntity findOrThrow(final String objectMetadataId) {

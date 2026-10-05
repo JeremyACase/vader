@@ -32,7 +32,8 @@ import org.vader.core.server.taskagent.model.InferenceTurn;
 class LlmRequestInboxTest {
 
     private static final EvaluationRequest EVALUATION_REQUEST = new EvaluationRequest(
-        "title", "description", TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
+        "user request", "objective", List.of(), "title", "description",
+        TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
