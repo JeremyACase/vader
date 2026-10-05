@@ -46,11 +46,12 @@ class LlmTaskPlanAdapterTest {
     void decompose_sendsPromptAndReturnsSchemaValidTaskPlanJson() throws Exception {
         var requestQueue = mock(LlmRequestQueue.class);
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("Ship onboarding", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("Ship onboarding", List.of(), null)))
             .thenReturn(VALID_PLAN);
 
         var result = this.adapter(requestQueue)
-            .decompose(promptOf("Ship onboarding"), null);
+            .decompose(promptOf("Ship onboarding"), List.of(), null);
 
         var plan = this.objectMapper.readValue(result, TaskPlan.class);
         assertThat(plan.getObjective()).isEqualTo("ship it");
@@ -75,11 +76,12 @@ class LlmTaskPlanAdapterTest {
         var requestQueue = mock(LlmRequestQueue.class);
         var emptyPlan = new LlmTaskPlan("reasoning", "ship it", List.of());
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenReturn(emptyPlan);
 
         assertThatThrownBy(
-            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), null))
+            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null))
             .isInstanceOf(OrchestratorResponseException.class)
             .hasMessageContaining("usable task plan");
     }
@@ -91,11 +93,12 @@ class LlmTaskPlanAdapterTest {
             new LlmTaskPlan.LlmTask("design", "draw it", List.of("build")),
             new LlmTaskPlan.LlmTask("build", "code it", List.of())));
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenReturn(forwardReferencingPlan);
 
         assertThatThrownBy(
-            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), null))
+            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null))
             .isInstanceOf(OrchestratorResponseException.class)
             .hasMessageContaining("invalid dependency");
     }
@@ -106,11 +109,12 @@ class LlmTaskPlanAdapterTest {
         var selfReferencingPlan = new LlmTaskPlan("reasoning", "ship it", List.of(
             new LlmTaskPlan.LlmTask("design", "draw it", List.of("design"))));
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenReturn(selfReferencingPlan);
 
         assertThatThrownBy(
-            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), null))
+            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null))
             .isInstanceOf(OrchestratorResponseException.class)
             .hasMessageContaining("invalid dependency");
     }
@@ -122,11 +126,12 @@ class LlmTaskPlanAdapterTest {
             new LlmTaskPlan.LlmTask("design", "draw it", List.of()),
             new LlmTaskPlan.LlmTask("build", "code it", List.of("gather requirements"))));
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenReturn(unknownTitlePlan);
 
         assertThatThrownBy(
-            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), null))
+            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null))
             .isInstanceOf(OrchestratorResponseException.class)
             .hasMessageContaining("invalid dependency");
     }
@@ -139,11 +144,12 @@ class LlmTaskPlanAdapterTest {
             new LlmTaskPlan.LlmTask("Identify Key Data", "find patterns",
                 List.of("  \"read  spreadsheet\" "))));
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenReturn(looselyReferencedPlan);
 
         var plan = this.objectMapper.readValue(
-            this.adapter(requestQueue).decompose(promptOf("plan a thing"), null),
+            this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null),
             TaskPlan.class);
 
         var read = plan.getTaskGraph().getTasks().get(0);
@@ -158,11 +164,12 @@ class LlmTaskPlanAdapterTest {
             new LlmTaskPlan.LlmTask("design", "draw it", List.of()),
             new LlmTaskPlan.LlmTask("build", "code it", List.of("design", "Design"))));
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenReturn(duplicatedReferencePlan);
 
         var plan = this.objectMapper.readValue(
-            this.adapter(requestQueue).decompose(promptOf("plan a thing"), null),
+            this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null),
             TaskPlan.class);
 
         assertThat(plan.getTaskGraph().getTasks().get(1).getDependsOnTaskIds()).hasSize(1);
@@ -172,12 +179,13 @@ class LlmTaskPlanAdapterTest {
     void decompose_whenModelUnreachable_propagatesOrchestratorUnavailable() {
         var requestQueue = mock(LlmRequestQueue.class);
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenThrow(new OrchestratorUnavailableException(
                 "Could not reach the local LLM.", new IllegalStateException("connection refused")));
 
         assertThatThrownBy(
-            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), null))
+            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null))
             .isInstanceOf(OrchestratorUnavailableException.class)
             .hasMessageContaining("local LLM");
     }
@@ -186,11 +194,12 @@ class LlmTaskPlanAdapterTest {
     void decompose_whenTheQueueThrows_throwsOrchestratorResponse() {
         var requestQueue = mock(LlmRequestQueue.class);
         when(requestQueue.submit(
-            DecompositionLlmExecutor.class, new DecompositionRequest("plan a thing", null)))
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("plan a thing", List.of(), null)))
             .thenThrow(new RuntimeException("boom"));
 
         assertThatThrownBy(
-            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), null))
+            () -> this.adapter(requestQueue).decompose(promptOf("plan a thing"), List.of(), null))
             .isInstanceOf(OrchestratorResponseException.class);
     }
 }

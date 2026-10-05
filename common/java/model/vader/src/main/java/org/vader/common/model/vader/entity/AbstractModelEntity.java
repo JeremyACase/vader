@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Pattern;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.Hibernate;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -74,25 +75,25 @@ public abstract class AbstractModelEntity {
         this.modelType = modelType;
     }
 
+    /**
+     * Hashes on {@link #getId()} alone, through the getter: a Hibernate proxy's own fields are
+     * never populated, and the class is already part of {@link #equals(Object)}.
+     */
     @Override
     public int hashCode() {
-        return Objects.hash(this.id, this.modelType);
+        return Objects.hashCode(this.getId());
     }
 
+    /**
+     * Equal when both are the same entity class and share an id. Compares through
+     * {@link Hibernate#getClass(Object)} and the getters so a lazy proxy equals the entity it
+     * stands for: a proxy is a generated subclass whose own fields stay empty, and a call on one
+     * is forwarded to its target, where {@code this} is no longer the proxy.
+     */
     @Override
     public boolean equals(Object o) {
-
-        if (this == o) {
-            return true;
-        }
-
-        if (Objects.isNull(o) || getClass() != o.getClass()) {
-            return false;
-        }
-        AbstractModelEntity other = (AbstractModelEntity) o;
-
-        return
-            Objects.equals(this.id, other.id)
-                && Objects.equals(this.modelType, other.modelType);
+        var sameClass = Objects.nonNull(o) && Hibernate.getClass(this) == Hibernate.getClass(o);
+        return this == o
+            || sameClass && Objects.equals(this.getId(), ((AbstractModelEntity) o).getId());
     }
 }

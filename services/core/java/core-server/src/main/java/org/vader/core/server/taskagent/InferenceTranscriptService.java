@@ -2,22 +2,29 @@ package org.vader.core.server.taskagent;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.vader.common.model.vader.entity.TaskAttemptEntity;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.vader.common.model.vader.entity.TaskAttemptToolCallEntity;
 import org.vader.common.model.vader.entity.TaskAttemptTranscriptEntity;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.workflow.TaskAttemptRepository;
 
 /**
  * Completes an assignment's inference turns and logs each to the attempt's transcript -- this,
  * not a direct model call, is the only path a harness has to any LLM.
+ *
+ * <p>Not transactional as a whole: the open-attempt check and the transcript write each run in
+ * their own short transaction, and the LLM call between them -- which can wait minutes on the
+ * queue -- holds no transaction or connection. The transcript write uses a
+ * {@link TransactionTemplate} because {@code @Transactional} is bypassed on self-calls.</p>
  */
 @Service
 public class InferenceTranscriptService {
@@ -29,10 +36,23 @@ public class InferenceTranscriptService {
     private InferenceGateway inferenceGateway;
 
     @Autowired
+    private TaskAttemptRepository taskAttemptRepository;
+
+    @Autowired
     private TaskAttemptTranscriptRepository transcriptRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    private TransactionTemplate transaction;
+
+    @PostConstruct
+    void init() {
+        this.transaction = new TransactionTemplate(this.transactionManager);
+    }
 
     /**
      * Completes one inference turn on behalf of an assignment and logs it to the transcript.
@@ -41,12 +61,12 @@ public class InferenceTranscriptService {
      * @param messages the running conversation so far
      * @return the model's response: either a final answer, or a request to call tools
      */
-    @Transactional
     public InferenceTurn recordInferenceTurn(
             final String assignmentId, final List<ConversationMessage> messages) {
-        var attempt = this.lifecycleService.requireOpen(assignmentId);
+        this.lifecycleService.requireOpen(assignmentId);
         var turn = this.inferenceGateway.complete(messages);
-        this.recordTranscript(assignmentId, attempt, messages, turn);
+        this.transaction.executeWithoutResult(
+            status -> this.recordTranscript(assignmentId, messages, turn));
         return turn;
     }
 
@@ -59,8 +79,8 @@ public class InferenceTranscriptService {
      * content, in plaintext, once per remaining turn of the run.
      */
     private void recordTranscript(
-            final String assignmentId, final TaskAttemptEntity attempt,
-            final List<ConversationMessage> messages, final InferenceTurn turn) {
+            final String assignmentId, final List<ConversationMessage> messages,
+            final InferenceTurn turn) {
         var previousMessageCount = this.transcriptRepository
             .findFirstByTaskAttemptIdOrderByTurnIndexDesc(assignmentId)
             .map(TaskAttemptTranscriptEntity::getMessageCount)
@@ -68,7 +88,7 @@ public class InferenceTranscriptService {
         var newMessages = messages.subList(previousMessageCount, messages.size());
 
         var transcript = new TaskAttemptTranscriptEntity();
-        transcript.setTaskAttempt(attempt);
+        transcript.setTaskAttempt(this.taskAttemptRepository.getReferenceById(assignmentId));
         transcript.setTurnIndex((int) this.transcriptRepository.countByTaskAttemptId(assignmentId));
         transcript.setPrompt(this.toJson(newMessages));
         transcript.setMessageCount(messages.size());

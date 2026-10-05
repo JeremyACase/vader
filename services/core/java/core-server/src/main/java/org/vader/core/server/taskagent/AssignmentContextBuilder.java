@@ -11,20 +11,24 @@ import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
+import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 
 /**
  * Composes the background a task's own short description never carries on its own: the
- * original client-submitted request, any files attached to it, the larger task a runtime subtask
- * is one step of, and the results of any prerequisite tasks -- without this, a task like "ensure
- * the report is well-structured" has no way to discover what report, since the planner never
- * restates it in every subtask.
+ * original client-submitted request, any files attached to it, the plan the task is one step of,
+ * the larger task a runtime subtask is one step of, and the results of any prerequisite tasks --
+ * without this, a task like "ensure the report is well-structured" has no way to discover what
+ * report, since the planner never restates it in every subtask.
  */
 @Component
 public class AssignmentContextBuilder {
 
     @Autowired
     private TaskAttemptRepository taskAttemptRepository;
+
+    @Autowired
+    private PlanOutlineBuilder planOutlineBuilder;
 
     // Absent when the Python sandbox operator is disabled; attached files are then described as
     // readable via get_object_content only, rather than as already in a working directory.
@@ -43,6 +47,7 @@ public class AssignmentContextBuilder {
         var sections = Stream.of(
                 requestSection(clientPrompt),
                 this.attachedFilesSection(clientPrompt),
+                this.planSection(task),
                 parentSection(task),
                 this.dependencySection(task))
             .filter(Objects::nonNull)
@@ -52,6 +57,21 @@ public class AssignmentContextBuilder {
 
     private static String requestSection(final ClientPromptEntity clientPrompt) {
         return "Original request from the user:\n" + clientPrompt.getText();
+    }
+
+    /**
+     * The whole plan with this task marked. The request alone reads as this task's to-do list:
+     * an agent given "analyze it, then decide if it can be reformatted" will start reformatting
+     * in the analysis step unless it can see that another task owns that.
+     */
+    private String planSection(final TaskEntity task) {
+        var lines = this.planOutlineBuilder.build(task).stream()
+            .map(step -> step.outlineLine("your task"))
+            .toList();
+        return "The plan for that request -- every task in this workflow, in the order they run. "
+            + "Do only your own task, marked below. The other tasks are handled separately, so "
+            + "leave their work to them, and do nothing the request does not ask for.\n"
+            + String.join("\n", lines);
     }
 
     /**

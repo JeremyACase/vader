@@ -26,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.mcp.AgentToolAudience;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.mcp.ToolAudienceTag;
+import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 
 class DecompositionLlmExecutorTest {
@@ -61,7 +62,7 @@ class DecompositionLlmExecutorTest {
     }
 
     private static DecompositionRequest request(final String clientPromptText) {
-        return new DecompositionRequest(clientPromptText, null);
+        return new DecompositionRequest(clientPromptText, List.of(), null);
     }
 
     private static Prompt capturedPrompt(final ChatModel chatModel) {
@@ -117,7 +118,7 @@ class DecompositionLlmExecutorTest {
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         executor(ChatClient.builder(chatModel)).execute(new DecompositionRequest(
-            "Analyze this spreadsheet", "the tasks are redundant"));
+            "Analyze this spreadsheet", List.of(), "the tasks are redundant"));
 
         var prompt = capturedPrompt(chatModel);
         // Spring AI's entity() appends its own JSON-format instructions after the user's text;
@@ -128,6 +129,52 @@ class DecompositionLlmExecutorTest {
         assertThat(prompt.getSystemMessage().getText())
             .contains("the tasks are redundant")
             .contains("do not quote, restate, or respond to this feedback");
+    }
+
+    @Test
+    void execute_withAttachedFiles_namesThemInTheInstructionsAndKeepsUserTextIntact() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+
+        executor(ChatClient.builder(chatModel)).execute(new DecompositionRequest(
+            "Analyze this spreadsheet",
+            List.of(new AttachedFile("Finances.xlsx", "application/vnd.ms-excel")), null));
+
+        var prompt = capturedPrompt(chatModel);
+        assertThat(prompt.getUserMessage().getText())
+            .startsWith("Analyze this spreadsheet")
+            .doesNotContain("Finances.xlsx");
+        assertThat(prompt.getSystemMessage().getText())
+            .contains("- \"Finances.xlsx\" (type: application/vnd.ms-excel)")
+            .contains("You cannot see their contents");
+    }
+
+    @Test
+    void execute_withoutAttachedFiles_sendsNoAttachedFilesSection() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+
+        executor(ChatClient.builder(chatModel)).execute(request("Plan a party"));
+
+        assertThat(capturedPrompt(chatModel).getSystemMessage().getText())
+            .doesNotContain("The user attached these files")
+            .contains("No agent can ask the user anything");
+    }
+
+    @Test
+    void execute_tellsThePlannerToEndWithAnUploadedDeliverable() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
+
+        executor(ChatClient.builder(chatModel)).execute(request("Write me a script"));
+
+        assertThat(capturedPrompt(chatModel).getSystemMessage().getText())
+            .contains("upload_object")
+            .contains("do not carry over between tasks")
+            .contains("standard library");
     }
 
     @Test

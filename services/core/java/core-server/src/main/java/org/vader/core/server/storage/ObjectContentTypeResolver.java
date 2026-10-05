@@ -3,6 +3,7 @@ package org.vader.core.server.storage;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.util.StringUtils;
@@ -15,14 +16,21 @@ import org.springframework.util.StringUtils;
  * filled in here; without them a Markdown report would be recorded as
  * {@code application/octet-stream}, which {@code get_object_content} then refuses to read back as
  * text.</p>
+ *
+ * <p>Also the one definition of which content types count as text, so the MCP read tool and the
+ * workflow's final answer agree on what may be inlined.</p>
  */
 public final class ObjectContentTypeResolver {
 
     private static final Map<String, String> MISSING_FROM_SPRING = Map.of(
         "md", "text/markdown",
         "markdown", "text/markdown",
+        "py", "text/x-python",
         "yaml", "application/yaml",
         "yml", "application/yaml");
+
+    private static final Set<String> ADDITIONAL_TEXT_CONTENT_TYPES = Set.of(
+        "application/json", "application/xml", "application/x-yaml", "application/yaml");
 
     private ObjectContentTypeResolver() {
     }
@@ -40,5 +48,17 @@ public final class ObjectContentTypeResolver {
         return Optional.ofNullable(MISSING_FROM_SPRING.get(extension))
             .or(() -> MediaTypeFactory.getMediaType(filename).map(MediaType::toString))
             .orElse(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+    }
+
+    /**
+     * Whether a content type is text, and so safe to inline as a string.
+     *
+     * @param contentType the stored MIME type, possibly {@code null}
+     * @return {@code true} for any {@code text/*} type or a known text-based application type
+     */
+    public static boolean isText(final String contentType) {
+        return contentType != null
+            && (contentType.startsWith("text/")
+                || ADDITIONAL_TEXT_CONTENT_TYPES.contains(contentType));
     }
 }

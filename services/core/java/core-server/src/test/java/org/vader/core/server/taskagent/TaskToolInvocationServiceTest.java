@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.vader.common.model.vader.entity.TaskAttemptToolCallEntity;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.workflow.TaskAttemptRepository;
@@ -29,6 +31,7 @@ class TaskToolInvocationServiceTest {
     private TaskAttemptRepository taskAttemptRepository;
     private TaskAttemptToolCallRepository toolCallRepository;
     private McpToolCallbackRegistry toolCallbackRegistry;
+    private PlatformTransactionManager transactionManager;
     private TaskAttemptLifecycleService lifecycleService;
     private TaskToolInvocationService service;
 
@@ -37,6 +40,7 @@ class TaskToolInvocationServiceTest {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
         this.toolCallRepository = mock(TaskAttemptToolCallRepository.class);
         this.toolCallbackRegistry = mock(McpToolCallbackRegistry.class);
+        this.transactionManager = mock(PlatformTransactionManager.class);
         this.lifecycleService = new TaskAttemptLifecycleService();
         ReflectionTestUtils.setField(
             this.lifecycleService, "taskAttemptRepository", this.taskAttemptRepository);
@@ -46,9 +50,32 @@ class TaskToolInvocationServiceTest {
         ReflectionTestUtils.setField(
             this.service, "toolCallbackRegistry", this.toolCallbackRegistry);
         ReflectionTestUtils.setField(
-            this.service, "toolCallInvocationBoundary", new ToolCallInvocationBoundary());
+            this.service, "taskAttemptRepository", this.taskAttemptRepository);
         ReflectionTestUtils.setField(this.service, "toolCallRepository", this.toolCallRepository);
         ReflectionTestUtils.setField(this.service, "objectMapper", new ObjectMapper());
+        ReflectionTestUtils.setField(
+            this.service, "transactionManager", this.transactionManager);
+        this.service.init();
+    }
+
+    @Test
+    void invokeTool_runsTheToolBetweenItsTwoShortTransactionsRatherThanInsideOne() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var toolCallback = mock(ToolCallback.class);
+        when(toolCallback.call(anyString(), any(ToolContext.class))).thenReturn("{}");
+        when(this.toolCallbackRegistry.findByName("run_python_code"))
+            .thenReturn(Optional.of(toolCallback));
+
+        this.service.invokeTool(ATTEMPT_ID, "call-1", "run_python_code", "{\"code\":\"pass\"}");
+
+        var order = inOrder(this.transactionManager, toolCallback, this.toolCallRepository);
+        order.verify(this.transactionManager).getTransaction(any());
+        order.verify(this.transactionManager).commit(any());
+        order.verify(toolCallback).call(anyString(), any(ToolContext.class));
+        order.verify(this.transactionManager).getTransaction(any());
+        order.verify(this.toolCallRepository).save(any());
+        order.verify(this.transactionManager).commit(any());
     }
 
     @Test
@@ -94,6 +121,7 @@ class TaskToolInvocationServiceTest {
             .thenReturn("{\"content\":\"...\"}");
         when(this.toolCallbackRegistry.findByName("get_object_content"))
             .thenReturn(Optional.of(toolCallback));
+        when(this.taskAttemptRepository.getReferenceById(ATTEMPT_ID)).thenReturn(attempt);
 
         this.service.invokeTool(ATTEMPT_ID, "call-1", "get_object_content", "{\"id\":\"abc\"}");
 

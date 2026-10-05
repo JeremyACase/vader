@@ -86,7 +86,8 @@ class ClientPromptControllerIntegrationTest {
 
     @Test
     void postClientPrompt_enqueuesPendingMessageThatInboxDecomposes() throws Exception {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any())).thenReturn(VALID_PLAN);
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
+            .thenReturn(VALID_PLAN);
 
         var promptId = postPrompt("Help me ship onboarding");
 
@@ -111,7 +112,7 @@ class ClientPromptControllerIntegrationTest {
     @Test
     void postClientPrompt_whenLlmResponseFailsSchema_marksTheMessageFailedAndBuildsNoWorkflow()
         throws Exception {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any()))
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
             .thenReturn("{\"objective\":\"no task graph\"}");
 
         var promptId = postPrompt("whatever");

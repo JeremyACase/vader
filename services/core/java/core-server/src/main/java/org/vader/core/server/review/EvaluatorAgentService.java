@@ -12,6 +12,7 @@ import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.EvaluationVerdict;
+import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskUpdateRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
@@ -51,6 +52,9 @@ public class EvaluatorAgentService {
     @Autowired
     private TaskDecompositionSaga taskDecompositionSaga;
 
+    @Autowired
+    private PlanOutlineBuilder planOutlineBuilder;
+
     /**
      * Evaluates one settled attempt and records the verdict as a {@link TaskUpdateEntity}.
      *
@@ -86,10 +90,21 @@ public class EvaluatorAgentService {
     private EvaluationRequest requestFor(
             final String taskTitle, final String taskDescription,
             final TaskAttemptEntity attempt) {
+        var task = attempt.getTask();
         return new EvaluationRequest(
-            taskTitle, taskDescription, attempt.getStatus(), attempt.getResult(),
-            attempt.getFailureReason(), this.priorUpdateDescriptions(attempt.getTask().getId()),
+            userRequestOf(task), planObjectiveOf(task), this.planOutlineBuilder.build(task),
+            taskTitle, taskDescription, attempt.getStatus(),
+            attempt.getResult(), attempt.getFailureReason(),
+            this.priorUpdateDescriptions(attempt.getTask().getId()),
             this.toolCallEvidenceAdapter.lastToolCallEvidence(attempt.getId()));
+    }
+
+    private static String planObjectiveOf(final TaskEntity task) {
+        return task.owningTaskGraph().getTaskPlan().getObjective();
+    }
+
+    private static String userRequestOf(final TaskEntity task) {
+        return task.owningTaskGraph().getTaskPlan().getWorkflow().getClientPrompt().getText();
     }
 
     private List<String> priorUpdateDescriptions(final String taskId) {

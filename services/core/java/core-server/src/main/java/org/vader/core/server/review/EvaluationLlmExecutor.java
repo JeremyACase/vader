@@ -1,6 +1,8 @@
 package org.vader.core.server.review;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -11,6 +13,7 @@ import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.EvaluationVerdict;
+import org.vader.core.server.workflow.model.PlanStep;
 
 /**
  * Asks the chat model to independently judge one settled attempt, via Spring AI's
@@ -39,10 +42,22 @@ public class EvaluationLlmExecutor
         reason if it claimed failure), and any prior updates already recorded against this task,
         then decide for yourself: did this attempt actually accomplish the task?
 
+        The task is one step of a plan for the user's request. The request and the whole plan
+        are shown below, with the task under review marked. Judge the attempt only on this task's
+        own share of the request: work that another task in the plan covers is not missing from
+        this one, even when the request mentions it. If the user asked whether something can be
+        done, establishing that it can is enough, and doing it is out of scope. Never list
+        remaining work that another task already covers, or that the user did not ask for.
+
         Set `passed` to true only if the reported result genuinely satisfies the task. A result
         that describes work instead of reporting it has NOT passed: code the agent shows but never
         ran, a plan for what it will do next ("let's proceed", "next I will"), or a confident
-        answer written right after its last tool call failed. Explain your reasoning in
+        answer that rests on a tool call that failed. Judge a failed tool call by what it was
+        for. If it was doing this task's own work, that work is not done. If it was attempting
+        something outside this task's share -- work another task owns, or that the user did not
+        ask for -- ignore it, and judge whether the result reports this task's own work, backed by
+        calls that succeeded. Never list fixing out-of-scope work as remaining work. Explain your
+        reasoning in
         `reasoning` -- this is recorded as the durable audit trail for this task, so be specific
         about what you checked and why you reached your conclusion.
 
@@ -78,6 +93,12 @@ public class EvaluationLlmExecutor
             .entity(EvaluationVerdict.class);
     }
 
+    private static String outlineOf(final List<PlanStep> planSteps) {
+        return planSteps.stream()
+            .map(step -> step.outlineLine("the task under review"))
+            .collect(Collectors.joining("\n"));
+    }
+
     private String userPromptFor(final EvaluationRequest request) {
         var reported = request.attemptStatus() == TaskAttemptStatus.SUCCEEDED
             ? "The agent reported SUCCESS with this result:\n" + request.attemptResult()
@@ -89,7 +110,12 @@ public class EvaluationLlmExecutor
             request.lastToolCallEvidence(), "The agent made no tool calls.");
 
         return """
-            Task: %s
+            The user's request: %s
+
+            The plan for that request, in the order its tasks run (objective: %s):
+            %s
+
+            Task under review: %s
 
             Description: %s
 
@@ -101,6 +127,7 @@ public class EvaluationLlmExecutor
             Prior updates already recorded against this task:
             %s
             """.formatted(
+                request.userRequest(), request.planObjective(), outlineOf(request.planSteps()),
                 request.taskTitle(), request.taskDescription(), reported, toolEvidence,
                 priorUpdates);
     }

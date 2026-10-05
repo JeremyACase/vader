@@ -1,6 +1,6 @@
 [package]
 name = "vader-core-agent-harness"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 # Native `async fn` in traits (no `async-trait` crate) has been stable since 1.75.
 rust-version = "1.75"

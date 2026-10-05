@@ -1,5 +1,6 @@
 package org.vader.core.server.orchestration;
 
+import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.llm.LlmRequestQueue;
+import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementRequest;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementVerdict;
 
@@ -46,15 +48,16 @@ public class TaskPlanRefinementService {
      * substituting anything.
      *
      * @param promptDto the original client prompt
+     * @param attachedFiles the files attached to the prompt, by name and type only
      * @return the task plan to persist
      */
-    public TaskPlan refine(final ClientPrompt promptDto) {
-        var taskPlanDto = this.decompose(promptDto, null);
+    public TaskPlan refine(final ClientPrompt promptDto, final List<AttachedFile> attachedFiles) {
+        var taskPlanDto = this.decompose(promptDto, attachedFiles, null);
         var revision = 0;
         var problem = this.reviewAndPatch(promptDto, taskPlanDto);
         while (Objects.nonNull(problem) && revision < this.maxTaskPlanRevisions) {
             revision++;
-            taskPlanDto = this.decompose(promptDto, problem);
+            taskPlanDto = this.decompose(promptDto, attachedFiles, problem);
             problem = this.reviewAndPatch(promptDto, taskPlanDto);
         }
         if (Objects.nonNull(problem)) {
@@ -66,9 +69,11 @@ public class TaskPlanRefinementService {
         return taskPlanDto;
     }
 
-    private TaskPlan decompose(final ClientPrompt promptDto, final String revisionGuidance) {
+    private TaskPlan decompose(
+            final ClientPrompt promptDto, final List<AttachedFile> attachedFiles,
+            final String revisionGuidance) {
         return this.schemaValidator.parseAndValidate(
-            this.taskPlanAdapter.decompose(promptDto, revisionGuidance));
+            this.taskPlanAdapter.decompose(promptDto, attachedFiles, revisionGuidance));
     }
 
     /**

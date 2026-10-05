@@ -1,6 +1,8 @@
 package org.vader.core.server.taskagent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.vader.common.model.vader.entity.TaskAttemptTranscriptEntity;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
@@ -27,6 +30,7 @@ class InferenceTranscriptServiceTest {
     private TaskAttemptRepository taskAttemptRepository;
     private TaskAttemptTranscriptRepository transcriptRepository;
     private InferenceGateway inferenceGateway;
+    private PlatformTransactionManager transactionManager;
     private TaskAttemptLifecycleService lifecycleService;
     private InferenceTranscriptService service;
 
@@ -35,6 +39,7 @@ class InferenceTranscriptServiceTest {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
         this.transcriptRepository = mock(TaskAttemptTranscriptRepository.class);
         this.inferenceGateway = mock(InferenceGateway.class);
+        this.transactionManager = mock(PlatformTransactionManager.class);
         this.lifecycleService = new TaskAttemptLifecycleService();
         ReflectionTestUtils.setField(
             this.lifecycleService, "taskAttemptRepository", this.taskAttemptRepository);
@@ -45,6 +50,30 @@ class InferenceTranscriptServiceTest {
         ReflectionTestUtils.setField(
             this.service, "transcriptRepository", this.transcriptRepository);
         ReflectionTestUtils.setField(this.service, "objectMapper", new ObjectMapper());
+        ReflectionTestUtils.setField(
+            this.service, "taskAttemptRepository", this.taskAttemptRepository);
+        ReflectionTestUtils.setField(
+            this.service, "transactionManager", this.transactionManager);
+        this.service.init();
+    }
+
+    @Test
+    void recordInferenceTurn_opensTheTranscriptTransactionOnlyAfterTheLlmCallReturns() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var messages = List.of(
+            new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
+        when(this.inferenceGateway.complete(messages))
+            .thenReturn(new InferenceTurn("hello", List.of(), 5L, "stop"));
+
+        this.service.recordInferenceTurn(ATTEMPT_ID, messages);
+
+        var order = inOrder(this.inferenceGateway, this.transactionManager,
+            this.transcriptRepository);
+        order.verify(this.inferenceGateway).complete(messages);
+        order.verify(this.transactionManager).getTransaction(any());
+        order.verify(this.transcriptRepository).save(any());
+        order.verify(this.transactionManager).commit(any());
     }
 
     @Test

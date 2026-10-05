@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0]
+### Added
+- **Vader returns files.** Asking for code, a report or a document now ends with the file saved
+  to object storage, and the workflow's final answer shows small text files in full for
+  copy/paste and lists every uploaded file with its download path.
+### Fixed
+- **Workflows follow their plan more faithfully.** Decomposed tasks wait for their subtasks,
+  agents and the evaluator work from the whole plan rather than the bare request, and the planner
+  knows about attached files. Long model calls and code runs no longer tie up database
+  connections. No chart values changed.
+
 ## [0.21.0]
 ### Removed
 - **The chart exposes fewer knobs.** Values that only tuned internal timings or duplicated

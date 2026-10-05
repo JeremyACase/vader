@@ -1,11 +1,13 @@
 package org.vader.core.server.sandbox;
 
+import jakarta.annotation.PostConstruct;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
@@ -36,6 +38,11 @@ import org.vader.core.server.workflow.TaskAttemptRepository;
  * the attempt that produced it and outlives the sandbox.</p>
  *
  * <p>Deletion happens on settlement ({@code TaskAttemptSandboxCleanupListener}), not here.</p>
+ *
+ * <p>Neither operation is transactional as a whole, since each blocks on the sandbox over the
+ * network: only the database reads and the object-storage write run in transactions, each short.
+ * Resolving the attached files walks lazy associations, so it runs in a
+ * {@link TransactionTemplate} -- {@code @Transactional} is bypassed on self-calls.</p>
  */
 @Service
 @ConditionalOnProperty(
@@ -55,6 +62,16 @@ public class TaskAttemptSandboxService {
     @Autowired
     private ObjectStorageService objectStorageService;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    private TransactionTemplate transaction;
+
+    @PostConstruct
+    void init() {
+        this.transaction = new TransactionTemplate(this.transactionManager);
+    }
+
     /**
      * Runs code in the calling attempt's own sandbox, provisioning it and staging the request's
      * attached files first if needed.
@@ -64,10 +81,10 @@ public class TaskAttemptSandboxService {
      * @return the run's stdout/stderr/exit code
      * @throws SandboxExecutionException if the sandbox never became ready, or is unreachable
      */
-    @Transactional
     public SandboxExecutionResult runCode(final String taskAttemptId, final String code) {
         var sandboxName = TaskAttemptSandboxNaming.resolve(taskAttemptId);
-        var workspaceFiles = this.workspaceFilesFor(taskAttemptId);
+        var workspaceFiles = this.transaction.execute(
+            status -> this.workspaceFilesFor(taskAttemptId));
         this.requireReady(sandboxName);
         workspaceFiles.forEach(file -> this.sandboxService.stageObjectIfAbsent(
             sandboxName, file.objectMetadataId(), file.filename()));
@@ -84,7 +101,6 @@ public class TaskAttemptSandboxService {
      * @return the stored object's id, filename, content type, and size
      * @throws SandboxExecutionException if there is no such file, or the sandbox is unreachable
      */
-    @Transactional
     public ObjectDescriptor uploadFile(final String taskAttemptId, final String filename) {
         var attempt = this.requireAttempt(taskAttemptId);
         var bytes = this.sandboxService.fetchFile(

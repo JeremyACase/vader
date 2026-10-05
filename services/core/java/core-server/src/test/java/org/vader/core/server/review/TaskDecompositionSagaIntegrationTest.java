@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import jakarta.persistence.EntityManager;
 import java.util.List;
+import org.hibernate.proxy.HibernateProxy;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -79,7 +80,8 @@ class TaskDecompositionSagaIntegrationTest {
     private EntityManager entityManager;
 
     private TaskAttemptEntity decomposableAttempt() {
-        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any())).thenReturn(PLAN);
+        when(this.taskPlanAdapter.decompose(any(ClientPrompt.class), any(), any()))
+            .thenReturn(PLAN);
         when(this.requestQueue.submit(eq(TaskPlanRefinementLlmExecutor.class), any()))
             .thenReturn(new TaskPlanRefinementVerdict(false, "approved"));
         var prompt = new ClientPromptEntity();
@@ -135,6 +137,32 @@ class TaskDecompositionSagaIntegrationTest {
         assertThat(this.taskUpdateRepository.findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(
                 attempt.getId(), List.of(TaskUpdateType.DECOMPOSED)))
             .isPresent();
+    }
+
+    /**
+     * Loads in the scheduler's order: the parent task's subtasks first, which leaves each
+     * {@code spawnedByAttempt} a lazy proxy, then the attempt itself, which the persistence
+     * context hands back as that same proxy.
+     */
+    @Test
+    void subtasksOf_findsTheSubtasksWhenTheAttemptIsLazilyProxied() {
+        var attempt = this.decomposableAttempt();
+        this.saga.decompose(attempt, List.of(
+            new RemainingSubtask("Run the fix", "Run the corrected cleaning code."),
+            new RemainingSubtask("Verify", "Confirm no missing values remain.")),
+            "code never ran");
+        var taskId = attempt.getTask().getId();
+        this.entityManager.flush();
+        this.entityManager.clear();
+
+        var task = this.taskRepository.findById(taskId).orElseThrow();
+        task.getSubTasks().forEach(TaskEntity::getSpawnedByAttempt);
+        var proxiedAttempt = this.taskAttemptRepository
+            .findFirstByTaskIdOrderByAttemptNumberDesc(taskId).orElseThrow();
+
+        assertThat(proxiedAttempt).isInstanceOf(HibernateProxy.class);
+        assertThat(this.saga.subtasksOf(proxiedAttempt)).extracting(TaskEntity::getTitle)
+            .containsExactly("Run the fix", "Verify");
     }
 
     @Test

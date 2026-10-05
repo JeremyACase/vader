@@ -30,7 +30,10 @@ final class TaskAttemptObjectMother {
         var taskGraph = new TaskGraphEntity();
         taskGraph.setTaskPlan(taskPlan);
         var task = new TaskEntity();
+        task.setTitle("Book a venue");
+        task.setDescription("Find somewhere to hold the party.");
         task.setTaskGraph(taskGraph);
+        taskGraph.getTasks().add(task);
 
         var attempt = new TaskAttemptEntity();
         attempt.setId(ATTEMPT_ID);

@@ -14,6 +14,7 @@ import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
+import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 
 class AssignmentContextBuilderTest {
@@ -29,6 +30,7 @@ class AssignmentContextBuilderTest {
         this.builder = new AssignmentContextBuilder();
         ReflectionTestUtils.setField(
             this.builder, "taskAttemptRepository", this.taskAttemptRepository);
+        ReflectionTestUtils.setField(this.builder, "planOutlineBuilder", new PlanOutlineBuilder());
     }
 
     private static TaskAttemptEntity attemptWithAttachedFile(final String originalFilename) {
@@ -52,6 +54,25 @@ class AssignmentContextBuilderTest {
 
         assertThat(context)
             .contains("Analyze the uploaded spreadsheet and write a report.");
+    }
+
+    @Test
+    void build_outlinesThePlanAndMarksThisTaskAsTheOnlyOneToDo() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        var task = attempt.getTask();
+        var invite = new TaskEntity();
+        invite.setTitle("Send invitations");
+        invite.setDescription("Invite the guests.");
+        invite.getDependsOn().add(task);
+        invite.setTaskGraph(task.getTaskGraph());
+        task.getTaskGraph().getTasks().add(invite);
+
+        var context = this.builder.build(task);
+
+        assertThat(context)
+            .contains("Do only your own task")
+            .contains("- Book a venue: Find somewhere to hold the party.   <-- your task\n"
+                + "- Send invitations: Invite the guests.");
     }
 
     @Test

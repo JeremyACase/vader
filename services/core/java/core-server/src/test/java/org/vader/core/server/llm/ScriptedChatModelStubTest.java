@@ -63,7 +63,8 @@ class ScriptedChatModelStubTest {
 
     private static EvaluationRequest evaluationOf(final TaskAttemptStatus status) {
         return new EvaluationRequest(
-            "title", "description", status, "result", "reason", List.of(), null);
+            "user request", "objective", List.of(), "title", "description", status, "result",
+            "reason", List.of(), null);
     }
 
     private static ConversationMessage message(final ConversationRole role, final String content) {
@@ -74,7 +75,7 @@ class ScriptedChatModelStubTest {
     void decomposition_parsesIntoTheFourTaskBirthdayPlan() {
         var executor = this.wiredWithTools(new DecompositionLlmExecutor());
 
-        var plan = executor.execute(new DecompositionRequest("anything at all", null));
+        var plan = executor.execute(new DecompositionRequest("anything at all", List.of(), null));
 
         assertThat(plan.objective()).contains("birthday party");
         assertThat(plan.tasks()).hasSize(4)
@@ -133,7 +134,8 @@ class ScriptedChatModelStubTest {
         var executor = this.wired(new WorkflowSynthesisLlmExecutor());
 
         var answer = executor.execute(new WorkflowSynthesisRequest(
-            "a party", "throw a party", List.of(new TaskOutcome("Book venue", true, "Booked."))));
+            "a party", "throw a party", List.of(new TaskOutcome("Book venue", true, "Booked.")),
+            List.of()));
 
         assertThat(answer).contains("Scripted synthesis");
     }
@@ -169,7 +171,7 @@ class ScriptedChatModelStubTest {
         var executor = this.wiredWithTools(new DecompositionLlmExecutor());
 
         var plan = executor.execute(new DecompositionRequest(
-            "Write a report. " + ScriptedChatModelStub.UPLOAD_SCRIPT_MARKER, null));
+            "Write a report. " + ScriptedChatModelStub.UPLOAD_SCRIPT_MARKER, List.of(), null));
 
         assertThat(plan.tasks()).singleElement()
             .satisfies(task -> assertThat(task.title()).contains("upload"));
