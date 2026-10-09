@@ -52,7 +52,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if ! git show "$BASE_SHA:.github/security/llm-review-prompt.md" > "$RUNNER_TEMP/prompt.md"; then
+          if ! git show "$BASE_SHA:.github/security/llm-review-prompt.md" > "$RUNNER_TEMP/prompt.md" 2>/dev/null; then
             echo "::notice::Review prompt is not on the base branch yet; skipping."
             echo "findings=[]" >> "$GITHUB_OUTPUT"
             exit 0
