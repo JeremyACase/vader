@@ -58,12 +58,19 @@ jobs:
             exit 0
           fi
           git diff "$BASE_SHA"...HEAD > pr.diff
-          claude -p "$(cat "$RUNNER_TEMP/prompt.md")" \
-            --model "$CLAUDE_MODEL" \
-            --allowedTools "Read,Grep,Glob" \
-            --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch" \
-            --max-turns 40 \
-            --output-format json > "$RUNNER_TEMP/raw.json"
+          # Claude Code reports failures (auth, billing, turn limit) inside its JSON output, so
+          # print that output when the run fails rather than exiting silently.
+          if ! claude -p "$(cat "$RUNNER_TEMP/prompt.md")" \
+              --model "$CLAUDE_MODEL" \
+              --allowedTools "Read,Grep,Glob" \
+              --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch" \
+              --max-turns 40 \
+              --output-format json > "$RUNNER_TEMP/raw.json" \
+            || ! jq -e '.is_error | not' "$RUNNER_TEMP/raw.json" > /dev/null; then
+            echo "::error::Claude Code run failed; its output follows."
+            cat "$RUNNER_TEMP/raw.json"
+            exit 1
+          fi
           findings="$(jq -r '.result' "$RUNNER_TEMP/raw.json" | sed '/^```/d' \
             | jq -c '[.[] | select((.path | type) == "string" and (.line | type) == "number"
                                     and (.body | type) == "string")]')"

@@ -11,13 +11,18 @@ output="$2"
 max_turns="$3"
 raw="$(mktemp)"
 
-claude -p "Follow the instructions in ${instructions}." \
-  --model "$CLAUDE_MODEL" \
-  --allowedTools "Read,Grep,Glob" \
-  --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch" \
-  --max-turns "$max_turns" \
-  --output-format json > "$raw"
-
-jq -e '.is_error | not' "$raw" > /dev/null
+# Claude Code reports failures (auth, billing, turn limit) inside its JSON output, so print
+# that output when the run fails rather than exiting silently.
+if ! claude -p "Follow the instructions in ${instructions}." \
+    --model "$CLAUDE_MODEL" \
+    --allowedTools "Read,Grep,Glob" \
+    --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch" \
+    --max-turns "$max_turns" \
+    --output-format json > "$raw" \
+  || ! jq -e '.is_error | not' "$raw" > /dev/null; then
+  echo "::error::Claude Code run failed; its output follows."
+  cat "$raw"
+  exit 1
+fi
 jq -r '.result' "$raw" | sed '/^```/d' > "$output"
 jq -e . "$output" > /dev/null
