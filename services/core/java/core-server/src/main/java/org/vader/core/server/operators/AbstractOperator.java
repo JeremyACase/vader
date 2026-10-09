@@ -9,10 +9,12 @@ import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.Watch;
 import io.fabric8.kubernetes.client.Watcher;
 import io.fabric8.kubernetes.client.WatcherException;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,14 +131,17 @@ public abstract class AbstractOperator<S> implements InterfaceOperator<S> {
     public void delete(final String name) {
         logger.info("Deleting managed resources '{}' for operator '{}'...",
             name, this.operatorName());
-        this.client.apps().deployments()
+        this.deleteIfManaged(this.client.apps().deployments()
             .inNamespace(this.namespace)
-            .withName(name)
-            .delete();
-        this.client.services()
+            .withName(name));
+        this.deleteIfManaged(this.client.services()
             .inNamespace(this.namespace)
-            .withName(name)
-            .delete();
+            .withName(name));
+    }
+
+    @Override
+    public boolean manages(final String name) {
+        return this.isManaged(this.deployment(name));
     }
 
     @Override
@@ -195,6 +200,33 @@ public abstract class AbstractOperator<S> implements InterfaceOperator<S> {
      */
     protected Deployment cachedOwnerDeployment() {
         return this.ownerDeployment;
+    }
+
+    /**
+     * Deletes {@code resource} only if this operator created it. Names come from callers (a REST
+     * path, a model's tool call), so deleting by name alone would let them remove any Deployment,
+     * Service or Job in the namespace -- core-server's own included. Absent or foreign resources
+     * are left alone, so deleting something never created stays a no-op.
+     *
+     * @param resource the named resource to delete
+     */
+    protected void deleteIfManaged(final Resource<? extends HasMetadata> resource) {
+        if (this.isManaged(resource.get())) {
+            resource.delete();
+        }
+    }
+
+    /**
+     * Reports whether {@code resource} exists and carries this operator's label.
+     *
+     * @param resource the resource, or {@code null} if it doesn't exist
+     * @return true if this operator created it
+     */
+    protected boolean isManaged(final HasMetadata resource) {
+        return Objects.nonNull(resource)
+            && this.operatorName().equals(Objects.requireNonNullElse(
+                resource.getMetadata().getLabels(), Map.<String, String>of())
+                .get(OperatorLabels.OPERATOR));
     }
 
     private Deployment deployment(final String name) {

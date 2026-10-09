@@ -1,0 +1,31 @@
+{{- if and .Values.vader.operators.enabled .Values.vader.operators.pythonSandbox.enabled }}
+# Sandbox pods run agent-submitted code. Only core-server may reach their exec server, and the
+# code itself may reach nothing: no core-server (whose REST and MCP endpoints are
+# unauthenticated), no other pods, no internet. core-server calls into the sandbox; the sandbox
+# never needs to call out. Whether this also covers the Kubernetes API server, a host-network
+# endpoint, is up to the CNI; sandbox pods mount no service-account token either way. The
+# operator labels every sandbox pod with the component this selects.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vader-python-sandbox
+  labels:
+    {{- include "vader.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: vader-python-sandbox
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "vader.selectorLabels" . | nindent 14 }}
+              component: vader-core-server
+      ports:
+        - protocol: TCP
+          port: 8888
+  egress: []
+{{- end }}

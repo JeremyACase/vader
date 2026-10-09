@@ -3,6 +3,32 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0]
+### Added
+- **Security scans gate every change.** PRs and pushes to main now run CodeQL, Semgrep, Trivy
+  (dependencies, Dockerfiles and the rendered Helm chart) and gitleaks, and the release pipeline
+  scans each built image before publishing it; PRs also get the build and system tests. A
+  HIGH/CRITICAL finding fails the build unless it's accepted, with a reason, in the Trivy
+  baseline. PRs also get an advisory LLM security review of their diff as inline comments; it
+  never blocks a merge. A nightly LLM audit works through the codebase one threat area at a time
+  (each area weekly), verifies what it finds, and files confirmed vulnerabilities as code-scanning
+  alerts that persist across nights until the code fixes them or a maintainer dismisses them.
+  `helm test` now also plays the attacker -- an outside pod and agent code probing the sandbox
+  boundary, a prompt-injected agent reaching for another task and an unoffered tool, and an
+  OWASP ZAP scan (test configuration only) -- and the published images are re-scanned nightly
+  for newly disclosed CVEs.
+### Security
+- The known dependency CVEs are cleared, mostly by moving core-server to Spring Boot 4 and
+  Spring AI 2. core-server and agent-harness images run as non-root, and the UI and Python
+  sandbox images apply their distribution's security patches at build time. core-server's MCP
+  endpoints only accept allowlisted hosts and browser origins (localhost by default; set
+  `vader.mcp.transportSecurity` for any other host clients use), and the H2 web console is
+  served only in DEV mode. Python sandboxes are now reachable only from core-server and have no
+  network access of their own, so agent code can no longer call core-server's unauthenticated
+  endpoints or install packages; a task agent can only invoke the tools it was offered; the
+  sandbox API can no longer delete or call into workloads it didn't create; and the UI and API
+  send browser-hardening headers.
+
 ## [0.22.0]
 ### Added
 - **Vader returns files.** Asking for code, a report or a document now ends with the file saved

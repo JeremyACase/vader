@@ -1,7 +1,5 @@
 package org.vader.core.server.llm;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.Optional;
@@ -17,6 +15,8 @@ import org.vader.common.model.vader.entity.OutboxMessageStatus;
 import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
 import org.vader.core.server.messaging.OutboxMessageEnqueuedEvent;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Front door for every LLM call: enqueues a durable {@code LlmRequest} message and blocks until
@@ -211,7 +211,7 @@ public class LlmRequestQueue {
     private String toJson(final Object value) {
         try {
             return this.objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new LlmRequestQueueException("Could not serialize LLM request", e);
         }
     }
@@ -219,7 +219,7 @@ public class LlmRequestQueue {
     private <T> T fromJson(final String json, final Class<T> type) {
         try {
             return this.objectMapper.readValue(json, type);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new LlmRequestQueueException("Could not deserialize LLM response", e);
         }
     }

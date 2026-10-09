@@ -11,6 +11,8 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
@@ -48,7 +50,13 @@ class ScriptedChatModelStubTest {
         ReflectionTestUtils.setField(stub, "mode", VaderMode.TEST);
         this.chatClientBuilder = ChatClient.builder(stub);
         this.toolCallbackRegistry = mock(McpToolCallbackRegistry.class);
-        when(this.toolCallbackRegistry.forAudience(any())).thenReturn(List.of());
+        var tool = mock(ToolCallback.class);
+        when(tool.getToolDefinition()).thenReturn(ToolDefinition.builder()
+            .name(ScriptedChatModelStub.SCRIPTED_TOOL_NAME)
+            .description("scripted")
+            .inputSchema("{}")
+            .build());
+        when(this.toolCallbackRegistry.forAudience(any())).thenReturn(List.of(tool));
     }
 
     private <E> E wired(final E executor) {
@@ -199,10 +207,42 @@ class ScriptedChatModelStubTest {
         });
         assertThat(second.toolCalls()).singleElement().satisfies(call -> {
             assertThat(call.name()).isEqualTo("upload_object");
-            assertThat(call.argumentsJson()).contains(ScriptedChatModelStub.UPLOADED_REPORT_FILENAME);
+            assertThat(call.argumentsJson())
+                .contains(ScriptedChatModelStub.UPLOADED_REPORT_FILENAME);
         });
         assertThat(last.content()).isEqualTo(ScriptedChatModelStub.INFERENCE_ANSWER);
         assertThat(last.toolCalls()).isEmpty();
+    }
+
+    @Test
+    void decomposition_ofTheInjectionMarkerPrompt_plansOneTask() {
+        var executor = this.wiredWithTools(new DecompositionLlmExecutor());
+
+        var plan = executor.execute(new DecompositionRequest(
+            "Summarize this. " + ScriptedChatModelStub.INJECTION_SCRIPT_MARKER, List.of(), null));
+
+        assertThat(plan.tasks()).hasSize(1);
+    }
+
+    @Test
+    void inferenceTurn_ofTheInjectionMarkerPrompt_targetsAnotherTaskThenAnUnofferedTool() {
+        var executor = this.wiredWithTools(new InferenceTurnLlmExecutor());
+        var task = message(ConversationRole.USER,
+            "Original request: summarize this. " + ScriptedChatModelStub.INJECTION_SCRIPT_MARKER);
+        var updateResult = new ConversationMessage(
+            ConversationRole.TOOL, "\"Recorded\"", null, "scripted-call-1", "post_task_update");
+
+        var first = executor.execute(List.of(task));
+        var second = executor.execute(List.of(task, updateResult));
+
+        assertThat(first.toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("post_task_update");
+            assertThat(call.argumentsJson()).contains(ScriptedChatModelStub.INJECTED_FOREIGN_ID);
+        });
+        assertThat(second.toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("create_sandbox");
+            assertThat(call.argumentsJson()).contains(ScriptedChatModelStub.INJECTED_SANDBOX_NAME);
+        });
     }
 
     @Test

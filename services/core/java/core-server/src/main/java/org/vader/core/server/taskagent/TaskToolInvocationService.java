@@ -1,8 +1,5 @@
 package org.vader.core.server.taskagent;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -12,13 +9,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.vader.common.model.vader.entity.TaskAttemptToolCallEntity;
+import org.vader.core.server.mcp.AgentToolAudience;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.taskagent.model.ToolCallInvocationResult;
 import org.vader.core.server.workflow.TaskAttemptRepository;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Executes the tool calls a model requests during an assignment's inference turns, scoped to the
- * calling task and written to the tool-call audit trail before the result is returned.
+ * calling task and written to the tool-call audit trail before the result is returned. Only tools
+ * offered to {@link AgentToolAudience#TASK_EXECUTION} can be invoked: the tool name comes from the
+ * model, so a prompt-injected model naming any other registered tool gets an unknown-tool error.
  *
  * <p>Not transactional as a whole: resolving the calling attempt and writing the audit row each
  * run in their own short transaction, and the tool itself -- which can block on a sandbox for
@@ -64,12 +67,12 @@ public class TaskToolInvocationService {
     /**
      * Executes one tool call a model requested, on behalf of an assignment, and writes it to the
      * tool-call audit trail before returning -- so the call survives even if the harness never
-     * calls back again. Uses the same {@link McpToolCallbackRegistry} lookup an MCP client would.
+     * calls back again.
      *
-     * <p>An unknown tool is audited, with the error as its result, before
-     * {@link UnknownToolException} is thrown. A tool that throws becomes an ordinary error result
-     * the model can reason about, not a 500 the harness would mistake for a connectivity failure.
-     * </p>
+     * <p>An unknown tool, including one not offered to a task agent, is audited, with the error
+     * as its result, before {@link UnknownToolException} is thrown. A tool that throws becomes an
+     * ordinary error result the model can reason about, not a 500 the harness would mistake for a
+     * connectivity failure.</p>
      *
      * @param assignmentId the calling harness's assignment id
      * @param toolCallId the id correlating this invocation back to the model's request
@@ -85,7 +88,8 @@ public class TaskToolInvocationService {
 
         var scopedArgumentsJson =
             this.scopedToOwnTask(toolName, argumentsJson, taskId, assignmentId);
-        var toolCallback = this.toolCallbackRegistry.findByName(toolName);
+        var toolCallback =
+            this.toolCallbackRegistry.findByName(AgentToolAudience.TASK_EXECUTION, toolName);
         var resultJson = toolCallback.isPresent()
             ? this.invoke(toolCallback.get(), scopedArgumentsJson, assignmentId)
             : this.toJson(Map.of("error", unknownToolMessage(toolName)));
@@ -128,7 +132,7 @@ public class TaskToolInvocationService {
         try {
             arguments = this.objectMapper.readValue(
                 argumentsJson, new TypeReference<Map<String, Object>>() {});
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Could not scope tool arguments to the calling task",
                 e);
         }
@@ -152,7 +156,7 @@ public class TaskToolInvocationService {
     }
 
     private static String unknownToolMessage(final String toolName) {
-        return "No tool registered with name '" + toolName + "'";
+        return "No tool named '" + toolName + "' is available to a task agent";
     }
 
     private void recordToolCall(
@@ -171,7 +175,7 @@ public class TaskToolInvocationService {
         String result;
         try {
             result = this.objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Could not serialize tool-call content", e);
         }
         return result;

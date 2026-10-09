@@ -1,0 +1,202 @@
+name: Security Audit (LLM)
+
+# Nightly LLM audit of the whole repository, one threat area per night in rotation (one file per
+# area in .github/security/llm-audit/areas). Findings go to the code-scanning tab as category
+# llm-audit/<area>; on a public repo only maintainers can see them there.
+#
+# Each finding is fingerprinted by type, path and sink, so the same issue keeps one alert across
+# nights. Open alerts in the night's area are re-uploaded unless the audit points to the code that
+# now prevents them, so an alert never closes just because a later run missed it, and a failed
+# run uploads nothing. New findings must survive a second, independent verification pass.
+#
+# The job that runs the model holds read-only permissions; a separate job that never runs the
+# model uploads the results.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      area:
+        description: "Area file name without .md (empty: tonight's rotation)"
+        required: false
+        default: ''
+
+permissions: {}
+
+# An explicit `bash` adds pipefail, so a failed alert fetch can't pass as "no previous findings".
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: security-audit
+  cancel-in-progress: false
+
+env:
+  CLAUDE_CODE_VERSION: 2.1.287
+  CLAUDE_MODEL: claude-opus-5-5
+  AUDIT_DIR: .github/security/llm-audit
+  TOOL_NAME: vader-llm-audit
+
+jobs:
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      security-events: read
+    outputs:
+      area: ${{ steps.area.outputs.area }}
+      results: ${{ steps.results.outputs.results }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Claude Code
+        run: npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+
+      - name: Pick area
+        id: area
+        env:
+          REQUESTED: ${{ inputs.area }}
+        run: |
+          area="$REQUESTED"
+          if [ -z "$area" ]; then
+            areas=("$AUDIT_DIR"/areas/*.md)
+            area="$(basename "${areas[$(( $(date -u +%s) / 86400 % ${#areas[@]} ))]}" .md)"
+          fi
+          if [[ ! "$area" =~ ^[a-z0-9-]+$ ]] || [ ! -f "$AUDIT_DIR/areas/$area.md" ]; then
+            echo "::error::Unknown audit area '$area'"
+            exit 1
+          fi
+          echo "Auditing area: $area"
+          echo "area=$area" >> "$GITHUB_OUTPUT"
+
+      # The token is only in this step's environment; the model never sees it.
+      - name: Fetch the area's previous findings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          AREA: ${{ steps.area.outputs.area }}
+        run: |
+          mkdir -p .llm-audit
+          cp "$AUDIT_DIR/prompt.md" "$AUDIT_DIR/verify-prompt.md" .llm-audit/
+          cp "$AUDIT_DIR/areas/$AREA.md" .llm-audit/area.md
+          gh api --paginate "repos/$REPO/code-scanning/alerts?tool_name=$TOOL_NAME&per_page=100" \
+            | jq -s --arg area "$AREA" '[.[][]
+                | .most_recent_instance as $i
+                | select((.state == "open" or .state == "dismissed")
+                         and ($i.category // "" | test("^/?llm-audit/" + $area + "/?$")))
+                | {number, state, rule: .rule.id, level: .rule.severity,
+                   path: $i.location.path, line: $i.location.start_line,
+                   message: $i.message.text,
+                   fingerprint: ([$i.message.text // "" | capture("Fingerprint: `(?<fp>[^`]+)`")]
+                                 | .[0].fp)}]' \
+            > .llm-audit/alerts.json
+          echo "Previous findings: $(jq length .llm-audit/alerts.json)"
+
+      - name: Audit
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          bash "$AUDIT_DIR/run-claude.sh" .llm-audit/prompt.md .llm-audit/audit.json 150
+          jq -e '(.fixed | type) == "array" and (.findings | type) == "array"' .llm-audit/audit.json > /dev/null
+          jq -r '.fixed[] | objects | "Claimed fixed: \(.fingerprint) -- \(.evidence)"' .llm-audit/audit.json
+
+      # Well-formed findings not already reported in this area (open or dismissed).
+      - name: Collect new candidates
+        run: |
+          jq --slurpfile alerts .llm-audit/alerts.json '
+              ($alerts[0] | map(.fingerprint)) as $known
+              | [.findings[]
+                 | select((.type | type) == "string" and (.path | type) == "string"
+                          and (.sink | type) == "string" and (.title | type) == "string"
+                          and (.line | type) == "number" and .line >= 1)
+                 | .type |= (if test("^[a-z-]+$") then . else "other" end)
+                 | .sink |= gsub("`"; "")
+                 | .fingerprint = "\(.type):\(.path):\(.sink)"
+                 | select(.fingerprint as $fp | any($known[]; . == $fp) | not)]
+              | unique_by(.fingerprint)' \
+            .llm-audit/audit.json > .llm-audit/candidates.json
+          echo "New candidates: $(jq length .llm-audit/candidates.json)"
+
+      - name: Verify new candidates
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo '[]' > .llm-audit/verdicts.json
+          if [ "$(jq length .llm-audit/candidates.json)" -gt 0 ]; then
+            bash "$AUDIT_DIR/run-claude.sh" .llm-audit/verify-prompt.md .llm-audit/verdicts.json 100
+          fi
+          jq --slurpfile verdicts .llm-audit/verdicts.json '. as $c
+              | [$verdicts[0][]
+                 | select((.index | type) == "number" and .index >= 0 and .index < ($c | length))
+                 | $c[.index]
+                   + (if (.line | type) == "number" and .line >= 1 then {line} else {} end)]
+              | unique_by(.fingerprint)' \
+            .llm-audit/candidates.json > .llm-audit/confirmed.json
+          echo "Confirmed: $(jq length .llm-audit/confirmed.json)"
+
+      - name: Assemble results
+        id: results
+        run: |
+          results="$(jq -c --slurpfile audit .llm-audit/audit.json \
+              --slurpfile alerts .llm-audit/alerts.json '
+              ($audit[0].fixed | map(.fingerprint?)) as $fixed
+              | {CRITICAL: "error", HIGH: "error", MEDIUM: "warning", LOW: "note"} as $levels
+              | map({ruleId: .type, level: ($levels[.severity // ""] // "warning"),
+                     path, line, fingerprint,
+                     message: "[\(.severity // "MEDIUM")] \(.title)\n\n\(.details // "")\n\nSink: `\(.sink)`\nFingerprint: `\(.fingerprint)`"})
+                + [$alerts[0][]
+                   | select(.state == "open" and .fingerprint != null)
+                   | select(.fingerprint as $fp | any($fixed[]; . == $fp) | not)
+                   | {ruleId: .rule, level, path, line, fingerprint, message}]' \
+            .llm-audit/confirmed.json)"
+          echo "Results to upload: $(jq length <<< "$results")"
+          echo "results=$results" >> "$GITHUB_OUTPUT"
+
+  upload:
+    name: Upload findings
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build SARIF
+        env:
+          RESULTS: ${{ needs.audit.outputs.results }}
+          AREA: ${{ needs.audit.outputs.area }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          jq --arg area "$AREA" --arg tool "$TOOL_NAME" --arg uri "$REPO_URL" '{
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              version: "2.1.0",
+              runs: [{
+                tool: {driver: {name: $tool, informationUri: $uri,
+                  rules: (map(.ruleId) | unique
+                          | map({id: ., name: ., shortDescription: {text: .},
+                                 properties: {tags: ["security"]}}))}},
+                automationDetails: {id: "llm-audit/\($area)/"},
+                results: map({ruleId, level, message: {text: .message},
+                  locations: [{physicalLocation: {artifactLocation: {uri: .path},
+                                                  region: {startLine: .line}}}],
+                  partialFingerprints: {"vaderLlmAudit/v1": .fingerprint}})
+              }]
+            }' <<< "$RESULTS" > llm-audit.sarif
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: llm-audit.sarif

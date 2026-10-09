@@ -1,0 +1,96 @@
+{{- if and .Values.vader.operators.enabled .Values.vader.operators.pythonSandbox.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vader-test-sandbox-isolation
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Adversarial: plays an attacker on both sides of the sandbox NetworkPolicy. This pod has no
+    # special labels, so it stands in for any other workload in the cluster and must not reach a
+    # sandbox's exec server directly. Code running inside the sandbox stands in for a malicious
+    # agent and must not reach core-server or the internet. Probes use IPs (from this pod's
+    # service environment variables), so they test the policy, not DNS. Whether a NetworkPolicy
+    # covers the Kubernetes API server (a host-network endpoint) is up to the CNI, so instead of
+    # probing it the test checks the sandbox has no service-account token to call it with.
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.6.0
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          SERVER="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
+          BASE="$SERVER/vader/core-server/python-sandbox/sandboxes"
+          NAME=""
+
+          cleanup() {
+            [ -n "$NAME" ] && curl -s -o /dev/null --max-time 30 -X DELETE "$BASE/$NAME"
+          }
+          trap cleanup EXIT
+
+          echo "== Health check =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$SERVER/actuator/health" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ health check got $STATUS"; exit 1; }
+          echo "✅ core-server healthy"
+
+          echo "== Create a sandbox through core-server =="
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 30 \
+            -X POST "$BASE" -H "Content-Type: application/json" \
+            -d '{"name":"isolation-probe"}' || true)
+          BODY=$(cat "$BODY_FILE")
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 creating a sandbox, got $STATUS: $BODY"; exit 1; }
+          NAME=$(echo "$BODY" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
+          ADDR=$(echo "$BODY" | sed -n 's/.*"clusterAddress":"\([^"]*\)".*/\1/p')
+          [ -n "$NAME" ] && [ -n "$ADDR" ] || { echo "❌ no name or address in response: $BODY"; exit 1; }
+          echo "✅ created $NAME at $ADDR"
+
+          echo "== Control: core-server can run code in it =="
+          i=0
+          STATUS=000
+          while [ $i -lt 20 ]; do
+            STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+              -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+              -d '{"code":"print(1 + 1)"}' || true)
+            [ "$STATUS" = "200" ] && grep -q '"stdout":"2' "$BODY_FILE" && break
+            i=$((i+1))
+            sleep 3
+          done
+          grep -q '"stdout":"2' "$BODY_FILE" || { echo "❌ sandbox never ran code: HTTP $STATUS $(cat "$BODY_FILE")"; exit 1; }
+          echo "✅ the sandbox is up and reachable from core-server"
+
+          echo "== Attack: reach the sandbox's exec server directly from another pod =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \
+            "http://$ADDR:8888/health" || true)
+          [ "$STATUS" = "000" ] || { echo "❌ an unrelated pod reached the sandbox directly (HTTP $STATUS)"; exit 1; }
+          echo "✅ direct connection refused by the network policy"
+
+          echo "== Attack: sandbox code calls out to core-server and the internet, or looks for a cluster credential =="
+          PROBE=$(printf 'import os, socket\\ndef probe(host, port):\\n    try:\\n        socket.create_connection((host, port), timeout=3).close()\\n        return \\"open\\"\\n    except OSError:\\n        return \\"blocked\\"\\nfor name, host, port in [(\\"core-server\\", \\"%s\\", %s), (\\"internet\\", \\"1.1.1.1\\", 443)]:\\n    print(name + \\"=\\" + probe(host, port))\\ntoken = os.path.exists(\\"/var/run/secrets/kubernetes.io/serviceaccount/token\\")\\nprint(\\"kubernetes-token=\\" + (\\"present\\" if token else \\"blocked\\"))' \
+            "$VADER_CORE_SERVER_SERVICE_HOST" "$VADER_CORE_SERVER_SERVICE_PORT")
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 30 \
+            -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+            -d "{\"code\":\"$PROBE\"}" || true)
+          BODY=$(cat "$BODY_FILE")
+          echo "HTTP $STATUS -- $BODY"
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 running the probe, got $STATUS"; exit 1; }
+          for target in core-server internet kubernetes-token; do
+            echo "$BODY" | grep -q "$target=blocked" \
+              || { echo "❌ sandbox code reached $target"; exit 1; }
+            echo "✅ sandbox code cannot reach $target"
+          done
+
+          echo "== Attack: use the sandbox API on a workload that isn't a sandbox =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -X POST "$BASE/vader-core-ui/execute" -H "Content-Type: application/json" \
+            -d '{"code":"print(1)"}' || true)
+          [ "$STATUS" = "404" ] || { echo "❌ expected 404 running code in core-ui, got $STATUS"; exit 1; }
+          curl -s -o /dev/null --max-time 30 -X DELETE "$BASE/vader-core-ui" || true
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://vader-core-ui:8080/healthz" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ the sandbox API deleted core-ui (health got $STATUS)"; exit 1; }
+          echo "✅ the sandbox API refuses to run code in, or delete, anything it didn't create"
+
+          echo "🎉 sandbox isolation test passed"
+{{- end }}

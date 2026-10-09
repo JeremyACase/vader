@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1]
+### Fixed
+- Counting with a filter on a field the entity doesn't have is now rejected like the same query
+  is, rather than failing inside Hibernate, and an unknown filter field is never silently
+  dropped, which would have widened the result.
+
 ## [0.9.0]
 ### Changed
 - The generic controller's entity-page-to-DTO-page conversion is now open to subclasses and

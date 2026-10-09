@@ -13,11 +13,10 @@ import org.springframework.stereotype.Service;
 /**
  * Flattens every {@link ToolCallbackProvider} bean registered in the application context into one
  * lookup table, so any collaborator that needs "every tool currently available" (or one tool by
- * name) has a single place to ask instead of re-flattening the provider list itself. Invocation
- * (looking a tool up by name to actually call it) is audience-independent -- once a model has
- * requested a tool call, {@link #findByName} resolves it regardless of who was offered it; the
- * audience only gates what a collaborator building a model's *available* tool list offers in the
- * first place, via {@link #forAudience}.
+ * name) has a single place to ask instead of re-flattening the provider list itself. The audience
+ * gates both what a model is offered ({@link #forAudience}) and what it can invoke
+ * ({@link #findByName}): a model's tool call is untrusted output, so naming a tool it was never
+ * offered must not reach that tool.
  */
 @Service
 public class McpToolCallbackRegistry {
@@ -71,13 +70,15 @@ public class McpToolCallbackRegistry {
     }
 
     /**
-     * Looks up one tool by its MCP name.
+     * Looks up one tool by its MCP name among the tools offered to {@code audience}.
      *
+     * @param audience which kind of agent is invoking the tool
      * @param name the tool name, as returned by {@code ToolDefinition.name()}
-     * @return the matching tool, or empty if no registered tool has that name
+     * @return the matching tool, or empty if no tool with that name is offered to
+     *     {@code audience}
      */
-    public Optional<ToolCallback> findByName(final String name) {
-        return this.toolCallbacks.stream()
+    public Optional<ToolCallback> findByName(final AgentToolAudience audience, final String name) {
+        return this.forAudience(audience).stream()
             .filter(callback -> callback.getToolDefinition().name().equals(name))
             .findFirst();
     }

@@ -9,4 +9,7 @@ FROM gcr.io/distroless/cc-debian12
 
 COPY --from=build /app/target/release/core-agent-harness /usr/local/bin/core-agent-harness
 
+# Matches the runAsUser the harness Job's pod security context sets.
+USER 1000
+
 ENTRYPOINT ["/usr/local/bin/core-agent-harness"]

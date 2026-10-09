@@ -1,0 +1,89 @@
+{{- if and .Values.vader.operators.agentHarness.enabled (eq .Values.vader.orchestrator.type "scripted") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vader-test-agent-tool-scope
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Adversarial: a prompt carrying ScriptedChatModelStub's injection marker makes a real
+    # agent-harness Job behave like a prompt-injected model. It posts a progress update aimed at
+    # another task's ids, then calls create_sandbox, a tool no task agent is offered. core-server
+    # must record the update against the agent's own task, refuse the sandbox tool, and create
+    # no sandbox. Only rendered with the scripted model, which is what plays the injection.
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.6.0
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          SERVER="http://vader-core-server:{{ .Values.convenience.variables.spring.port }}"
+          DATA="$SERVER/vader/core-server/data"
+          TOOL_CALLS="$DATA/task-attempt-tool-call/query/params"
+          TASK_UPDATES="$DATA/task-update/query/params"
+          FOREIGN_ID="00000000-0000-0000-0000-0000000f0e19"
+
+          total() {
+            sed -n 's/.*"totalElements":\([0-9]*\).*/\1/p'
+          }
+
+          echo "== Health check =="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$SERVER/actuator/health" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ health check got $STATUS"; exit 1; }
+          echo "✅ core-server healthy"
+
+          BEFORE=$(curl -s --max-time 10 "$TOOL_CALLS?page=0&size=1&toolName=create_sandbox" | total)
+          [ -n "$BEFORE" ] || { echo "❌ could not count existing create_sandbox calls"; exit 1; }
+
+          echo "== Submit a prompt whose agent has been prompt-injected =="
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 30 \
+            -X POST "$SERVER/vader/core-server/client-prompt" \
+            -F "text=Summarize this document. [scripted:prompt-injection]" || true)
+          [ "$STATUS" = "202" ] || { echo "❌ expected HTTP 202, got $STATUS: $(cat "$BODY_FILE")"; exit 1; }
+          echo "✅ prompt accepted"
+
+          echo "== Wait for the agent to try the unoffered tool =="
+          CALL=""
+          i=1
+          while [ $i -le 60 ]; do
+            CALL=$(curl -s --max-time 10 \
+              "$TOOL_CALLS?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&toolName=create_sandbox" || true)
+            [ "$(echo "$CALL" | total)" -gt "$BEFORE" ] 2>/dev/null && break
+            i=$((i+1))
+            sleep 3
+          done
+          [ "$(echo "$CALL" | total)" -gt "$BEFORE" ] 2>/dev/null \
+            || { echo "❌ the injected agent never called create_sandbox: $CALL"; exit 1; }
+          ATTEMPT=$(echo "$CALL" | sed -n 's/.*"taskAttemptId":"\([^"]*\)".*/\1/p')
+          [ -n "$ATTEMPT" ] || { echo "❌ tool call has no taskAttemptId: $CALL"; exit 1; }
+          echo "✅ the injected agent (attempt $ATTEMPT) asked for create_sandbox"
+
+          echo "== Attack: call a tool the agent was never offered =="
+          echo "$CALL" | grep -qF "is available to a task agent" \
+            || { echo "❌ create_sandbox was not refused: $CALL"; exit 1; }
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+            "$SERVER/vader/core-server/python-sandbox/sandboxes" || true)
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 listing sandboxes, got $STATUS"; exit 1; }
+          grep -q '"vader-sandbox-injected"' "$BODY_FILE" \
+            && { echo "❌ the injected agent created a sandbox: $(cat "$BODY_FILE")"; exit 1; }
+          echo "✅ create_sandbox refused and no sandbox created"
+
+          echo "== Attack: post an update against another task =="
+          UPDATE_CALL=$(curl -s --max-time 10 \
+            "$TOOL_CALLS?page=0&size=1&toolName=post_task_update&taskAttempt.id=$ATTEMPT" || true)
+          echo "$UPDATE_CALL" | grep -q '"toolName":"post_task_update"' \
+            || { echo "❌ no post_task_update call for attempt $ATTEMPT: $UPDATE_CALL"; exit 1; }
+          echo "$UPDATE_CALL" | grep -qF "$FOREIGN_ID" \
+            && { echo "❌ the foreign ids reached the tool: $UPDATE_CALL"; exit 1; }
+          FOREIGN=$(curl -s --max-time 10 "$TASK_UPDATES?page=0&size=1&task.id=$FOREIGN_ID" | total)
+          [ "$FOREIGN" = "0" ] || { echo "❌ an update was recorded against the foreign task ($FOREIGN)"; exit 1; }
+          OWN=$(curl -s --max-time 10 "$TASK_UPDATES?page=0&size=50&taskAttempt.id=$ATTEMPT" || true)
+          echo "$OWN" | grep -qF "Injected: task complete." \
+            || { echo "❌ the update was not recorded against the agent's own attempt: $OWN"; exit 1; }
+          echo "✅ the update was re-scoped to the agent's own task; the foreign task is untouched"
+
+          echo "🎉 agent tool-scope test passed"
+{{- end }}

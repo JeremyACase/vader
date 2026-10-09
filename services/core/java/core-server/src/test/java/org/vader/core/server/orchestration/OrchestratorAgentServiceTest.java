@@ -13,8 +13,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import java.util.List;
@@ -41,6 +39,9 @@ import org.vader.core.server.orchestration.model.TaskPlanRefinementVerdict;
 import org.vader.core.server.workflow.TaskUpdateService;
 import org.vader.core.server.workflow.WorkflowDecomposedEvent;
 import org.vader.core.server.workflow.WorkflowRepository;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 class OrchestratorAgentServiceTest {
 
@@ -83,7 +84,8 @@ class OrchestratorAgentServiceTest {
             final TaskPlanDtoToEntityMapper taskPlanMapper) {
         var schemaValidator = new TaskPlanSchemaValidator();
         ReflectionTestUtils.setField(schemaValidator, "objectMapper",
-            new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false));
+            JsonMapper.builder()
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build());
         ReflectionTestUtils.setField(schemaValidator, "validator", newValidator());
 
         var refinementService = new TaskPlanRefinementService();

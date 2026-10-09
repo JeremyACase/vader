@@ -1,7 +1,5 @@
 package org.vader.core.server.llm;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Type;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +14,8 @@ import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
 import org.vader.core.server.messaging.AbstractInbox;
 import org.vader.core.server.messaging.OutboxMessageEnqueuedEvent;
 import org.vader.core.server.messaging.OutboxMessageRepository;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Inbox for local-LLM requests: pops the oldest pending request and performs it with the
@@ -91,7 +91,7 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
     private <T> T readValue(final String requestJson, final Type type) {
         try {
             return this.objectMapper.readValue(requestJson, this.objectMapper.constructType(type));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new LlmRequestQueueException("Could not deserialize " + type + " request", e);
         }
     }
@@ -99,7 +99,7 @@ public class LlmRequestInbox extends AbstractInbox<LlmRequestOutboxMessageEntity
     private String toJson(final Object value) {
         try {
             return this.objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new LlmRequestQueueException("Could not serialize LLM response", e);
         }
     }

@@ -185,6 +185,21 @@ vader:
       # timeouts, the reaper) -- and never against another task, regardless of what the calling
       # model supplies.
       enabled: true
+    transportSecurity:
+      # Host headers (exact, or host:* for any port) the MCP endpoints accept; anything else
+      # gets 421. This is what keeps a web page from reaching the unauthenticated MCP server
+      # through a victim's browser by DNS rebinding, so it must not be empty. Add the host
+      # clients actually use if MCP is reached by anything other than localhost/port-forward.
+      allowedHosts:
+        - localhost
+        - "localhost:*"
+        - 127.0.0.1
+        - "127.0.0.1:*"
+      # Browser origins allowed to call MCP (e.g. the MCP Inspector on localhost). Requests with
+      # no Origin header -- ordinary non-browser MCP clients -- are unaffected.
+      allowedOrigins:
+        - "http://localhost:*"
+        - "http://127.0.0.1:*"
   operators:
     # Kubernetes operators core-server runs, each also exposed to LLMs as MCP tools.
     # Master switch: constructs the shared Kubernetes client and enables the RBAC the
@@ -305,3 +320,11 @@ infrastructure:
 telemetry:
   prometheus:
     enabled: true
+
+systemTests:
+  zapScan:
+    # When true, `helm test` also runs an OWASP ZAP scan: a passive baseline crawl of core-ui and
+    # a safe-mode (no active attack) pass over every core-server endpoint in its OpenAPI spec.
+    # The API pass really calls each endpoint -- it submits prompts and creates sandboxes -- so
+    # it's meant for a throwaway test release, not one with a real LLM behind it.
+    enabled: false

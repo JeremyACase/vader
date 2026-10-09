@@ -1,0 +1,62 @@
+{{- if .Values.systemTests.zapScan.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vader-test-zap-scan
+  annotations:
+    "helm.sh/hook": test
+    # Runs after every other test, since its API pass creates workflows and sandboxes of its own.
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Adversarial: an OWASP ZAP scan from inside the cluster. A baseline crawl of core-ui, then a
+    # safe-mode pass over every core-server endpoint in its OpenAPI spec; both only passively
+    # check what comes back, never actively attack. Any alert fails the test unless the rules
+    # file below accepts it, with a reason.
+spec:
+  restartPolicy: Never
+  containers:
+    - name: zap
+      image: ghcr.io/zaproxy/zaproxy:2.17.0@sha256:7aaa659b0d43078febd82e29bad112285c370727e86ab8340444220e17d9f0d2
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          # Accepted alerts, one per line: <rule id> IGNORE (<why it's accepted>).
+          {
+            printf '10049\tIGNORE\t(The UI bundle is static and non-sensitive; caching it is intended.)\n'
+            printf '10055\tIGNORE\t(style-src needs unsafe-inline for the styles Angular injects at runtime.)\n'
+            printf '10109\tIGNORE\t(Informational: notes the UI is a single-page app.)\n'
+            printf '90003\tIGNORE\t(Every script and stylesheet is same-origin; SRI guards third-party hosts.)\n'
+            printf '100000\tIGNORE\t(4xx rejections of placeholder ids and values are correct; 5xx are checked below.)\n'
+          } > /zap/wrk/rules.tsv
+
+          status=0
+          echo "== Baseline scan: core-ui =="
+          zap-baseline.py -t "http://vader-core-ui:8080" -c rules.tsv -s -T 5 || status=1
+          echo "== API scan (safe mode): core-server's OpenAPI spec =="
+          zap-api-scan.py -t "http://vader-core-server:{{ .Values.convenience.variables.spring.port }}/v3/api-docs" \
+            -f openapi -S -c rules.tsv -s -T 5 -J api.json || status=1
+
+          # Rule 100000 is accepted above for its 4xx half; any 5xx a request provoked fails here.
+          echo "== Server errors provoked by the API scan =="
+          python3 - <<'EOF' || status=1
+          import json, sys
+          report = json.load(open("/zap/wrk/api.json"))
+          errors = sorted({(i["method"], i["uri"], i.get("evidence", "").strip())
+                           for site in report["site"] for alert in site["alerts"]
+                           if alert["pluginid"] == "100000" for i in alert["instances"]
+                           if i.get("evidence", "").strip().startswith("5")})
+          for method, uri, code in errors:
+              print(f"❌ {code} {method} {uri}")
+          print("✅ no 5xx responses" if not errors else f"❌ {len(errors)} request(s) got a 5xx")
+          sys.exit(1 if errors else 0)
+          EOF
+
+          [ "$status" = "0" ] && echo "🎉 ZAP scan passed" || echo "❌ ZAP reported unaccepted alerts"
+          exit "$status"
+      volumeMounts:
+        - name: wrk
+          mountPath: /zap/wrk
+  volumes:
+    - name: wrk
+      emptyDir: {}
+{{- end }}

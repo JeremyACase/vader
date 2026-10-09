@@ -48,7 +48,7 @@ class TaskPlanRefinementLlmExecutorTest {
     @Test
     void execute_returnsTheParsedVerdict() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(
             responseWith("{\"needsRevision\":false,\"reasoning\":\"looks fine\"}"));
 
@@ -63,7 +63,7 @@ class TaskPlanRefinementLlmExecutorTest {
     @Test
     void execute_parsesTheMissingDependenciesTheCriticNamed() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(
             "{\"needsRevision\":false,\"reasoning\":\"reading must come first\","
                 + "\"missingDependencies\":[{\"task\":\"Identify Key Data\","
@@ -93,7 +93,7 @@ class TaskPlanRefinementLlmExecutorTest {
         taskPlan.setObjective("analyze it");
         taskPlan.setTaskGraph(taskGraph);
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(
             responseWith("{\"needsRevision\":false,\"reasoning\":\"fine\"}"));
 

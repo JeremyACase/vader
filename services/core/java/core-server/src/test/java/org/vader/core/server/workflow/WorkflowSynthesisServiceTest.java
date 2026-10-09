@@ -160,7 +160,7 @@ class WorkflowSynthesisServiceTest {
     }
 
     @Test
-    void synthesize_whenListingFilesFails_stillAnswersWithoutAFilesList() {
+    void synthesize_whenListingFilesFails_stillAnswersWithoutFilesList() {
         var task = task("t1", "Write the server");
         when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("t1"))
             .thenReturn(Optional.of(attempt(TaskAttemptStatus.SUCCEEDED, "Wrote server.py.")));

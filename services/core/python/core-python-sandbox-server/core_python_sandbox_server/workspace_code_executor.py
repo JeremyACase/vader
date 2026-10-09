@@ -46,7 +46,9 @@ class WorkspaceCodeExecutor:
         script.write_text(request.code)
 
         try:
-            completed = subprocess.run(
+            # Semgrep's subprocess-injection rule flags this call, but running submitted code is
+            # this server's purpose: the argv is fixed and no shell is involved.
+            completed = subprocess.run(  # nosemgrep
                 [sys.executable, str(ECHO_RUNNER), str(script)],
                 cwd=self._workspace,
                 capture_output=True,

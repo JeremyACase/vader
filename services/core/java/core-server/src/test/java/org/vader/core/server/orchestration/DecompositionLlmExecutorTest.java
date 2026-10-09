@@ -83,7 +83,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_returnsTheParsedPlan() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         var plan = executor(ChatClient.builder(chatModel)).execute(request("Ship onboarding"));
@@ -95,7 +95,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_attachesEveryRegisteredToolCallback() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
         var provider = MethodToolCallbackProvider.builder()
             .toolObjects(new DummyTools())
@@ -114,7 +114,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_onRevision_keepsUserTextIntactAndSendsGuidanceAsInstructions() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         executor(ChatClient.builder(chatModel)).execute(new DecompositionRequest(
@@ -134,7 +134,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_withAttachedFiles_namesThemInTheInstructionsAndKeepsUserTextIntact() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         executor(ChatClient.builder(chatModel)).execute(new DecompositionRequest(
@@ -153,7 +153,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_withoutAttachedFiles_sendsNoAttachedFilesSection() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         executor(ChatClient.builder(chatModel)).execute(request("Plan a party"));
@@ -166,7 +166,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_tellsThePlannerToEndWithAnUploadedDeliverable() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         executor(ChatClient.builder(chatModel)).execute(request("Write me a script"));
@@ -180,7 +180,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_onFirstAttempt_sendsNoRevisionInstructions() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
 
         executor(ChatClient.builder(chatModel)).execute(request("Analyze this spreadsheet"));
@@ -197,7 +197,7 @@ class DecompositionLlmExecutorTest {
     @Test
     void execute_buildsFreshChatClientPerCall() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
         var builder = spy(ChatClient.builder(chatModel));
         var executor = executor(builder);

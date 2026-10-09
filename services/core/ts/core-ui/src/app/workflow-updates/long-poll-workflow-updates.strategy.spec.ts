@@ -97,13 +97,15 @@ describe('LongPollWorkflowUpdatesStrategy', () => {
   }));
 
   it('fetches one workflow by id, independent of the paginated list', fakeAsync(() => {
-    const sub = strategy.workflow('wf-1').subscribe();
+    const received: Workflow[] = [];
+    const sub = strategy.workflow('wf-1').subscribe((workflow) => received.push(workflow));
     tick(0);
 
     httpMock
       .expectOne('/vader/core-server/data/workflow/query/wf-1')
       .flush({ id: 'wf-1', clientPromptId: 'prompt-1', status: 'RUNNING' });
 
+    expect(received.map((workflow) => workflow.id)).toEqual(['wf-1']);
     sub.unsubscribe();
   }));
 

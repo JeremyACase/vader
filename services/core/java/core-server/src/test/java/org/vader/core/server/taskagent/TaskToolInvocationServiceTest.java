@@ -9,8 +9,8 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.vader.core.server.mcp.AgentToolAudience.TASK_EXECUTION;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +22,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.vader.common.model.vader.entity.TaskAttemptToolCallEntity;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.workflow.TaskAttemptRepository;
+import tools.jackson.databind.ObjectMapper;
 
 class TaskToolInvocationServiceTest {
 
@@ -64,7 +65,7 @@ class TaskToolInvocationServiceTest {
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
         when(toolCallback.call(anyString(), any(ToolContext.class))).thenReturn("{}");
-        when(this.toolCallbackRegistry.findByName("run_python_code"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "run_python_code"))
             .thenReturn(Optional.of(toolCallback));
 
         this.service.invokeTool(ATTEMPT_ID, "call-1", "run_python_code", "{\"code\":\"pass\"}");
@@ -85,7 +86,7 @@ class TaskToolInvocationServiceTest {
         var toolCallback = mock(ToolCallback.class);
         when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
             .thenReturn("{\"content\":\"...\"}");
-        when(this.toolCallbackRegistry.findByName("get_object_content"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "get_object_content"))
             .thenReturn(Optional.of(toolCallback));
 
         var result = this.service.invokeTool(
@@ -101,7 +102,7 @@ class TaskToolInvocationServiceTest {
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
         when(toolCallback.call(anyString(), any(ToolContext.class))).thenReturn("{}");
-        when(this.toolCallbackRegistry.findByName("run_python_code"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "run_python_code"))
             .thenReturn(Optional.of(toolCallback));
 
         this.service.invokeTool(ATTEMPT_ID, "call-1", "run_python_code", "{\"code\":\"pass\"}");
@@ -119,7 +120,7 @@ class TaskToolInvocationServiceTest {
         var toolCallback = mock(ToolCallback.class);
         when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
             .thenReturn("{\"content\":\"...\"}");
-        when(this.toolCallbackRegistry.findByName("get_object_content"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "get_object_content"))
             .thenReturn(Optional.of(toolCallback));
         when(this.taskAttemptRepository.getReferenceById(ATTEMPT_ID)).thenReturn(attempt);
 
@@ -142,7 +143,7 @@ class TaskToolInvocationServiceTest {
         var toolCallback = mock(ToolCallback.class);
         when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
             .thenThrow(new IllegalStateException("sandbox pod unreachable"));
-        when(this.toolCallbackRegistry.findByName("stage_object"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "stage_object"))
             .thenReturn(Optional.of(toolCallback));
 
         var result = this.service.invokeTool(
@@ -161,7 +162,7 @@ class TaskToolInvocationServiceTest {
         var toolCallback = mock(ToolCallback.class);
         when(toolCallback.call(eq("{\"id\":\"abc\"}"), any(ToolContext.class)))
             .thenThrow(new IllegalStateException("sandbox pod unreachable"));
-        when(this.toolCallbackRegistry.findByName("stage_object"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "stage_object"))
             .thenReturn(Optional.of(toolCallback));
 
         this.service.invokeTool(ATTEMPT_ID, "call-1", "stage_object", "{\"id\":\"abc\"}");
@@ -177,7 +178,8 @@ class TaskToolInvocationServiceTest {
     void invokeTool_forAnUnregisteredToolName_throwsUnknownTool() {
         var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        when(this.toolCallbackRegistry.findByName("bogus_tool")).thenReturn(Optional.empty());
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "bogus_tool"))
+            .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> this.service.invokeTool(
                 ATTEMPT_ID, "call-1", "bogus_tool", "{}"))
@@ -191,7 +193,7 @@ class TaskToolInvocationServiceTest {
         attempt.getTask().setId("real-task-id");
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var toolCallback = mock(ToolCallback.class);
-        when(this.toolCallbackRegistry.findByName("post_task_update"))
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "post_task_update"))
             .thenReturn(Optional.of(toolCallback));
         when(toolCallback.call(anyString(), any(ToolContext.class)))
             .thenReturn("Recorded update against task real-task-id.");
@@ -214,7 +216,8 @@ class TaskToolInvocationServiceTest {
     void invokeTool_forAnUnregisteredToolName_stillPersistsTheFailedAttempt() {
         var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        when(this.toolCallbackRegistry.findByName("bogus_tool")).thenReturn(Optional.empty());
+        when(this.toolCallbackRegistry.findByName(TASK_EXECUTION, "bogus_tool"))
+            .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> this.service.invokeTool(
                 ATTEMPT_ID, "call-1", "bogus_tool", "{}"))

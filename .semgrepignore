@@ -1,0 +1,11 @@
+# A .semgrepignore replaces Semgrep's built-in ignore list, so the build outputs it would
+# otherwise skip are repeated here.
+build/
+dist/
+target/
+node_modules/
+.gradle/
+.angular/
+
+# Helm templates are Go templates, not YAML; Trivy scans the rendered chart instead.
+deploy/helm/templates/

@@ -7,7 +7,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +20,7 @@ import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceToolCall;
 import org.vader.core.server.taskagent.model.InferenceTurn;
 import org.vader.core.server.workflow.TaskAttemptRepository;
+import tools.jackson.databind.ObjectMapper;
 
 class InferenceTranscriptServiceTest {
 

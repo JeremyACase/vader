@@ -1,7 +1,6 @@
-- expose the queue in the UI and allow it to be inspectedd
+- Add an alert SMS mechanism
 - a chronological log of events for a workflow
 
 - allow ollama operator to be able to create new, specialized LLM's
 - compaction-as-a-service
 - evaluation testing as a part of the devops pipeline
-- clean up the tunable knobs

@@ -40,3 +40,6 @@ Thumbs.db
 # Python
 __pycache__/
 *.py[cod]
+
+# Written by CI's dependency scan (.github/security/dependency-locks.init.gradle), not committed
+gradle.lockfile

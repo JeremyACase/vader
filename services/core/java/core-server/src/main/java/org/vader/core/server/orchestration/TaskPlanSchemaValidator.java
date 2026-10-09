@@ -1,7 +1,5 @@
 package org.vader.core.server.orchestration;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import java.util.Objects;
@@ -10,6 +8,8 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.vader.common.model.vader.dto.TaskPlan;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Parses the orchestrator's raw JSON into a {@link TaskPlan} and checks it against the
@@ -42,7 +42,7 @@ public class TaskPlanSchemaValidator {
         final TaskPlan taskPlan;
         try {
             taskPlan = this.objectMapper.readValue(rawResponse, TaskPlan.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new OrchestratorResponseException(
                 "Orchestrator response could not be parsed as a task plan.", e);
         }

@@ -1,11 +1,13 @@
 package org.vader.core.server.sandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -158,11 +160,21 @@ class PythonSandboxServiceTest {
     void runCode_delegatesToTheExecutionClient() {
         var request = new SandboxExecutionRequest("print('hi')", Map.of(), null);
         var expected = new SandboxExecutionResult("hi\n", "", 0, false);
+        when(this.operator.manages("vader-sandbox-a")).thenReturn(true);
         when(this.executionClient.execute("vader-sandbox-a", request)).thenReturn(expected);
 
         var result = this.service.runCode("vader-sandbox-a", request);
 
         assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void runCode_forSandboxNotManagedHere_throwsNotFoundWithoutCallingOut() {
+        var request = new SandboxExecutionRequest("print('hi')", Map.of(), null);
+
+        assertThatThrownBy(() -> this.service.runCode("vader-core-server", request))
+            .isInstanceOf(SandboxNotFoundException.class);
+        verifyNoInteractions(this.executionClient);
     }
 
     @Test

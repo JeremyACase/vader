@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0]
+### Security
+- Picks up Angular's patched 20.3 release line, and is served from a current nginx release with
+  Alpine security patches applied at build time. The app is now served with a Content Security
+  Policy and the usual hardening headers (`nosniff`, cross-origin isolation, a locked-down
+  permissions policy) and no longer advertises the nginx version. It can no longer be embedded
+  in a frame, and anything it loads must be same-origin. The production build stops inlining
+  critical CSS, whose inline loader the policy would block.
+
 ## [0.19.0]
 ### Added
 - A System section in the nav rail holds system tools, starting with Queues: every inbox/outbox

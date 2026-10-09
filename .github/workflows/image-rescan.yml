@@ -1,0 +1,59 @@
+name: Published Image Rescan
+
+# Nightly Trivy scan of the images already on Docker Hub. Their contents don't change, but new
+# CVEs are published against them every day, so this is the only scan that catches a release
+# going stale. Full results go to the code-scanning tab per image; the run fails on a fixable
+# HIGH/CRITICAL CVE not accepted in .trivyignore.yaml, the same gate the release pipeline applies.
+#
+# Third-party actions are pinned to commit SHAs and the scanner image to a digest, as in
+# security.yml.
+
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+  DOCKER_REPO: jeremyacase
+
+jobs:
+
+  rescan:
+    name: Rescan ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [core-server, core-ui, core-agent-harness, core-python-sandbox-server]
+    env:
+      IMAGE_REF: jeremyacase/vader-${{ matrix.image }}:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Report
+        run: |
+          docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+            image --quiet --disable-telemetry --ignorefile /src/.trivyignore.yaml \
+            --format sarif --output /src/trivy-image.sarif "$IMAGE_REF"
+
+      - name: Upload results
+        if: always()
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-published-${{ matrix.image }}
+
+      - name: Fail on fixable HIGH/CRITICAL
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+            image --quiet --disable-telemetry --ignorefile /src/.trivyignore.yaml \
+            --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 "$IMAGE_REF"

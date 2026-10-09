@@ -34,7 +34,7 @@ class InferenceTurnLlmExecutorTest {
     @BeforeEach
     void setUp() {
         this.chatModel = mock(ChatModel.class);
-        when(this.chatModel.getDefaultOptions())
+        when(this.chatModel.getOptions())
             .thenReturn(ToolCallingChatOptions.builder().build());
         this.toolCallbackRegistry = mock(McpToolCallbackRegistry.class);
         when(this.toolCallbackRegistry.forAudience(any())).thenReturn(List.of());
@@ -65,7 +65,7 @@ class InferenceTurnLlmExecutorTest {
             .usage(new DefaultUsage(3, 4, 7))
             .build();
         var toolCall = new AssistantMessage.ToolCall(id, "function", name, argumentsJson);
-        var assistantMessage = new AssistantMessage(null, java.util.Map.of(), List.of(toolCall));
+        var assistantMessage = AssistantMessage.builder().toolCalls(List.of(toolCall)).build();
         return new ChatResponse(List.of(new Generation(assistantMessage)), metadata);
     }
 

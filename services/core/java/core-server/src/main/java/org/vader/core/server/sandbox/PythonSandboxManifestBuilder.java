@@ -27,9 +27,18 @@ import org.vader.core.server.operators.AbstractOperator;
  * <p>The workspace is an {@code emptyDir} volume so staged files survive a container restart
  * (e.g. an OOM kill) for the pod's lifetime. They are lost if the pod is replaced, so core-server
  * re-stages missing files before each run of an attempt-owned sandbox.</p>
+ *
+ * <p>Every sandbox pod carries {@value #COMPONENT_LABEL}={@value #COMPONENT}, which the Helm
+ * chart's sandbox NetworkPolicy selects to admit only core-server and deny the pod all egress.</p>
  */
 @Component
 public class PythonSandboxManifestBuilder {
+
+    /** The label key the Helm chart's sandbox NetworkPolicy selects sandbox pods by. */
+    public static final String COMPONENT_LABEL = "component";
+
+    /** The {@link #COMPONENT_LABEL} value every sandbox pod carries. */
+    public static final String COMPONENT = "vader-python-sandbox";
 
     private static final String CONTAINER_NAME = "sandbox";
     private static final String PORT_NAME = "exec";
@@ -87,7 +96,7 @@ public class PythonSandboxManifestBuilder {
      * @return the Deployment manifest
      */
     public Deployment buildDeployment(final String name) {
-        final Map<String, String> podLabels = Map.of("app", name);
+        final Map<String, String> selectorLabels = Map.of("app", name);
         return new DeploymentBuilder()
             .withNewMetadata()
                 .withName(name)
@@ -96,11 +105,12 @@ public class PythonSandboxManifestBuilder {
             .withNewSpec()
                 .withReplicas(1)
                 .withNewSelector()
-                    .withMatchLabels(podLabels)
+                    .withMatchLabels(selectorLabels)
                 .endSelector()
                 .withNewTemplate()
                     .withNewMetadata()
-                        .addToLabels(podLabels)
+                        .addToLabels(selectorLabels)
+                        .addToLabels(COMPONENT_LABEL, COMPONENT)
                     .endMetadata()
                     .withNewSpec()
                         .withAutomountServiceAccountToken(false)

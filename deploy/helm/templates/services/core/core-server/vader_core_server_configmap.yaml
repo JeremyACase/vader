@@ -30,18 +30,14 @@ data:
     management:
       endpoint:
         info:
-          enabled: true
-          java:
-            enabled: true
-          build:
-            enabled: true
+          access: read-only
         health:
           probes:
             enabled: true
           show-components: always
           show-details: always
         prometheus:
-          enabled: {{ .Values.telemetry.prometheus.enabled }}
+          access: {{ ternary "read-only" "none" .Values.telemetry.prometheus.enabled }}
       endpoints:
         web:
           exposure:
@@ -91,6 +87,8 @@ data:
             name: vader-core-server
             version: {{ .Chart.Version | quote }}
             type: SYNC
+            # The documented MCP endpoints are SSE (GET /sse, POST /mcp/message).
+            protocol: SSE
 
       http:
         client:
@@ -117,10 +115,14 @@ data:
           hibernate:
             generate_statistics: false
             format_sql: true
+      {{- if eq (.Values.vader.mode | default "PROD") "DEV" }}
+      # DEV only: the console runs arbitrary SQL in this process with no login. It accepts
+      # loopback connections only, which is what a kubectl port-forward arrives as.
       h2:
         console:
           enabled: true
           path: /h2-console
+      {{- end }}
 
     vader:
       mode: {{ .Values.vader.mode | default "PROD" }}
@@ -180,6 +182,9 @@ data:
           max-inline-bytes: {{ int .Values.vader.mcp.objectStorage.maxInlineBytes }}
         task-update:
           enabled: {{ .Values.vader.mcp.taskUpdate.enabled }}
+        transport-security:
+          allowed-hosts: {{ required "vader.mcp.transportSecurity.allowedHosts must not be empty" .Values.vader.mcp.transportSecurity.allowedHosts | join "," | quote }}
+          allowed-origins: {{ .Values.vader.mcp.transportSecurity.allowedOrigins | join "," | quote }}
       kubernetes:
         namespace: {{ .Release.Namespace }}
       operators:

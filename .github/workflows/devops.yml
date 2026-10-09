@@ -6,6 +6,10 @@ on:
       - main
     tags:
       - 'v*'
+  # PRs run the build, system tests and image scan; only pushes publish images.
+  pull_request:
+    branches:
+      - main
 
 env:
   DOCKER_REPO: jeremyacase
@@ -27,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -129,8 +133,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # kind v0.24+ enforces NetworkPolicy out of the box, which the sandbox-isolation test needs.
       - name: Set up Kubernetes with KinD
-        uses: helm/kind-action@v1.5.0
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: v0.33.0
+          cluster_name: vader-agent-0
 
       - name: Ensure KinD cluster exists
         run: |
@@ -179,9 +187,9 @@ jobs:
 
       - name: Run systems tests
         run: |
-          # 8m, not 5m: the agent-harness test schedules real k8s Jobs and waits on real Pod
-          # startup on top of the existing suite.
-          helm test vader -n vader --timeout 8m
+          # The agent-harness and tool-scope tests wait on real Jobs and Pods, and the ZAP scan
+          # pulls a large image and crawls for several minutes.
+          helm test vader -n vader --timeout 15m
 
       - name: Inspect resources after Helm test
         if: always()
@@ -203,8 +211,43 @@ jobs:
             echo ""
           done
 
+  # Scans the exact images push-images publishes, so a HIGH/CRITICAL CVE not accepted in
+  # .trivyignore.yaml stops the release. Unfixed CVEs are skipped: there is nothing to upgrade to.
+  scan-images:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: docker-images
+
+      - name: Scan images
+        shell: bash
+        env:
+          TRIVY_IMAGE: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+        run: |
+          set -uo pipefail
+          IFS=$'\n'
+          status=0
+          for dir in $SUBPROJECTS; do
+            project_name="$(basename "$dir")"
+            echo "---- Scanning ${project_name}"
+            docker run --rm -v "$PWD:/src:ro" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+              image --quiet --disable-telemetry --ignorefile /src/.trivyignore.yaml \
+              --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 \
+              --input "/src/docker-images/${project_name}.tar" || status=1
+          done
+          exit "$status"
+
   push-images:
-    needs: [build, systems-tests]
+    needs: [build, systems-tests, scan-images]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:

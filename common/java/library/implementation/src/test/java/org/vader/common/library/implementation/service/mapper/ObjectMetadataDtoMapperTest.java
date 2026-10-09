@@ -46,7 +46,7 @@ class ObjectMetadataDtoMapperTest {
     }
 
     @Test
-    void map_forAnObjectATaskAttemptUploaded_emitsOnlyTheAttemptsId() {
+    void map_forAnObjectUploadedByTaskAttempt_emitsOnlyTheAttemptsId() {
         var attempt = new TaskAttemptEntity();
         attempt.setId("22222222-2222-2222-2222-222222222222");
         var entity = new ObjectMetadataEntity();

@@ -1,0 +1,15 @@
+// Applied only by CI's dependency scan: writes a gradle.lockfile per project holding its
+// runtimeClasspath -- exactly what ships in the jar, not build tooling such as Checkstyle --
+// so the scanner can read it without developers maintaining lockfiles in the repo.
+allprojects {
+    dependencyLocking {
+        lockAllConfigurations()
+    }
+
+    tasks.register('lockRuntimeClasspath') {
+        notCompatibleWithConfigurationCache('Resolves configurations at execution time')
+        doLast {
+            configurations.matching { it.name == 'runtimeClasspath' }.each { it.resolve() }
+        }
+    }
+}

@@ -3,6 +3,26 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0]
+### Security
+- Moved to Spring Boot 4.1 and Spring AI 2.0 (with Jackson 3), which clears the known CVEs in
+  the server's dependency tree; the image runs as a non-root user. The MCP endpoints now reject
+  requests whose `Host` or `Origin` isn't allowlisted (`vader.mcp.transport-security.*`,
+  localhost by default), so a web page can't reach the unauthenticated MCP server through a
+  browser by DNS rebinding -- add the host clients use if MCP is reached other than through
+  localhost or a port-forward. The H2 web console is served only in DEV mode.
+- A task agent can now only invoke the tools it is offered: a (possibly prompt-injected) model
+  naming any other tool, such as the database query or general sandbox tools, gets an
+  unknown-tool error. Sandbox pods are labelled for the chart's new network policy, which cuts
+  them off from the network entirely, so agents are told to plan around the standard library,
+  pandas and openpyxl rather than installing packages.
+- The operators only ever delete what they created: a sandbox delete naming any other workload
+  (core-server's own Deployment included) is now a no-op, and running code in a sandbox that
+  doesn't exist is a 404 rather than a request aimed at whatever host the name resolves to. A
+  query filtering on an unknown field is a 400 instead of a 500, every response carries
+  `nosniff` and same-origin resource-policy headers, and unexpected errors no longer echo
+  internal detail to the caller.
+
 ## [0.33.0]
 ### Added
 - Workflows now hand files back to the user. A request for a script, report or document is

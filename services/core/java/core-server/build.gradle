@@ -37,9 +37,17 @@ dependencies {
     implementation project(':common:java:library:dao')
 
     runtimeOnly "com.h2database:h2:${H2_VERSION}"
+    // Off unless spring.h2.console.enabled is set, which the Helm chart does only in DEV mode.
+    runtimeOnly "org.springframework.boot:spring-boot-h2console"
     implementation "io.minio:minio:${MINIO_VERSION}"
+    constraints {
+        implementation("org.bouncycastle:bcprov-jdk18on:${BOUNCYCASTLE_VERSION}") {
+            because "MinIO's own BouncyCastle has known CVEs"
+        }
+    }
 
     testImplementation "org.springframework.boot:spring-boot-starter-test"
+    testImplementation "org.springframework.boot:spring-boot-starter-webmvc-test"
     testImplementation "org.instancio:instancio-core:${INSTANCIO_VERSION}"
     testImplementation "io.fabric8:kubernetes-server-mock:${FABRIC8_VERSION}"
 }

@@ -1,0 +1,25 @@
+# Trivy baseline: findings accepted on purpose, so only new findings fail a build. Each entry
+# says why it is accepted; the ones that need a fix carry an expired_at, after which Trivy
+# reports them again and the build fails.
+
+misconfigurations:
+  # The operator creates and deletes a Service per Python sandbox; that is its job.
+  - id: KSV-0056
+    statement: Operator role manages per-sandbox Services by design
+  # The only match is the in-memory H2 datasource's empty password, which is not a secret.
+  # gitleaks covers committed secrets.
+  - id: KSV-0109
+    statement: Empty H2 password in the core-server ConfigMap is not a secret
+  # Karma test image runs headless Chrome during the dockerized build and is never deployed.
+  - id: DS-0002
+    paths:
+      - "core/ts/core-ui/ops/karma.Dockerfile"
+    statement: Build-time test image, never deployed
+  # Deployments need pod security contexts and read-only root filesystems (with emptyDir
+  # mounts for the paths core-server, nginx and Ollama write to).
+  - id: KSV-0014
+    statement: Pending pod security hardening
+    expired_at: 2026-12-08
+  - id: KSV-0118
+    statement: Pending pod security hardening
+    expired_at: 2026-12-08
