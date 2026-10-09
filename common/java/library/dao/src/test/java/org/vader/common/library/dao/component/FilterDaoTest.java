@@ -125,4 +125,11 @@ class FilterDaoTest {
             filter(parameter("nope", QueryOperatorType.EQUAL, "x")), 0, 50, TaskEntity.class))
             .isInstanceOf(NoSuchFieldException.class);
     }
+
+    @Test
+    void getCount_unknownField_throwsNoSuchField() {
+        assertThatThrownBy(() -> this.entityDao.getCount(
+            filter(parameter("nope", QueryOperatorType.EQUAL, "x")), TaskEntity.class))
+            .isInstanceOf(NoSuchFieldException.class);
+    }
 }

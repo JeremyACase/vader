@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +20,7 @@ import org.vader.common.library.dao.service.PageValidator;
 import org.vader.common.library.implementation.interfaces.mapper.InterfaceEntityToDtoMapper;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.entity.TaskEntity;
+import tools.jackson.databind.ObjectMapper;
 
 class GenericVaderDaoControllerTest {
 

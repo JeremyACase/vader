@@ -69,8 +69,9 @@ public class DecompositionLlmExecutor
         upload_object tool, which is how the user receives it. Running or testing the file in a
         sandbox only checks it; it does not deliver it. Every task gets a fresh sandbox, so files
         do not carry over between tasks: the task that saves the deliverable must write the
-        complete file itself. Prefer Python's standard library over third-party packages whenever
-        it does the job, since installing a package is one more step that can fail.
+        complete file itself. Sandboxes have no network access, so nothing can be installed or
+        downloaded: plan around Python's standard library plus pandas and openpyxl, which are
+        preinstalled.
 
         You have been given a set of tools. Call a tool only when doing so materially helps you
         plan or gather information the plan needs; otherwise just plan. Do not call tools

@@ -5,6 +5,10 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3]
+### Security
+- The container image runs as uid 1000, matching the Job's pod security context, instead of root.
+
 ## [0.4.2]
 ### Changed
 - The agent is told its task is one step of a plan it can now see, and to leave the rest of the

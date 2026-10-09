@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -16,6 +14,9 @@ import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.llm.OrchestratorUnavailableException;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 import org.vader.core.server.orchestration.model.LlmTaskPlan;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 class LlmTaskPlanAdapterTest {
 
@@ -26,7 +27,8 @@ class LlmTaskPlanAdapterTest {
             new LlmTaskPlan.LlmTask("build", "code it", List.of("design"))));
 
     private final ObjectMapper objectMapper =
-        new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        JsonMapper.builder()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
     private LlmTaskPlanAdapter adapter(final LlmRequestQueue requestQueue) {
 

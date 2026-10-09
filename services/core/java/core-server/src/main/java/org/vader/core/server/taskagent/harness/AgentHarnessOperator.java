@@ -102,10 +102,14 @@ public class AgentHarnessOperator extends AbstractOperator<AgentHarnessSpec> {
     public void delete(final String name) {
         logger.info("Deleting managed resources '{}' for operator '{}'...",
             name, this.operatorName());
-        this.client.batch().v1().jobs()
+        this.deleteIfManaged(this.client.batch().v1().jobs()
             .inNamespace(this.namespace)
-            .withName(name)
-            .delete();
+            .withName(name));
+    }
+
+    @Override
+    public boolean manages(final String name) {
+        return this.isManaged(this.job(name));
     }
 
     @Override

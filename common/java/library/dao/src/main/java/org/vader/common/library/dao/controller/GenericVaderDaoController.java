@@ -1,6 +1,5 @@
 package org.vader.common.library.dao.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import java.lang.reflect.ParameterizedType;
@@ -27,6 +26,7 @@ import org.vader.common.library.dao.service.PageValidator;
 import org.vader.common.library.implementation.interfaces.mapper.InterfaceEntityToDtoMapper;
 import org.vader.common.model.vader.dto.AbstractModel;
 import org.vader.common.model.vader.entity.AbstractModelEntity;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Abstract, read-only RESTful controller over the DAO query engine. Subclasses annotate

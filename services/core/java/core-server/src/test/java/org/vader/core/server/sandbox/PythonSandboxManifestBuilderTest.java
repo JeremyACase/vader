@@ -75,6 +75,16 @@ class PythonSandboxManifestBuilderTest {
     }
 
     @Test
+    void buildDeployment_labelsThePodForTheChartsSandboxNetworkPolicy() {
+        var podLabels = this.builder.buildDeployment("vader-sandbox-a").getSpec().getTemplate()
+            .getMetadata().getLabels();
+
+        assertThat(podLabels)
+            .containsEntry("app", "vader-sandbox-a")
+            .containsEntry("component", "vader-python-sandbox");
+    }
+
+    @Test
     void buildService_exposesTheExecPortOverClusterIp() {
         Service service = this.builder.buildService("vader-sandbox-a");
 

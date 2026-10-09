@@ -10,20 +10,20 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
-import org.springframework.ai.ollama.api.OllamaOptions;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 
 /**
  * Pins the Spring AI behavior the Helm-injected output cap depends on: the cap is set once, as the
- * Ollama chat model's default {@code num-predict} option, and must survive being merged with the
- * per-call options an executor passes (e.g. {@code InferenceTurnLlmExecutor}'s tool-calling
- * options, which say nothing about output length). If a Spring AI upgrade ever stopped merging
- * defaults this way, the cap would silently vanish and a runaway generation could hold
+ * Ollama chat model's default {@code num-predict} option, and must survive the chat client
+ * merging it with the per-call options an executor passes (e.g. {@code InferenceTurnLlmExecutor}'s
+ * tool callbacks, which say nothing about output length). If a Spring AI upgrade ever stopped
+ * merging defaults this way, the cap would silently vanish and a runaway generation could hold
  * Ollama's only slot indefinitely -- this test fails first instead.
  */
 class OllamaOutputCapMergeTest {
@@ -37,20 +37,19 @@ class OllamaOutputCapMergeTest {
         when(ollamaApi.chat(any())).thenThrow(new IllegalStateException("request captured"));
         var chatModel = OllamaChatModel.builder()
             .ollamaApi(ollamaApi)
-            .defaultOptions(OllamaOptions.builder()
+            .options(OllamaChatOptions.builder()
                 .model("any-model")
                 .numPredict(MAX_OUTPUT_TOKENS)
                 .build())
-            .retryTemplate(RetryTemplate.builder().maxAttempts(1).build())
-            .build();
-        var perCallOptions = ToolCallingChatOptions.builder()
-            .toolCallbacks(List.of())
-            .internalToolExecutionEnabled(false)
+            .retryTemplate(new RetryTemplate(RetryPolicy.withMaxRetries(0)))
             .build();
 
-        assertThatThrownBy(() -> chatModel.call(
-            new Prompt(List.of(new UserMessage("hi")), perCallOptions)))
-            .hasMessageContaining("request captured");
+        assertThatThrownBy(() -> ChatClient.builder(chatModel).build().prompt()
+            .messages(new UserMessage("hi"))
+            .toolCallbacks(List.of())
+            .call()
+            .chatResponse())
+            .hasStackTraceContaining("request captured");
 
         var requestCaptor = ArgumentCaptor.forClass(OllamaApi.ChatRequest.class);
         verify(ollamaApi).chat(requestCaptor.capture());

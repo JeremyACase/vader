@@ -113,6 +113,43 @@ class AbstractOperatorTest {
     }
 
     @Test
+    void delete_removesManagedResource() {
+        this.createOwnerDeployment();
+        var operator = this.operator(3);
+        operator.init();
+        operator.reconcile("sbx-a");
+
+        operator.delete("sbx-a");
+
+        assertThat(this.fetchDeployment("sbx-a")).isNull();
+        assertThat(this.client.services().inNamespace(NAMESPACE).withName("sbx-a").get())
+            .isNull();
+    }
+
+    @Test
+    void delete_leavesAnUnmanagedDeploymentAlone() {
+        this.createOwnerDeployment();
+        var operator = this.operator(3);
+        operator.init();
+
+        operator.delete(OWNER);
+
+        assertThat(this.fetchDeployment(OWNER)).isNotNull();
+    }
+
+    @Test
+    void manages_isTrueOnlyForResourcesThisOperatorCreated() {
+        this.createOwnerDeployment();
+        var operator = this.operator(3);
+        operator.init();
+        operator.reconcile("sbx-a");
+
+        assertThat(operator.manages("sbx-a")).isTrue();
+        assertThat(operator.manages(OWNER)).isFalse();
+        assertThat(operator.manages("never-created")).isFalse();
+    }
+
+    @Test
     void teardown_whenOwnerDeploymentIsGone_deletesEveryManagedResource() {
         this.createOwnerDeployment();
         var operator = this.operator(3);

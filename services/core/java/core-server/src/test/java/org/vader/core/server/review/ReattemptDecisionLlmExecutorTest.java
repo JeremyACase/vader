@@ -35,7 +35,7 @@ class ReattemptDecisionLlmExecutorTest {
     @Test
     void execute_returnsTheParsedDecision() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(
             responseWith("{\"shouldReattempt\":false,\"reasoning\":\"won't help\"}"));
 

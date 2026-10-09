@@ -41,7 +41,7 @@ class EvaluationLlmExecutorTest {
     @Test
     void execute_returnsTheParsedVerdict() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(
             responseWith("{\"passed\":true,\"reasoning\":\"looks correct\"}"));
 
@@ -54,7 +54,7 @@ class EvaluationLlmExecutorTest {
     @Test
     void execute_parsesRemainingSubtasksAndDefaultsThemToEmptyWhenOmitted() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(
             responseWith("{\"passed\":false,\"reasoning\":\"code never ran\","
                 + "\"remainingSubtasks\":[{\"title\":\"Run the fix\","
@@ -73,7 +73,7 @@ class EvaluationLlmExecutorTest {
     @Test
     void execute_includesTheRequestPlanAndToolCallEvidenceInThePrompt() {
         var chatModel = mock(ChatModel.class);
-        when(chatModel.getDefaultOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(
             responseWith("{\"passed\":false,\"reasoning\":\"last run failed\"}"));
         var request = new EvaluationRequest(

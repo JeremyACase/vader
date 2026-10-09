@@ -1,7 +1,7 @@
 package org.vader.core.server.llm;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 /**
  * What {@link LlmRequestInbox} writes back for any kind of LLM call: either the executor's

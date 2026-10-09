@@ -10,7 +10,8 @@ metadata:
     # REST surface (which shares its service layer with the MCP tools) through a full
     # create -> list -> execute -> delete -> list round trip against the real cluster,
     # including a real core-python-sandbox-server call and a check that a staged file
-    # survives across calls.
+    # survives across calls. The sandbox itself is only reachable through core-server (see
+    # vader_test_sandbox_isolation.yaml), so every call here goes through core-server.
 spec:
   restartPolicy: Never
   containers:
@@ -78,27 +79,6 @@ spec:
           [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading staged file, got $STATUS"; exit 1; }
           echo "$BODY" | grep -q '"stdout":"hello' || { echo "❌ staged file not readable: $BODY"; exit 1; }
           echo "✅ a file staged in one call was readable in a later call"
-
-          echo "== The sandbox reports which files are already staged =="
-          # core-server checks this before every attempt-owned run, staging only what's missing.
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -I \
-            "http://$ADDR:8888/workspace/files/greeting.txt" || true)
-          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 for a staged file, got $STATUS"; exit 1; }
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -I \
-            "http://$ADDR:8888/workspace/files/never-staged.xlsx" || true)
-          [ "$STATUS" = "404" ] || { echo "❌ expected HTTP 404 for a missing file, got $STATUS"; exit 1; }
-          echo "✅ HEAD reports staged files as present and missing ones as absent"
-
-          echo "== A file code wrote can be read back out of the workspace =="
-          # core-server's upload_object tool copies agent-written files to object storage this way.
-          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
-            "http://$ADDR:8888/workspace/files/greeting.txt" || true)
-          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading a workspace file, got $STATUS"; exit 1; }
-          [ "$(cat "$BODY_FILE")" = "hello" ] || { echo "❌ unexpected file content: $(cat "$BODY_FILE")"; exit 1; }
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
-            "http://$ADDR:8888/workspace/files/never-written.md" || true)
-          [ "$STATUS" = "404" ] || { echo "❌ expected HTTP 404 reading a missing file, got $STATUS"; exit 1; }
-          echo "✅ GET returns a workspace file's raw bytes, and 404 for a missing one"
 
           echo "== Delete the sandbox =="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \

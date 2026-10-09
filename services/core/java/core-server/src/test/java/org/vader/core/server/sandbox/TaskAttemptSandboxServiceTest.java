@@ -128,7 +128,7 @@ class TaskAttemptSandboxServiceTest {
     }
 
     @Test
-    void runCode_resolvesAttachedFilesInATransactionThatEndsBeforeTheSandboxIsTouched() {
+    void runCode_resolvesAttachedFilesInTransactionThatEndsBeforeTheSandboxIsTouched() {
         when(this.sandboxService.ensureReady(this.sandboxName))
             .thenReturn(sandboxIn(this.sandboxName, "Running"));
 

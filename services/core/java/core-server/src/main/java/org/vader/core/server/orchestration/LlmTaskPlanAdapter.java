@@ -1,7 +1,5 @@
 package org.vader.core.server.orchestration;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +16,8 @@ import org.vader.core.server.llm.OrchestratorUnavailableException;
 import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 import org.vader.core.server.orchestration.model.LlmTaskPlan;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Asks the orchestrator LLM to decompose a client prompt, then adapts the lean {@link LlmTaskPlan}
@@ -65,13 +65,13 @@ public class LlmTaskPlanAdapter {
             return this.toTaskPlanJson(plan);
         } catch (OrchestratorResponseException | OrchestratorUnavailableException e) {
             throw e;
-        } catch (JsonProcessingException | RuntimeException e) {
+        } catch (RuntimeException e) {
             throw new OrchestratorResponseException(
                 "The local LLM's response was not a usable task plan: " + e.getMessage(), e);
         }
     }
 
-    private String toTaskPlanJson(final LlmTaskPlan llmPlan) throws JsonProcessingException {
+    private String toTaskPlanJson(final LlmTaskPlan llmPlan) throws JacksonException {
         if (Objects.isNull(llmPlan)
             || Objects.isNull(llmPlan.objective())
             || Objects.isNull(llmPlan.tasks())

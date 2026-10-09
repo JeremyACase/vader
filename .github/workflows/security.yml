@@ -1,0 +1,207 @@
+name: Security Scans
+
+# Deterministic scanners on every PR and every push to main. Each gate fails on HIGH/CRITICAL
+# (Semgrep: ERROR) findings not accepted in .trivyignore.yaml or annotated in code; every tool
+# also uploads its full results to the repository's code-scanning tab.
+#
+# Third-party actions are pinned to commit SHAs and scanner images to digests: a scanner runs
+# with read access to the whole repo, so a hijacked tag would be a supply-chain compromise.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+  SEMGREP_IMAGE: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+  HELM_IMAGE: alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9
+  # Fork PRs get a read-only token, so they still run every gate but skip the SARIF upload.
+  CAN_UPLOAD_SARIF: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # build-mode none: CodeQL extracts these from source, so the dockerized Gradle build
+        # never has to run here. `actions` checks the workflows themselves for injection.
+        language: [java-kotlin, javascript-typescript, python, rust, actions]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.language }}
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Scan
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --metrics=off \
+              --config p/default --config p/java --config p/typescript \
+              --config p/python --config p/rust --config p/dockerfile \
+              --sarif-output=semgrep.sarif --json-output=semgrep.json
+
+      - name: Upload results
+        if: always() && env.CAN_UPLOAD_SARIF == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Fail on ERROR findings
+        run: |
+          errors="$(jq '[.results[] | select(.extra.severity == "ERROR")]' semgrep.json)"
+          jq -r '.[] | "\(.path):\(.start.line) \(.check_id)"' <<< "$errors"
+          test "$(jq length <<< "$errors")" -eq 0
+
+  dependencies:
+    name: Dependencies (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # Trivy reads Cargo.lock and package-lock.json directly; Gradle has no lockfiles in the
+      # repo, so write them for this run.
+      - name: Lock Gradle runtime classpaths
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --init-script .github/security/dependency-locks.init.gradle \
+            lockRuntimeClasspath --write-locks -q
+
+      - name: Report
+        run: |
+          docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+            fs --quiet --disable-telemetry --scanners vuln --ignorefile /src/.trivyignore.yaml \
+            --skip-dirs '**/build' --skip-dirs '**/node_modules' \
+            --format sarif --output /src/trivy-dependencies.sarif /src
+
+      - name: Upload results
+        if: always() && env.CAN_UPLOAD_SARIF == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-dependencies.sarif
+          category: trivy-dependencies
+
+      - name: Fail on HIGH/CRITICAL
+        run: |
+          docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+            fs --quiet --disable-telemetry --scanners vuln --ignorefile /src/.trivyignore.yaml \
+            --skip-dirs '**/build' --skip-dirs '**/node_modules' \
+            --severity HIGH,CRITICAL --exit-code 1 /src
+
+  iac:
+    name: Dockerfiles and Helm (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Scan what each environment actually deploys. Helm test pods are left out: they are
+      # throwaway curl clients, not part of the release.
+      - name: Render chart per environment
+        run: |
+          mkdir -p rendered
+          for env in prod test dev; do
+            docker run --rm -v "$PWD:/src:ro" "$HELM_IMAGE" template vader /src/deploy/helm \
+              -n vader --skip-tests --values "/src/deploy/helm/configurations/$env/$env.yaml" \
+              > "rendered/$env.yaml"
+          done
+
+      - name: Report
+        run: |
+          for target in services rendered; do
+            docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+              config --quiet --disable-telemetry --ignorefile /src/.trivyignore.yaml --skip-dirs '**/build' \
+              --format sarif --output "/src/trivy-$target.sarif" "/src/$target"
+          done
+
+      - name: Upload Dockerfile results
+        if: always() && env.CAN_UPLOAD_SARIF == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-services.sarif
+          category: trivy-dockerfiles
+
+      - name: Upload Helm results
+        if: always() && env.CAN_UPLOAD_SARIF == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-rendered.sarif
+          category: trivy-helm
+
+      - name: Fail on HIGH/CRITICAL
+        run: |
+          status=0
+          for target in services rendered; do
+            docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache "$TRIVY_IMAGE" \
+              config --quiet --disable-telemetry --ignorefile /src/.trivyignore.yaml --skip-dirs '**/build' \
+              --severity HIGH,CRITICAL --exit-code 1 "/src/$target" || status=1
+          done
+          exit "$status"
+
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Full history, not just the diff: a secret removed in a later commit is still leaked.
+      # Runs as the checkout's owner so git inside the container trusts the repository.
+      - name: Scan history
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo:ro" "$GITLEAKS_IMAGE" \
+            git /repo --no-banner --redact -v

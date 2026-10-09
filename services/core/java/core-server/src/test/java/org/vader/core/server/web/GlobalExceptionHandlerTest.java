@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -119,7 +120,8 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleMalformedRequest_returnsBadRequestInsteadOfInternalServerError() {
         var response = this.handler.handleMalformedRequest(
-            new HttpMessageNotReadableException("Unexpected token"), this.request);
+            new HttpMessageNotReadableException("Unexpected token", mock(HttpInputMessage.class)),
+            this.request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().error()).isEqualTo("malformed_request");
@@ -138,7 +140,8 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleFramework_keepsNotFoundForAnUnresolvedResource() {
         var response = this.handler.handleFramework(
-            new NoResourceFoundException(HttpMethod.GET, "object-storage/bogus-id/content"),
+            new NoResourceFoundException(
+                HttpMethod.GET, "object-storage/bogus-id/content", "bogus-id/content"),
             this.request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -170,6 +173,15 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody().error()).isEqualTo("internal_error");
-        assertThat(response.getBody().message()).contains("nobody anticipated");
+        assertThat(response.getBody().message()).doesNotContain("nobody anticipated");
+    }
+
+    @Test
+    void handleUnknownField_returnsBadRequestInsteadOfInternalServerError() {
+        var response = this.handler.handleUnknownField(
+            new NoSuchFieldException("Field 'bogus' not found in TaskEntity"), this.request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().error()).isEqualTo("invalid_argument");
     }
 }

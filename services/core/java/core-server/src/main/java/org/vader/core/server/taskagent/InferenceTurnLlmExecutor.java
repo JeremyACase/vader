@@ -1,16 +1,15 @@
 package org.vader.core.server.taskagent;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.ChatClientAttributes;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.vader.common.model.vader.entity.LlmRequestKind;
@@ -66,13 +65,13 @@ public class InferenceTurnLlmExecutor
     @Override
     public InferenceTurn execute(final List<ConversationMessage> messages) {
         var tools = this.toolCallbackRegistry.forAudience(AgentToolAudience.TASK_EXECUTION);
-        var options = ToolCallingChatOptions.builder()
-            .toolCallbacks(tools)
-            .internalToolExecutionEnabled(false)
-            .build();
+        // The harness executes tool calls itself, so the client must hand them back unexecuted
+        // rather than auto-registering its tool-calling advisor.
         var chatResponse = this.chatClientBuilder.build().prompt()
             .messages(toSpringMessages(messages))
-            .options(options)
+            .toolCallbacks(tools)
+            .advisors(advisors -> advisors.param(
+                ChatClientAttributes.TOOL_CALLING_ADVISOR_AUTO_REGISTER.getKey(), false))
             .call()
             .chatResponse();
         return toInferenceTurn(chatResponse);
@@ -135,12 +134,15 @@ public class InferenceTurnLlmExecutor
             .map(call -> new AssistantMessage.ToolCall(
                 call.id(), "function", call.name(), call.argumentsJson()))
             .toList();
-        return new AssistantMessage(message.content(), Map.of(), springToolCalls);
+        return AssistantMessage.builder()
+            .content(message.content())
+            .toolCalls(springToolCalls)
+            .build();
     }
 
     private static ToolResponseMessage toToolResponseMessage(final ConversationMessage message) {
         var response = new ToolResponseMessage.ToolResponse(
             message.toolCallId(), message.toolName(), message.content());
-        return new ToolResponseMessage(List.of(response));
+        return ToolResponseMessage.builder().responses(List.of(response)).build();
     }
 }

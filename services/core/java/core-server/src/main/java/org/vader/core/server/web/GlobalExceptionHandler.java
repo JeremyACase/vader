@@ -193,6 +193,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Maps a query naming a field the entity doesn't have -- the DAO query engine resolves
+     * client-supplied filter keys by reflection -- to a 400, like an unknown sort field.
+     *
+     * @param exception the unknown-field failure
+     * @param request the originating request
+     * @return a 400 response
+     */
+    @ExceptionHandler(NoSuchFieldException.class)
+    public ResponseEntity<ErrorResponse> handleUnknownField(
+        final NoSuchFieldException exception, final HttpServletRequest request) {
+        logger.warn("Rejected {}: {}", request.getRequestURI(), exception.getMessage());
+        return status(HttpStatus.BAD_REQUEST, "invalid_argument", exception.getMessage());
+    }
+
+    /**
      * Lets Spring MVC's own request-level failures -- no handler or resource for the path (which
      * is how the object-storage download reports an unknown id), unsupported method or media
      * type, a missing parameter, a {@code ResponseStatusException} -- keep the 4xx status Spring
@@ -217,7 +232,9 @@ public class GlobalExceptionHandler {
      * {@link ErrorResponse}, logged at {@code ERROR} with the full stack trace, rather than
      * Spring Boot's bare whitelabel body -- which a caller cannot distinguish from a genuine
      * connectivity failure (exactly the bug that motivated this class: an uncaught tool-call
-     * exception surfacing to the harness as "tool-call invocation is unreachable").
+     * exception surfacing to the harness as "tool-call invocation is unreachable"). The body
+     * doesn't echo the exception's message, which can carry internal detail; that stays in the
+     * log.
      *
      * @param exception the unhandled failure
      * @param request the originating request
@@ -228,7 +245,8 @@ public class GlobalExceptionHandler {
         final Exception exception, final HttpServletRequest request) {
         logger.error("Unhandled exception on {}: {}",
             request.getRequestURI(), exception.getMessage(), exception);
-        return status(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error", exception.getMessage());
+        return status(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error",
+            "An unexpected error occurred; see the core-server log.");
     }
 
     private static ResponseEntity<ErrorResponse> handleFrameworkStatus(

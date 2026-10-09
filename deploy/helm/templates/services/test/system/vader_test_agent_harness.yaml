@@ -15,7 +15,7 @@ metadata:
     # the canned response is deterministic.
     #
     # ScriptedChatModelStub scripts every harness's first turn as a request to call
-    # list_queryable_entities rather than answering directly, so every one of these real
+    # post_task_update rather than answering directly, so every one of these real
     # harness Jobs also exercises the full agent action loop -- including a real POST to
     # /agent/tool-calls -- deterministically, with no need to race a live assignment for it.
 spec:
@@ -56,7 +56,7 @@ spec:
             -X POST "$SERVER/vader/core-server/agent/tool-calls" \
             -H "Content-Type: application/json" \
             -d '{"assignmentId":"00000000-0000-0000-0000-000000000000","toolCallId":"test-call",
-                 "toolName":"list_queryable_entities","argumentsJson":"{}"}' || true)
+                 "toolName":"post_task_update","argumentsJson":"{}"}' || true)
           [ "$UNKNOWN_TOOL_CALL_STATUS" = "404" ] || { echo "❌ expected 404 for an unknown assignment on /agent/tool-calls, got $UNKNOWN_TOOL_CALL_STATUS"; exit 1; }
           echo "✅ tool-call gateway correctly rejects an unknown assignment with 404"
 
@@ -101,12 +101,12 @@ spec:
           echo "✅ the inference gateway call was logged to the transcript, end to end"
 
           echo "== Spot-check: a real harness actually invoked the scripted tool call =="
-          echo "   (ScriptedChatModelStub's first turn always requests list_queryable_entities;"
+          echo "   (ScriptedChatModelStub's first turn always requests post_task_update;"
           echo "    a real harness Job must have called POST /agent/tool-calls to get past it)"
           TOOL_CALL=$(curl -s --max-time 10 \
-            "$TOOL_CALL_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&toolName=list_queryable_entities" || true)
-          echo "$TOOL_CALL" | grep -q '"toolName":"list_queryable_entities"' \
-            || { echo "❌ no task-attempt-tool-call row for list_queryable_entities: $TOOL_CALL"; exit 1; }
+            "$TOOL_CALL_QUERY?page=0&size=1&sort-descending=true&sort-by-fields=createdAt&toolName=post_task_update" || true)
+          echo "$TOOL_CALL" | grep -q '"toolName":"post_task_update"' \
+            || { echo "❌ no task-attempt-tool-call row for post_task_update: $TOOL_CALL"; exit 1; }
           echo "$TOOL_CALL" | grep -qF '"resultJson"' \
             || { echo "❌ tool-call row has no resultJson: $TOOL_CALL"; exit 1; }
           echo "✅ a real harness Job invoked /agent/tool-calls and the call was durably logged"

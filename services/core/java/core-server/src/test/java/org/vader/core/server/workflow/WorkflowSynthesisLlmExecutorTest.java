@@ -30,7 +30,7 @@ class WorkflowSynthesisLlmExecutorTest {
     @BeforeEach
     void setUp() {
         this.chatModel = mock(ChatModel.class);
-        when(this.chatModel.getDefaultOptions())
+        when(this.chatModel.getOptions())
             .thenReturn(ToolCallingChatOptions.builder().build());
 
         this.executor = new WorkflowSynthesisLlmExecutor();

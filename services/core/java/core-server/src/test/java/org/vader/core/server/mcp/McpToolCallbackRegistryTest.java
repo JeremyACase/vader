@@ -34,9 +34,8 @@ class McpToolCallbackRegistryTest {
     /**
      * Wires the given providers, tagging each with whatever {@link AgentToolAudience}s
      * {@code audiencesByProvider} maps it to (an untagged provider -- the common case for tests
-     * that only care about {@link McpToolCallbackRegistry#all} / {@link
-     * McpToolCallbackRegistry#findByName} -- is simply invisible to {@link
-     * McpToolCallbackRegistry#forAudience}).
+     * that only care about {@link McpToolCallbackRegistry#all} -- is invisible to both {@link
+     * McpToolCallbackRegistry#forAudience} and {@link McpToolCallbackRegistry#findByName}).
      */
     @SuppressWarnings("unchecked")
     private void wireProvidersWithAudiences(
@@ -75,13 +74,40 @@ class McpToolCallbackRegistryTest {
     }
 
     @Test
-    void findByName_returnsTheMatchingTool() {
-        assertThat(this.registry.findByName("run_python_code")).isPresent();
+    void findByName_returnsTheMatchingToolOfferedToTheAudience() {
+        var callback = callbackNamed("run_python_code");
+        ToolCallbackProvider provider = () -> new ToolCallback[] {callback};
+        this.wireProvidersWithAudiences(
+            Map.of(provider, Set.of(AgentToolAudience.TASK_EXECUTION)), provider);
+
+        assertThat(this.registry.findByName(AgentToolAudience.TASK_EXECUTION, "run_python_code"))
+            .contains(callback);
     }
 
     @Test
     void findByName_forAnUnregisteredName_returnsEmpty() {
-        assertThat(this.registry.findByName("bogus_tool")).isEmpty();
+        ToolCallbackProvider provider = () -> new ToolCallback[] {callbackNamed("run_python_code")};
+        this.wireProvidersWithAudiences(
+            Map.of(provider, Set.of(AgentToolAudience.TASK_EXECUTION)), provider);
+
+        assertThat(this.registry.findByName(AgentToolAudience.TASK_EXECUTION, "bogus_tool"))
+            .isEmpty();
+    }
+
+    @Test
+    void findByName_forToolOfferedOnlyToAnotherAudience_returnsEmpty() {
+        ToolCallbackProvider provider = () -> new ToolCallback[] {callbackNamed("query_database")};
+        this.wireProvidersWithAudiences(
+            Map.of(provider, Set.of(AgentToolAudience.ORCHESTRATION)), provider);
+
+        assertThat(this.registry.findByName(AgentToolAudience.TASK_EXECUTION, "query_database"))
+            .isEmpty();
+    }
+
+    @Test
+    void findByName_forAnUntaggedTool_returnsEmpty() {
+        assertThat(this.registry.findByName(AgentToolAudience.TASK_EXECUTION, "run_python_code"))
+            .isEmpty();
     }
 
     @Test

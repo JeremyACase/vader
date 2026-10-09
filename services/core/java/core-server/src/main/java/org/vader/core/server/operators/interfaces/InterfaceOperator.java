@@ -38,11 +38,20 @@ public interface InterfaceOperator<S> {
     ManagedResource reconcile(S spec);
 
     /**
-     * Deletes the Deployment and Service identified by {@code name}.
+     * Deletes the resources identified by {@code name}, if this operator manages them. A name
+     * this operator doesn't manage -- absent, or created by anyone else -- is left alone.
      *
      * @param name the managed resource name
      */
     void delete(String name);
+
+    /**
+     * Reports whether this operator manages a resource named {@code name}.
+     *
+     * @param name the resource name
+     * @return true if a resource of that name exists and this operator created it
+     */
+    boolean manages(String name);
 
     /**
      * Deletes every resource this operator manages.

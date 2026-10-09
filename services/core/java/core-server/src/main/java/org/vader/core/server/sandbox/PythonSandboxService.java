@@ -147,9 +147,14 @@ public class PythonSandboxService {
      * @param name the exact sandbox name
      * @param request the code (and any files) to run
      * @return the run's stdout/stderr/exit code
+     * @throws SandboxNotFoundException if no sandbox of that name is managed here, so a
+     *     caller-supplied name can never direct the request at some other in-cluster host
      */
     public SandboxExecutionResult runCode(
         final String name, final SandboxExecutionRequest request) {
+        if (!this.operator.manages(name)) {
+            throw new SandboxNotFoundException(name);
+        }
         return this.executionClient.execute(name, request);
     }
 

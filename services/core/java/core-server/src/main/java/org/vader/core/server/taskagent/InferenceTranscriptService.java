@@ -1,7 +1,5 @@
 package org.vader.core.server.taskagent;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Objects;
@@ -16,6 +14,8 @@ import org.vader.common.model.vader.entity.TaskAttemptTranscriptEntity;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.InferenceTurn;
 import org.vader.core.server.workflow.TaskAttemptRepository;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Completes an assignment's inference turns and logs each to the attempt's transcript -- this,
@@ -116,7 +116,7 @@ public class InferenceTranscriptService {
         String result;
         try {
             result = this.objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Could not serialize transcript content", e);
         }
         return result;

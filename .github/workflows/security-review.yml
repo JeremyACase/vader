@@ -1,0 +1,101 @@
+name: Security Review (LLM)
+
+# Advisory LLM security review of each PR's diff, posted as inline review comments. It is not a
+# merge gate: keep it out of the branch's required status checks until its false-positive rate
+# has been measured.
+#
+# The PR is untrusted input to the model, so the job that runs the model holds only a read-only
+# token and read-only tools; a separate job that never runs the model posts the comments.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: security-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CLAUDE_CODE_VERSION: 2.1.287
+  CLAUDE_MODEL: claude-opus-5-5
+
+jobs:
+
+  review:
+    name: Review diff
+    # Fork PRs get no secrets, so there is no API key to run with.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      findings: ${{ steps.review.outputs.findings }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Claude Code
+        run: npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+
+      # The prompt is read from the base branch so a PR can't rewrite its own reviewer's
+      # instructions; until the prompt exists on main there is nothing trusted to run.
+      - name: Review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if ! git show "$BASE_SHA:.github/security/llm-review-prompt.md" > "$RUNNER_TEMP/prompt.md"; then
+            echo "::notice::Review prompt is not on the base branch yet; skipping."
+            echo "findings=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff "$BASE_SHA"...HEAD > pr.diff
+          claude -p "$(cat "$RUNNER_TEMP/prompt.md")" \
+            --model "$CLAUDE_MODEL" \
+            --allowedTools "Read,Grep,Glob" \
+            --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch" \
+            --max-turns 40 \
+            --output-format json > "$RUNNER_TEMP/raw.json"
+          findings="$(jq -r '.result' "$RUNNER_TEMP/raw.json" | sed '/^```/d' \
+            | jq -c '[.[] | select((.path | type) == "string" and (.line | type) == "number"
+                                    and (.body | type) == "string")]')"
+          echo "Findings: $(jq length <<< "$findings")"
+          echo "findings=$findings" >> "$GITHUB_OUTPUT"
+
+  comment:
+    name: Post findings
+    needs: review
+    if: needs.review.outputs.findings != '' && needs.review.outputs.findings != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      # Inline comments are rejected if any finding cites a line outside the diff; the findings
+      # then go up as one plain PR comment instead.
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINDINGS: ${{ needs.review.outputs.findings }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          HEADER: "Advisory LLM security review -- not a merge gate."
+        run: |
+          review="$(jq --arg sha "$SHA" --arg header "$HEADER" '{
+              commit_id: $sha, event: "COMMENT", body: $header,
+              comments: [.[] | {path, line, side: "RIGHT", body}]
+            }' <<< "$FINDINGS")"
+          if ! gh api "repos/$REPO/pulls/$PR/reviews" --input - <<< "$review"; then
+            body="$(jq -r --arg header "$HEADER" \
+              '$header + "\n\n" + (map("- `\(.path):\(.line)` \(.body)") | join("\n"))' <<< "$FINDINGS")"
+            gh api "repos/$REPO/issues/$PR/comments" -f body="$body"
+          fi

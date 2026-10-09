@@ -44,8 +44,9 @@ Point an MCP client at the SSE URL, or explore it with the MCP Inspector:
 **************************************************
 Vader Database (H2):
 
-Core Server is running with an embedded H2 in-memory database. H2 ships a
-browser-based console that runs inside the Core Server process itself, so
+{{ if eq (.Values.vader.mode | default "PROD") "DEV" -}}
+Core Server is running with an embedded H2 in-memory database. In DEV mode
+H2's browser-based console runs inside the Core Server process itself, so
 once you've port-forwarded Core Server (see above), it can be viewed as
 follows:
 
@@ -54,6 +55,14 @@ follows:
 3. Replace the connection URL with "jdbc:h2:mem:vaderDb;DB_CLOSE_DELAY=-1"
 4. Input "sa" for the username, and leave the password blank.
 5. Select "Connect."
+{{ else -}}
+Core Server is running with an embedded H2 in-memory database. H2's web
+console is served only in DEV mode (it runs arbitrary SQL with no login).
+Read the data through the query API instead, once you've port-forwarded Core
+Server (see above): the REST "/vader/core-server/data/<entity>/query"
+endpoints (e.g. entity "workflow"), or the query_database /
+list_queryable_entities MCP tools.
+{{ end -}}
 **************************************************
 Vader Core UI:
 

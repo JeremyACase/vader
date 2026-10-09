@@ -107,8 +107,9 @@ public class FilterDao<T> {
         var countQuery = criteriaBuilder.createQuery(Long.class);
         var countRoot = countQuery.from(clazz);
 
+        var predicateClass = this.classDeriver.tryGetPredicateClass(clazz, queryFilter);
         var predicates = this.getPredicates(
-            queryFilter, criteriaBuilder, countQuery, countRoot, clazz);
+            queryFilter, criteriaBuilder, countQuery, countRoot, predicateClass);
 
         countQuery
             .select(criteriaBuilder.count(countRoot))
@@ -170,16 +171,16 @@ public class FilterDao<T> {
         final CriteriaBuilder criteriaBuilder,
         final QueryFilterParameter filterParameter,
         final Root<?> root,
-        final Class<?> clazz) {
+        final Class<?> clazz) throws NoSuchFieldException {
 
+        // An unknown key is an error, never a dropped filter: dropping it would widen the result.
         var match = FieldUtils.getAllFieldsList(clazz).stream()
             .filter(field -> field.getName().equalsIgnoreCase(filterParameter.getKey()))
-            .findFirst();
-        if (match.isEmpty()) {
-            return null;
-        }
+            .findFirst()
+            .orElseThrow(() -> new NoSuchFieldException("Field '" + filterParameter.getKey()
+                + "' not found in " + clazz.getSimpleName() + "."));
         return this.getPredicateForParameterHelper(
-            criteriaBuilder, match.get(), root, filterParameter);
+            criteriaBuilder, match, root, filterParameter);
     }
 
     private Predicate getPredicateForNestedParameter(

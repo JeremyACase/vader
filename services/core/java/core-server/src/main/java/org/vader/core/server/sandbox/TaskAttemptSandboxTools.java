@@ -49,7 +49,8 @@ public class TaskAttemptSandboxTools {
             + "working directory persists across calls for the rest of this task, so a file you "
             + "write in one call is still there for the next. You see only what the code prints, "
             + "plus the value of a bare expression on its last line (shown as a notebook would), "
-            + "so print anything else you want to see.")
+            + "so print anything else you want to see. The sandbox has no network access: use "
+            + "the standard library, pandas or openpyxl; nothing else can be installed.")
     public SandboxExecutionResult runPythonCode(
         @ToolParam(description = "The Python source to run.")
         final String code,

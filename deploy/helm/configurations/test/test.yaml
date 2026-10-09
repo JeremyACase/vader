@@ -34,3 +34,7 @@ vader:
 infrastructure:
   image:
     pullPolicy: IfNotPresent
+
+systemTests:
+  zapScan:
+    enabled: true

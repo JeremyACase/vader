@@ -14,7 +14,10 @@ RUN BASE="$(printf "%s" "${APP_BASE_PATH%/}/")" \
  && npm run build -- --configuration production --base-href "$BASE" --deploy-url "$BASE"
 
 # 2) Serve with NGINX
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
+
+# Pick up Alpine security patches published after the base image was built.
+RUN apk upgrade --no-cache
 
 ENV NGINX_ENTRYPOINT_QUIET_LOGS=1
 

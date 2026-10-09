@@ -1,14 +1,14 @@
 package org.vader.core.server.review;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.vader.common.model.vader.entity.TaskAttemptToolCallEntity;
 import org.vader.core.server.taskagent.TaskAttemptToolCallRepository;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Adapts an attempt's logged tool calls into one line of evidence an evaluator can read: what the
@@ -51,7 +51,7 @@ public class ToolCallEvidenceAdapter {
         if (Objects.nonNull(resultJson)) {
             try {
                 result = this.objectMapper.readTree(resultJson);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 result = null;
             }
         }
