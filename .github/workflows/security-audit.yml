@@ -102,7 +102,7 @@ jobs:
 
       - name: Audit
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           bash "$AUDIT_DIR/run-claude.sh" .llm-audit/prompt.md .llm-audit/audit.json 150
           jq -e '(.fixed | type) == "array" and (.findings | type) == "array"' .llm-audit/audit.json > /dev/null
@@ -127,7 +127,7 @@ jobs:
 
       - name: Verify new candidates
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           echo '[]' > .llm-audit/verdicts.json
           if [ "$(jq length .llm-audit/candidates.json)" -gt 0 ]; then
