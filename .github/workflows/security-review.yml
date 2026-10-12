@@ -26,7 +26,7 @@ jobs:
 
   review:
     name: Review diff
-    # Fork PRs get no secrets, so there is no API key to run with.
+    # Fork PRs get no secrets, so there is no token to run with.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -49,7 +49,7 @@ jobs:
       - name: Review
         id: review
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if ! git show "$BASE_SHA:.github/security/llm-review-prompt.md" > "$RUNNER_TEMP/prompt.md" 2>/dev/null; then
