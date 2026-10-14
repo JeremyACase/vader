@@ -60,6 +60,9 @@ public class LlmRequestQueue {
     @Autowired
     private LlmExecutorRegistry executorRegistry;
 
+    @Autowired
+    private LlmRequestOutboxMessageFactory messageFactory;
+
     @Value("${vader.llm.request-queue.stall-timeout-seconds:60}")
     private long stallTimeoutSeconds;
 
@@ -110,10 +113,7 @@ public class LlmRequestQueue {
 
     private String enqueue(final LlmRequestKind kind, final String requestJson) {
         return this.requiresNewTransaction.execute(status -> {
-            var message = new LlmRequestOutboxMessageEntity();
-            message.setKind(kind);
-            message.setRequestJson(requestJson);
-            message.setStatus(OutboxMessageStatus.PENDING);
+            var message = this.messageFactory.create(kind, requestJson);
             this.messageRepository.save(message);
             this.eventPublishingFacade.publish(new OutboxMessageEnqueuedEvent(QUEUED_MODEL_TYPE));
             return message.getId();

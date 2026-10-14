@@ -1,3 +1,6 @@
+{{- if not (has (.Values.vader.mode | default "PROD") (list "DEV" "PROD" "TEST" "EVAL")) }}
+{{- fail (printf "vader.mode must be one of DEV, PROD, TEST or EVAL (got %s)." (.Values.vader.mode | default "PROD")) }}
+{{- end }}
 {{- if and (eq .Values.vader.orchestrator.type "scripted") (ne (.Values.vader.mode | default "PROD") "TEST") }}
 {{- fail (printf "vader.orchestrator.type=scripted returns canned results and is only permitted with vader.mode=TEST (got %s). Use vader.orchestrator.type=local." (.Values.vader.mode | default "PROD")) }}
 {{- end }}
@@ -67,6 +70,12 @@ data:
             options:
               model: {{ .Values.vader.orchestrator.local.model }}
               temperature: 0
+              {{- if eq (.Values.vader.mode | default "PROD") "EVAL" }}
+              # EVAL only: with temperature 0 and a fixed seed, a benchmark's repeated runs
+              # differ only where the model itself is nondeterministic, so a prompt change can
+              # be told apart from chance. See vader.orchestrator.local.seed.
+              seed: {{ required "vader.orchestrator.local.seed is required when vader.mode is EVAL" .Values.vader.orchestrator.local.seed }}
+              {{- end }}
               # Caps every single response (Ollama's num_predict) so a runaway generation ends
               # instead of holding Ollama's only slot indefinitely. These are Spring AI's default
               # options, merged into every chat call. See vader.orchestrator.local.maxOutputTokens.

@@ -30,6 +30,12 @@ public class LlmRequestOutboxMessageEntity extends AbstractOutboxMessageEntity {
     @Lob
     private String responseJson;
 
+    /** The fingerprint of the prompt templates this kind of call was rendered from. */
+    private String promptFingerprint;
+
+    /** The model the call was sent to, so a change of model is never mistaken for a prompt's. */
+    private String model;
+
     @Override
     public String getModelType() {
         return "LlmRequestOutboxMessage";
@@ -57,5 +63,21 @@ public class LlmRequestOutboxMessageEntity extends AbstractOutboxMessageEntity {
 
     public void setResponseJson(String responseJson) {
         this.responseJson = responseJson;
+    }
+
+    public String getPromptFingerprint() {
+        return this.promptFingerprint;
+    }
+
+    public void setPromptFingerprint(String promptFingerprint) {
+        this.promptFingerprint = promptFingerprint;
+    }
+
+    public String getModel() {
+        return this.model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 }

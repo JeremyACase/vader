@@ -24,6 +24,8 @@ public class LlmRequestOutboxMessageDtoMapper extends
             to.setKind(from.getKind());
             to.setRequestJson(from.getRequestJson());
             to.setResponseJson(from.getResponseJson());
+            to.setPromptFingerprint(from.getPromptFingerprint());
+            to.setModel(from.getModel());
         }
         return to;
     }

@@ -11,6 +11,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   against the variables their code supplies at startup, and each LLM call kind gets a logged
   fingerprint of its templates, the groundwork for attributing outcomes to prompt versions. The
   wording itself is unchanged.
+### Added
+- A new `EVAL` mode for benchmarking the system's prompts against a baseline: it runs a real
+  local model and refuses to start unless sampling is pinned (temperature 0 and a fixed seed),
+  so repeated runs are comparable. Every recorded LLM call now carries its prompt fingerprint
+  and model, and `GET /vader/core-server/llm/configuration` reports the model, its sampling
+  options and every fingerprint in effect, for a benchmark runner to record with each result.
 
 ## [0.34.0]
 ### Security

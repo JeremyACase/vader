@@ -157,6 +157,27 @@ spec:
           [ "$STATUS" = "400" ] || { echo "❌ unknown status: expected 400, got $STATUS"; exit 1; }
           echo "✅ queue inspection lists queues and messages and rejects unknown queues/statuses"
 
+          echo "== LLM configuration endpoint =="
+          CONFIG=$(curl -s --max-time 10 "$SERVER/vader/core-server/llm/configuration" || true)
+          echo "🔍 $CONFIG"
+          echo "$CONFIG" | grep -q '"mode":"{{ .Values.vader.mode | default "PROD" }}"' \
+            || { echo "❌ configuration does not report this release's mode"; exit 1; }
+          for KIND in DECOMPOSITION TASK_PLAN_REFINEMENT EVALUATION REATTEMPT_DECISION WORKFLOW_SYNTHESIS INFERENCE_TURN; do
+            echo "$CONFIG" | grep -Eq "\"$KIND\":\"[0-9a-f]{12}\"" \
+              || { echo "❌ configuration has no prompt fingerprint for $KIND"; exit 1; }
+          done
+          # The prompt just decomposed went through the LLM queue, stamped with the fingerprint the
+          # configuration reports for decomposition.
+          DECOMPOSITION_FP=$(echo "$CONFIG" | sed -n 's/.*"DECOMPOSITION":"\([0-9a-f]*\)".*/\1/p')
+          LLM_MESSAGES=$(curl -s --max-time 10 "$QUEUE_URL/LlmRequest/message?page=0&size=50" || true)
+          LLM_ROW=$(echo "$LLM_MESSAGES" | tr '{' '\n' | grep '"subject":"DECOMPOSITION"' | head -1 || true)
+          LLM_ID=$(echo "$LLM_ROW" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+          [ -n "$LLM_ID" ] || { echo "❌ no decomposition on the LLM request queue"; exit 1; }
+          LLM_MESSAGE=$(curl -s --max-time 10 "$QUEUE_URL/LlmRequest/message/$LLM_ID" || true)
+          echo "$LLM_MESSAGE" | grep -q "\"promptFingerprint\":\"$DECOMPOSITION_FP\"" \
+            || { echo "❌ decomposition request $LLM_ID is not stamped with $DECOMPOSITION_FP"; exit 1; }
+          echo "✅ LLM configuration reports every prompt fingerprint, and requests are stamped with them"
+
           echo "== Validation: 6 files should be rejected with 400 =="
           i=1; while [ $i -le 6 ]; do printf "content %d" $i > "/tmp/excess-file-$i.txt"; i=$((i+1)); done
           BODY_FILE=$(mktemp)

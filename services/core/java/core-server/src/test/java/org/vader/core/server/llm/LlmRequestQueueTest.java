@@ -40,6 +40,9 @@ class LlmRequestQueueTest {
     private LlmRequestOutboxMessageRepository messageRepository;
     private EventPublishingFacade eventPublishingFacade;
     private LlmRequestQueue queue;
+    private final PromptTemplateRegistry promptTemplateRegistry =
+        PromptTemplateRegistryObjectMother.loaded();
+    private final LlmModelNameResolver modelNameResolver = new LlmModelNameResolver();
 
     @BeforeEach
     void setUp() {
@@ -66,6 +69,14 @@ class LlmRequestQueueTest {
         ReflectionTestUtils.setField(this.queue, "executorRegistry", executorRegistry);
         ReflectionTestUtils.setField(this.queue, "stallTimeoutSeconds", 30L);
         ReflectionTestUtils.setField(this.queue, "maxWaitSeconds", 60L);
+        var messageFactory = new LlmRequestOutboxMessageFactory();
+        ReflectionTestUtils.setField(
+            messageFactory, "promptTemplateRegistry", this.promptTemplateRegistry);
+        ReflectionTestUtils.setField(
+            messageFactory, "llmModelNameResolver", this.modelNameResolver);
+        ReflectionTestUtils.setField(this.queue, "messageFactory", messageFactory);
+        ReflectionTestUtils.setField(this.modelNameResolver, "orchestratorType", "local");
+        ReflectionTestUtils.setField(this.modelNameResolver, "localModel", "qwen2.5:7b");
         ReflectionTestUtils.invokeMethod(this.queue, "init");
 
         when(this.messageRepository.save(any())).thenAnswer(call -> call.getArgument(0));
@@ -102,6 +113,33 @@ class LlmRequestQueueTest {
         assertThat(messageCaptor.getValue().getRequestJson()).contains("hi");
         verify(this.eventPublishingFacade)
             .publish(new OutboxMessageEnqueuedEvent("LlmRequest"));
+    }
+
+    @Test
+    void submit_stampsTheRequestWithItsKindsPromptFingerprintAndTheModel() {
+        this.respondWith(
+            "{\"value\":{\"passed\":true,\"reasoning\":\"ok\"},\"unreachableReason\":null}");
+
+        this.queue.submit(EvaluationLlmExecutor.class, EVALUATION_REQUEST);
+
+        var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
+        verify(this.messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getPromptFingerprint())
+            .isEqualTo(this.promptTemplateRegistry.fingerprint(LlmRequestKind.EVALUATION));
+        assertThat(messageCaptor.getValue().getModel()).isEqualTo("qwen2.5:7b");
+    }
+
+    @Test
+    void submit_stampsTheOrchestratorTypeAsTheModelWhenNoLocalModelAnswers() {
+        ReflectionTestUtils.setField(this.modelNameResolver, "orchestratorType", "scripted");
+        this.respondWith(
+            "{\"value\":{\"passed\":true,\"reasoning\":\"ok\"},\"unreachableReason\":null}");
+
+        this.queue.submit(EvaluationLlmExecutor.class, EVALUATION_REQUEST);
+
+        var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
+        verify(this.messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getModel()).isEqualTo("scripted");
     }
 
     @Test

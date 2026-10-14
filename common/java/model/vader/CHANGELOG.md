@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0]
+### Added
+- A queued LLM request records the fingerprint of the prompt templates it was rendered from
+  and the model it went to, so every call can be attributed to the prompt version and model
+  that produced it.
+
 ## [0.23.1]
 ### Fixed
 - Entity equality now holds between a lazily-loaded proxy and the entity it stands for, so

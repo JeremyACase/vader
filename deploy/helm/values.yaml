@@ -13,11 +13,13 @@ logging:
   vader: INFO
 
 vader:
-  # Allowable values are: DEV, PROD, TEST. Canned results are permitted ONLY in TEST: the chart
-  # refuses to render, and core-server refuses to start, with orchestrator.type "scripted" in any
-  # other mode. In DEV and PROD an unreachable LLM always fails loudly -- nothing ever substitutes
-  # a canned result for a real request. This chart's out-of-the-box default is DEV; a real
-  # deployment should set PROD, and only the devops test pipeline (configurations/test) sets TEST.
+  # Allowable values are: DEV, PROD, TEST, EVAL. Canned results are permitted ONLY in TEST: the
+  # chart refuses to render, and core-server refuses to start, with orchestrator.type "scripted"
+  # in any other mode. In every other mode an unreachable LLM always fails loudly -- nothing ever
+  # substitutes a canned result for a real request. EVAL benchmarks the system's prompts against a
+  # baseline: it needs a real local model and pins sampling with orchestrator.local.seed. This
+  # chart's out-of-the-box default is DEV; a real deployment should set PROD, only the devops
+  # test pipeline (configurations/test) sets TEST, and configurations/eval sets EVAL.
   mode: DEV
   swagger:
     # When true, core-server serves the OpenAPI spec at /v3/api-docs and Swagger UI at
@@ -87,6 +89,10 @@ vader:
       # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
       # on 32k, so there is no benefit going above 32768.
       contextTokens: 16384
+      # The sampling seed every Ollama call uses in mode EVAL (ignored in every other mode).
+      # With temperature 0 it makes a benchmark repeatable; change it only to deliberately
+      # sample a different run, never between a baseline and the run compared with it.
+      seed: 42
       # How long the core-server Helm system test waits for each submitted prompt to be
       # decomposed into a workflow. A real model on modest hardware takes minutes per
       # decomposition, and a later prompt also queues behind earlier workflows' agent calls on the

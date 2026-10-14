@@ -1,0 +1,31 @@
+# Helm values for the "eval" Vader deployment configuration: benchmarking the system's prompts
+# against a baseline. Like dev, but with sampling pinned (see vader.orchestrator.local.seed) and
+# none of dev's debugging surfaces, so a run measures only what production would do.
+vader:
+  mode: EVAL
+  orchestrator:
+    type: local
+  operators:
+    enabled: true
+    pythonSandbox:
+      enabled: true
+  components:
+    core:
+      coreServer:
+        image:
+          registry: docker.io/jeremyacase
+          repository: vader-core-server
+          tag: latest
+      coreUi:
+        image:
+          registry: docker.io/jeremyacase
+          repository: vader-core-ui
+          tag: latest
+
+infrastructure:
+  image:
+    pullPolicy: IfNotPresent
+
+telemetry:
+  prometheus:
+    enabled: false

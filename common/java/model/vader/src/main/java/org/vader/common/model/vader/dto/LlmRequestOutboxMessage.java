@@ -14,6 +14,10 @@ public class LlmRequestOutboxMessage extends AbstractOutboxMessage {
 
     private String responseJson;
 
+    private String promptFingerprint;
+
+    private String model;
+
     @Override
     public String getModelType() {
         return "LlmRequestOutboxMessage";
@@ -41,5 +45,21 @@ public class LlmRequestOutboxMessage extends AbstractOutboxMessage {
 
     public void setResponseJson(String responseJson) {
         this.responseJson = responseJson;
+    }
+
+    public String getPromptFingerprint() {
+        return this.promptFingerprint;
+    }
+
+    public void setPromptFingerprint(String promptFingerprint) {
+        this.promptFingerprint = promptFingerprint;
+    }
+
+    public String getModel() {
+        return this.model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 }
