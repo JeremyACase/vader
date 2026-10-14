@@ -9,10 +9,12 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-vader-agent-0}"     # KIND cluster name
 UI_BASE_PATH="${UI_BASE_PATH:-/}"                           # Angular base-href (/, /workbench, etc.)
 WORKBENCH_PATH="services/dag/workbench/ts/dag-workbench-ui" # UI subproject root (Angular/NGINX)
 DOCKER_REPO="${DOCKER_REPO:-jeremyacase}"                   # Docker Hub repository/namespace
+VADER_CONFIGURATION="${VADER_CONFIGURATION:-dev}"          # deploy/helm/configurations/<name> (dev, eval)
 
 echo "Using OPENJDK_VERSION=${OPENJDK_VERSION}"
 echo "Using KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME}"
 echo "Using UI_BASE_PATH=${UI_BASE_PATH}"
+echo "Using VADER_CONFIGURATION=${VADER_CONFIGURATION}"
 
 # ----------- PREREQS -------------------
 for cmd in kind helm kubectl docker; do
@@ -90,13 +92,13 @@ LOCAL_OLLAMA_URL="http://vader-ollama-local:11434"
 if helm status vader -n vader >/dev/null 2>&1; then
   echo "Helm release 'vader' exists — upgrading..."
   helm upgrade vader deploy/helm/ \
-    --values deploy/helm/configurations/dev/dev.yaml \
+    --values "deploy/helm/configurations/${VADER_CONFIGURATION}/${VADER_CONFIGURATION}.yaml" \
     --set vader.orchestrator.local.externalBaseUrl="${LOCAL_OLLAMA_URL}" \
     -n vader
 else
   echo "Installing Helm release 'vader'..."
   helm install vader deploy/helm/ \
-    --values deploy/helm/configurations/dev/dev.yaml \
+    --values "deploy/helm/configurations/${VADER_CONFIGURATION}/${VADER_CONFIGURATION}.yaml" \
     --set vader.orchestrator.local.externalBaseUrl="${LOCAL_OLLAMA_URL}" \
     -n vader
 fi
