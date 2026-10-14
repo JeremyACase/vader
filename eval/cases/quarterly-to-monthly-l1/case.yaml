@@ -1,0 +1,14 @@
+# Level 1 of the quarterly-to-monthly ladder: one flow column, the method stated outright, and
+# quarterly values divisible by three, so the only thing being measured is whether the system
+# plans, executes and delivers a simple, fully specified transformation.
+id: quarterly-to-monthly-l1
+level: 1
+prompt: |
+  Attached is quarterly_revenue.csv, which holds quarterly revenue totals. Convert it to monthly
+  revenue by splitting each quarter's revenue evenly across its three months. Deliver the result
+  as monthly_revenue.csv with exactly two columns: month (formatted YYYY-MM) and revenue, one row
+  per month in chronological order.
+inputs:
+  - quarterly_revenue.csv
+deliverable: monthly_revenue.csv
+samples: 5
