@@ -62,8 +62,8 @@ vader:
       # 5-6 GB of memory on the node running Ollama.
       model: qwen2.5:7b
       # Base URL of an Ollama instance running outside the cluster -- in dev, the one
-      # tools/scripts/devs/install-ollama.sh starts in Docker so it can use the host's GPU, which
-      # KIND nodes can't reach (both KIND install scripts set this to it). When set, the chart
+      # tools/scripts/local/ollama-up.sh starts in Docker so it can use the host's GPU, which
+      # KIND nodes can't reach (every local install script sets this to it). When set, the chart
       # deploys no Ollama of its own and core-server calls this URL instead. Leave empty to run
       # Ollama in-cluster.
       externalBaseUrl: ""

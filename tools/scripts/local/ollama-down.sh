@@ -1,12 +1,12 @@
 #!/bin/bash
-# Purpose: Stop and remove the Ollama container started by install-ollama.sh.
+# Purpose: Stop and remove the Ollama container started by ollama-up.sh.
 #
-# Usage:   tools/scripts/devs/uninstall-ollama.sh [--purge-models]
+# Usage:   tools/scripts/local/ollama-down.sh [--purge-models]
 #            --purge-models   also delete the downloaded models (several GB; re-downloaded on the
-#                             next install-ollama.sh)
+#                             next ollama-up.sh)
 #
-# The KIND install scripts point Vader at this Ollama, so a running Vader loses its LLM until a
-# KIND install script is re-run (which starts it again).
+# The local install scripts point Vader at this Ollama, so a running Vader loses its LLM until a
+# local install script, or ollama-up.sh, is re-run.
 
 set -euo pipefail
 

@@ -1,14 +1,14 @@
 #!/bin/bash
 # Purpose: Run Ollama locally in Docker -- on this machine's NVIDIA GPU when Docker can reach one
 #          -- and pull the model Vader is configured to use. KIND nodes can't reach the host's
-#          GPU; a plain Docker container can. Called by both KIND install scripts, which point
+#          GPU; a plain Docker container can. Called by every local install script, which points
 #          Vader at it; safe to re-run (an existing container is reused, the model is only
 #          downloaded once).
 #
 #          The container joins the 'kind' Docker network, where pods reach it by name, so run
 #          this after the KIND cluster exists.
 #
-# Usage:   tools/scripts/devs/install-ollama.sh [--recreate]
+# Usage:   tools/scripts/local/ollama-up.sh [--recreate]
 #            --recreate   remove and recreate the container (e.g. after changing OLLAMA_GPU).
 #                         Downloaded models live in a Docker volume and are kept.
 #
@@ -29,8 +29,8 @@ export MSYS_NO_PATHCONV=1
 
 cd "$(dirname "$0")/../../.."
 
-# Vader reaches this container at http://vader-ollama-local:11434 -- the install scripts hard-code
-# that URL, so keep the name in step with them.
+# Vader reaches this container at http://vader-ollama-local:11434, the URL
+# tools/scripts/lib/common.sh hard-codes, so keep the name in step with it.
 CONTAINER="vader-ollama-local"
 VOLUME="vader-ollama-models"
 VALUES_FILE="deploy/helm/values.yaml"

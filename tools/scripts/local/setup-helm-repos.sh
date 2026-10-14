@@ -1,7 +1,9 @@
 #!/bin/bash
+# Purpose: One-time setup: add the Helm repos the Vader chart depends on.
+#
+# Usage:   tools/scripts/local/setup-helm-repos.sh
 
-# Purpose: This script will set up devs with the requisite Helm repos to do local development of Vader.
-
+set -euo pipefail
 
 echo Running one-time setup for Vader installation...
 echo ...adding Helm repos...

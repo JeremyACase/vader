@@ -80,15 +80,30 @@ npm start
 # Agent harness: build/test/lint directly with cargo (also wired into ./gradlew build)
 cd services/core/rust/core-agent-harness && cargo build
 
-# Local LLM: both KIND install scripts run this first -- Ollama in Docker on the host GPU (GPU
-# passthrough works there, not inside KIND nodes), pulling the configured model -- and point
-# Vader at it. Re-runnable on its own; uninstall-ollama.sh [--purge-models] removes it.
-tools/scripts/devs/install-ollama.sh
+# Local LLM: every local install script runs this first -- Ollama in Docker on the host GPU
+# (GPU passthrough works there, not inside KIND nodes), pulling the configured model -- and
+# points Vader at it. Re-runnable on its own; ollama-down.sh [--purge-models] removes it.
+tools/scripts/local/ollama-up.sh
 
 # Python sandbox exec server: lint/test run dockerized (also wired into ./gradlew build) --
 # no host Python install required
 ./gradlew :services:core:python:core-python-sandbox-server:build
 ```
+
+### Local cluster scripts
+
+`tools/scripts/local/` holds one script per goal, each a few lines over the shared helpers in
+`tools/scripts/lib/` (sourced, never run). All target the KIND cluster `vader-agent-0` and the
+local GPU Ollama, and run from any directory.
+
+| Script | Does |
+|---|---|
+| `setup-helm-repos.sh` | One-time: add the Helm repos the chart depends on |
+| `install-dev.sh` | Install or upgrade from the published images, dev configuration |
+| `install-dev-from-source.sh` | Build every image from the working tree, then install or upgrade with dev |
+| `install-eval.sh` | Build from the working tree and install a **fresh** EVAL release (any existing release, its database and leftover harness Jobs/sandboxes are wiped first) |
+| `uninstall.sh [--cluster]` | Remove the release and operator-created workloads; `--cluster` also deletes the KIND cluster |
+| `ollama-up.sh` / `ollama-down.sh` | Start or remove the local GPU Ollama |
 
 Checkstyle runs on every build. Config is in `common/java/checkstyle/`. The project follows
 Google Java Style with a 100-character line limit. The Google checks only warn, but one check
@@ -354,7 +369,7 @@ compress it further, not to add structure.
 | `vader.mode` | `PROD` | `DEV`, `PROD`, `TEST`, or `EVAL`. Canned results are permitted **only** in `TEST` (the devops test pipeline): `vader.orchestrator.type=scripted` is refused -- by the Helm chart at render time and by core-server at startup -- in any other mode. In every mode an unreachable local LLM fails loudly with `OrchestratorUnavailableException`; nothing ever substitutes a canned result. `EVAL` benchmarks the prompts against a baseline (`deploy/helm/configurations/eval`): core-server refuses to start in it unless sampling is pinned (temperature 0 and a seed), and `GET /vader/core-server/llm/configuration` reports the model, sampling and prompt fingerprints a result was produced under |
 | `vader.orchestrator.type` | `local` (Helm) | `local` (Ollama) or `scripted` (`ScriptedChatModelStub` stands in for the LLM: every real prompt, queue and parser runs, but replies are canned; requires `vader.mode=TEST`) |
 | `vader.orchestrator.local.model` | — | Ollama model name |
-| `spring.ai.ollama.base-url` (Helm: `vader.orchestrator.local.externalBaseUrl`) | in-cluster `http://vader-ollama:11434` | Set the Helm value to use an Ollama outside the cluster (e.g. `install-ollama.sh`'s, on the host GPU); the chart then deploys no Ollama of its own. Both dev KIND install scripts set it to their local Ollama |
+| `spring.ai.ollama.base-url` (Helm: `vader.orchestrator.local.externalBaseUrl`) | in-cluster `http://vader-ollama:11434` | Set the Helm value to use an Ollama outside the cluster (e.g. `ollama-up.sh`'s, on the host GPU); the chart then deploys no Ollama of its own. Every local install script sets it to the local Ollama |
 | `spring.ai.ollama.chat.options.num-predict` (Helm: `vader.orchestrator.local.maxOutputTokens`) | `2048` (Helm) | Hard cap on tokens generated per response, for every Ollama call. Stops a small model's runaway repetition loop from generating forever and holding Ollama's single slot; tune per model |
 | `spring.ai.ollama.chat.options.num-ctx` (Helm: `vader.orchestrator.local.contextTokens`) | `16384` (Helm) | Ollama's context window per call. The prompt budget is this minus `num-predict`. Over it, Ollama silently drops the oldest messages, keeping every system message and the latest one -- so a task agent loses its opening task message first. Each agent turn's prompt/completion tokens and characters sent are recorded on its transcript, and core-server warns when a turn nears the budget. Must comfortably exceed `num-predict` (the chart refuses to render otherwise) |
 | `spring.ai.ollama.chat.options.seed` (Helm: `vader.orchestrator.local.seed`) | `42` (Helm) | Sampling seed for every Ollama call, rendered only in `EVAL` mode, where it is required. Never change it between a baseline and the run compared with it |
