@@ -1,7 +1,6 @@
 package org.vader.core.server.workflow;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +8,12 @@ import org.springframework.stereotype.Service;
 import org.vader.common.model.vader.entity.LlmRequestKind;
 import org.vader.core.server.llm.LlmRequestInbox;
 import org.vader.core.server.llm.LlmRequestQueue;
+import org.vader.core.server.llm.PromptKey;
+import org.vader.core.server.llm.PromptTemplateRegistry;
+import org.vader.core.server.llm.PromptVariablesBuilder;
 import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
 import org.vader.core.server.workflow.model.DeliveredFile;
+import org.vader.core.server.workflow.model.TaskOutcome;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 
 /**
@@ -29,38 +32,11 @@ import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 public class WorkflowSynthesisLlmExecutor
     implements InterfaceLlmExecutor<WorkflowSynthesisRequest, String> {
 
-    private static final String SYNTHESIS_INSTRUCTIONS = """
-        You are Vader, wrapping up a multi-step task for the user. Their original request was:
-        "%s"
-
-        Your plan's objective was: %s
-
-        Every subtask has now finished. Here is what each one produced:
-
-        %s
-
-        Write a clear, direct final answer to the user's original request, synthesizing what
-        every subtask found or produced into one coherent response -- not a list of what each
-        subtask did, but the actual answer the tasks were meant to produce together. If any
-        subtask failed, use what the successful ones still support and say plainly what could
-        not be completed.
-        """;
-
-    private static final String FILES_INSTRUCTIONS = """
-
-        The subtasks saved these files for the user:
-
-        %s
-
-        When a file's content is shown above, include it in your answer in full, exactly as
-        written, in a fenced code block, so the user can copy it. Do not write download links or
-        paths: a list of every file with its download link is added after your answer.
-        """;
-
-    private static final String NO_CONTENT_SHOWN = "(content not shown: binary or too large)";
-
     @Autowired
     private ChatClient.Builder chatClientBuilder;
+
+    @Autowired
+    private PromptTemplateRegistry promptTemplateRegistry;
 
     @Override
     public LlmRequestKind kind() {
@@ -77,22 +53,40 @@ public class WorkflowSynthesisLlmExecutor
     @Override
     public String execute(final WorkflowSynthesisRequest request) {
         var taskSummaries = request.taskOutcomes().stream()
-            .map(outcome -> "- " + outcome.title() + " ("
-                + (outcome.succeeded() ? "succeeded" : "failed") + "): " + outcome.output())
+            .map(this::taskSummary)
             .collect(Collectors.joining("\n"));
-
-        var prompt = SYNTHESIS_INSTRUCTIONS.formatted(
-            request.promptText(), request.objective(), taskSummaries)
-            + filesSection(request.deliveredFiles());
+        var variables = new PromptVariablesBuilder()
+            .with("request", request.promptText())
+            .with("objective", request.objective())
+            .with("taskSummaries", taskSummaries)
+            .with("files", this.fileListing(request.deliveredFiles()))
+            .build();
+        var prompt = this.promptTemplateRegistry.render(PromptKey.SYNTHESIS, variables);
 
         return this.chatClientBuilder.build().prompt().user(prompt).call().content();
     }
 
-    private static String filesSection(final List<DeliveredFile> files) {
+    private String taskSummary(final TaskOutcome outcome) {
+        var variables = new PromptVariablesBuilder()
+            .with("title", outcome.title())
+            .with("succeeded", outcome.succeeded())
+            .with("output", outcome.output())
+            .build();
+        return this.promptTemplateRegistry.render(PromptKey.SYNTHESIS_TASK, variables);
+    }
+
+    private String fileListing(final List<DeliveredFile> files) {
         var listing = files.stream()
-            .map(file -> "File " + file.filename() + ":\n"
-                + Objects.requireNonNullElse(file.inlineContent(), NO_CONTENT_SHOWN))
+            .map(this::fileEntry)
             .collect(Collectors.joining("\n\n"));
-        return files.isEmpty() ? "" : FILES_INSTRUCTIONS.formatted(listing);
+        return files.isEmpty() ? null : listing;
+    }
+
+    private String fileEntry(final DeliveredFile file) {
+        var variables = new PromptVariablesBuilder()
+            .with("filename", file.filename())
+            .with("content", file.inlineContent())
+            .build();
+        return this.promptTemplateRegistry.render(PromptKey.SYNTHESIS_FILE, variables);
     }
 }

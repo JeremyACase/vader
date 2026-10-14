@@ -1,15 +1,34 @@
 use serde_json::Value;
 
 use crate::conversation::{ConversationMessage, ConversationRole};
-use crate::prompts::{UNEXECUTED_CODE_NUDGE, UNRESOLVED_ERROR_NUDGE};
+use crate::prompts::AssignmentNudges;
 
 /// The tool whose `code` argument counts as "executed" when checking a final answer for code the
 /// model never ran.
 const RUN_PYTHON_CODE_TOOL: &str = "run_python_code";
 
+/// Why a would-be final answer looks unfinished, which picks the nudge sent back for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnfinishedAnswer {
+    /// The last tool call failed and nothing has succeeded since.
+    UnresolvedError,
+    /// The answer carries code that no `run_python_code` call executed.
+    UnexecutedCode,
+}
+
+impl UnfinishedAnswer {
+    /// The text core-server supplied for this case.
+    pub fn nudge(self, nudges: &AssignmentNudges) -> &str {
+        match self {
+            Self::UnresolvedError => &nudges.unresolved_error,
+            Self::UnexecutedCode => &nudges.unexecuted_code,
+        }
+    }
+}
+
 /// Catches a final answer that describes work instead of reporting it -- code the model never
-/// ran, or a reply that follows an unresolved tool error -- and supplies a nudge to send back
-/// instead of ending the run.
+/// ran, or a reply that follows an unresolved tool error -- so a nudge is sent back instead of
+/// ending the run.
 ///
 /// Deliberately cheap to get past: at most `max_nudges` per run, and a model that replies with
 /// the exact answer it was just nudged about is taken at its word (the code may genuinely be the
@@ -29,19 +48,19 @@ impl UnfinishedAnswerGuard {
         }
     }
 
-    /// Reviews a would-be final answer against the conversation so far, returning the nudge to
-    /// send back when it looks unfinished, or `None` to accept it as the run's result.
+    /// Reviews a would-be final answer against the conversation so far, returning why it looks
+    /// unfinished, or `None` to accept it as the run's result.
     pub fn review(
         &mut self,
         answer: &str,
         messages: &[ConversationMessage],
-    ) -> Option<&'static str> {
+    ) -> Option<UnfinishedAnswer> {
         let exhausted = self.nudges_sent >= self.max_nudges
             || self.last_nudged_answer.as_deref() == Some(answer);
         let nudge = if exhausted {
             None
         } else {
-            unfinished_nudge_for(answer, messages)
+            unfinished_answer_in(answer, messages)
         };
         if nudge.is_some() {
             self.nudges_sent += 1;
@@ -53,11 +72,14 @@ impl UnfinishedAnswerGuard {
 
 /// An unresolved tool error takes priority: code in the reply is usually the model's proposed fix
 /// for exactly that error, and "fix it and run it again" covers both.
-fn unfinished_nudge_for(answer: &str, messages: &[ConversationMessage]) -> Option<&'static str> {
+fn unfinished_answer_in(
+    answer: &str,
+    messages: &[ConversationMessage],
+) -> Option<UnfinishedAnswer> {
     if last_tool_call_failed(messages) {
-        Some(UNRESOLVED_ERROR_NUDGE)
+        Some(UnfinishedAnswer::UnresolvedError)
     } else if has_unexecuted_code(answer, messages) {
-        Some(UNEXECUTED_CODE_NUDGE)
+        Some(UnfinishedAnswer::UnexecutedCode)
     } else {
         None
     }
@@ -182,7 +204,10 @@ mod tests {
     #[test]
     fn nudges_an_answer_carrying_code_that_was_never_run() {
         let answer = answer_with_code(CODE);
-        assert_eq!(guard().review(&answer, &[]), Some(UNEXECUTED_CODE_NUDGE));
+        assert_eq!(
+            guard().review(&answer, &[]),
+            Some(UnfinishedAnswer::UnexecutedCode)
+        );
     }
 
     #[test]
@@ -209,7 +234,7 @@ mod tests {
         let messages = vec![run_python_call(CODE), python_result(1)];
         assert_eq!(
             guard().review("It failed, but that's fine.", &messages),
-            Some(UNRESOLVED_ERROR_NUDGE)
+            Some(UnfinishedAnswer::UnresolvedError)
         );
     }
 
@@ -233,7 +258,7 @@ mod tests {
         ];
         assert_eq!(
             guard().review("Done.", &messages),
-            Some(UNRESOLVED_ERROR_NUDGE)
+            Some(UnfinishedAnswer::UnresolvedError)
         );
     }
 
@@ -260,6 +285,17 @@ mod tests {
         let mut guard = UnfinishedAnswerGuard::new(1);
         assert!(guard.review(&answer_with_code("a = 1"), &[]).is_some());
         assert_eq!(guard.review(&answer_with_code("b = 2"), &[]), None);
+    }
+
+    #[test]
+    fn each_unfinished_answer_picks_its_own_nudge() {
+        let nudges = AssignmentNudges {
+            empty_reply: "empty".to_string(),
+            unexecuted_code: "run it".to_string(),
+            unresolved_error: "fix it".to_string(),
+        };
+        assert_eq!(UnfinishedAnswer::UnexecutedCode.nudge(&nudges), "run it");
+        assert_eq!(UnfinishedAnswer::UnresolvedError.nudge(&nudges), "fix it");
     }
 
     #[test]

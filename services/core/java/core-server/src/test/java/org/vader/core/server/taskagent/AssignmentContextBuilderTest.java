@@ -13,6 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
 import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
@@ -31,6 +32,8 @@ class AssignmentContextBuilderTest {
         ReflectionTestUtils.setField(
             this.builder, "taskAttemptRepository", this.taskAttemptRepository);
         ReflectionTestUtils.setField(this.builder, "planOutlineBuilder", new PlanOutlineBuilder());
+        ReflectionTestUtils.setField(
+            this.builder, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
     }
 
     private static TaskAttemptEntity attemptWithAttachedFile(final String originalFilename) {

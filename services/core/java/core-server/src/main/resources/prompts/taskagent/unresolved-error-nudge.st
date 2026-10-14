@@ -1,0 +1,1 @@
+Your last tool call failed and nothing has succeeded since, so the work it was doing is not done yet. If that work is part of your task, fix the problem and run it again. If it is outside your task, drop it and reply with your task's own results instead. If the task is genuinely complete regardless, reply again with the same final answer.

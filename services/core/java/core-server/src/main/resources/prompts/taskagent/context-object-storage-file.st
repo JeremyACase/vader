@@ -1,0 +1,1 @@
+- "<filename>" (id: <id>, type: <contentType>) -- read small text content directly with get_object_content and this id.

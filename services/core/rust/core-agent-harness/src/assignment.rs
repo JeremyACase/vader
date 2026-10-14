@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::HarnessError;
+use crate::prompts::AssignmentPrompts;
 
 /// Identifies which node of a `TaskGraph` this harness is responsible for. Stable across
 /// retries: a task may be attempted more than once, but its `TaskId` never changes.
@@ -50,11 +51,11 @@ fn parse_uuid(raw: &str, field: &'static str) -> Result<Uuid, HarnessError> {
 pub struct Assignment {
     pub task_id: TaskId,
     pub assignment_id: AssignmentId,
-    pub objective: String,
-    /// Background a task's own short `objective` never carries on its own: the original
-    /// client-submitted request, any files attached to it, and the results of any prerequisite
-    /// tasks this one depends on. Always at least the original request.
-    pub context: String,
+    /// Every message the harness sends the model on its own initiative, as core-server rendered
+    /// it. The opening task message carries the background a task's own short description never
+    /// carries on its own: the original request, its attached files, the plan, and the results
+    /// of any prerequisite tasks.
+    pub prompts: AssignmentPrompts,
     pub max_turns: u32,
     pub max_tokens: u64,
     pub deadline_seconds: u64,

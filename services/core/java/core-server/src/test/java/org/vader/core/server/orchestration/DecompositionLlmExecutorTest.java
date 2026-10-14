@@ -23,6 +23,7 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.mcp.AgentToolAudience;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.mcp.ToolAudienceTag;
@@ -76,6 +77,8 @@ class DecompositionLlmExecutorTest {
 
         var executor = new DecompositionLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
+        ReflectionTestUtils.setField(
+            executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
         ReflectionTestUtils.setField(executor, "toolCallbackRegistry", registryWith(providers));
         return executor;
     }

@@ -41,7 +41,7 @@ public class TaskAttemptLifecycleService {
     private TaskUpdateService taskUpdateService;
 
     @Autowired
-    private AssignmentContextBuilder assignmentContextBuilder;
+    private AssignmentPromptsBuilder assignmentPromptsBuilder;
 
     @Value("${vader.agent-harness.max-turns:20}")
     private int maxTurns;
@@ -118,7 +118,7 @@ public class TaskAttemptLifecycleService {
             task.getId(),
             attempt.getId(),
             task.getDescription(),
-            this.assignmentContextBuilder.build(task),
+            this.assignmentPromptsBuilder.build(task),
             this.maxTurns,
             this.maxTokens,
             this.deadlineSeconds);

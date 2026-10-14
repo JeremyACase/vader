@@ -45,6 +45,18 @@ packages, never the reverse.
 An LLM executor lives with the feature whose prompt it holds (e.g. `DecompositionLlmExecutor` in
 `orchestration`), not in `llm`.
 
+### Prompts
+
+All model-facing prompt text lives in StringTemplate files (`< >` delimiters) under
+`core-server/src/main/resources/prompts/<feature>/`, never in code -- including the task agent's
+prompts, which core-server renders and hands the harness with its assignment. Each template has a
+`PromptKey` declaring its variables and the `LlmRequestKind` it belongs to; `PromptTemplateRegistry`
+renders them, refuses to start if a template and its key disagree, and fingerprints each call
+kind so outcomes can be attributed to prompt versions. Express optional sections with
+`<if(var)>...<else>...<endif>` and a `null` variable; keep a multi-line conditional's `<if>` and
+`<endif>` each on a line of their own, since StringTemplate drops the newline after an inline
+`<endif>` that closes a multi-line block.
+
 ## Build and run
 
 Aside from the JVM and the Java server code, no build environment needs to be installed on the

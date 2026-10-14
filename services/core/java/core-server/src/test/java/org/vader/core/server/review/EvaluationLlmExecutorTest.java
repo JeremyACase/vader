@@ -18,6 +18,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.RemainingSubtask;
 import org.vader.core.server.workflow.model.PlanStep;
@@ -35,6 +36,8 @@ class EvaluationLlmExecutorTest {
     private static EvaluationLlmExecutor executor(final ChatClient.Builder builder) {
         var executor = new EvaluationLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
+        ReflectionTestUtils.setField(
+            executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
         return executor;
     }
 

@@ -14,6 +14,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.util.ReflectionUtils;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
@@ -61,6 +62,11 @@ class ScriptedChatModelStubTest {
 
     private <E> E wired(final E executor) {
         ReflectionTestUtils.setField(executor, "chatClientBuilder", this.chatClientBuilder);
+        // The inference-turn executor sends the harness's own messages, so renders no prompts.
+        if (ReflectionUtils.findField(executor.getClass(), "promptTemplateRegistry") != null) {
+            ReflectionTestUtils.setField(
+                executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
+        }
         return executor;
     }
 

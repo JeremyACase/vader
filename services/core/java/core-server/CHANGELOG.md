@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0]
+### Changed
+- Every prompt Vader sends a model now lives in a StringTemplate file under `prompts/` instead
+  of in code, including the task agent's own system prompt and nudges, which the assignment now
+  delivers to the harness (replacing its `context` field with `prompts`). Templates are checked
+  against the variables their code supplies at startup, and each LLM call kind gets a logged
+  fingerprint of its templates, the groundwork for attributing outcomes to prompt versions. The
+  wording itself is unchanged.
+
 ## [0.34.0]
 ### Security
 - Moved to Spring Boot 4.1 and Spring AI 2.0 (with Jackson 3), which clears the known CVEs in

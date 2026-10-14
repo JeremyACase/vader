@@ -1,0 +1,1 @@
+- <title> (<if(succeeded)>succeeded<else>failed<endif>): <output>
