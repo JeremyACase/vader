@@ -7,7 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 - A queued LLM request records the fingerprint of the prompt templates it was rendered from
   and the model it went to, so every call can be attributed to the prompt version and model
-  that produced it.
+  that produced it. An agent turn's transcript records its prompt and completion tokens and the
+  characters it sent, to show how close each turn came to the context window.
 
 ## [0.23.1]
 ### Fixed

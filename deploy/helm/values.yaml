@@ -82,9 +82,12 @@ vader:
       maxOutputTokens: 2048
       # Ollama's context window (num_ctx) for every call, prompt and reply together. Ollama
       # reserves maxOutputTokens of it for the reply, so the prompt budget is contextTokens minus
-      # maxOutputTokens -- and a prompt over that budget is silently cut from the front, dropping
-      # the system instructions first. Ollama's own default (4096) left only ~2k tokens of prompt,
-      # which task-plan decomposition and any agent turn carrying a tool result easily exceed.
+      # maxOutputTokens -- and a conversation over that budget silently loses its oldest messages:
+      # Ollama keeps every system message and the latest one, so for a task agent the opening task
+      # message (the request, the plan and its own task) goes first. core-server logs a warning
+      # when an agent turn nears the budget. Ollama's own default (4096) left only ~2k tokens of
+      # prompt, which task-plan decomposition and any agent turn carrying a tool result easily
+      # exceed.
       # Must be larger than maxOutputTokens (the chart refuses to render otherwise). Costs KV-cache
       # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
       # on 32k, so there is no benefit going above 32768.

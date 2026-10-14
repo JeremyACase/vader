@@ -30,6 +30,7 @@ import org.vader.core.server.review.ReattemptDecisionLlmExecutor;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.ReattemptDecisionRequest;
 import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
+import org.vader.core.server.taskagent.PromptCharacterCounter;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.workflow.WorkflowSynthesisLlmExecutor;
@@ -72,6 +73,10 @@ class ScriptedChatModelStubTest {
 
     private <E> E wiredWithTools(final E executor) {
         ReflectionTestUtils.setField(executor, "toolCallbackRegistry", this.toolCallbackRegistry);
+        if (ReflectionUtils.findField(executor.getClass(), "promptCharacterCounter") != null) {
+            ReflectionTestUtils.setField(
+                executor, "promptCharacterCounter", new PromptCharacterCounter());
+        }
         return this.wired(executor);
     }
 

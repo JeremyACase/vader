@@ -47,6 +47,9 @@ public class InferenceTranscriptService {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private PromptBudgetMonitor promptBudgetMonitor;
+
     private TransactionTemplate transaction;
 
     @PostConstruct
@@ -89,12 +92,17 @@ public class InferenceTranscriptService {
 
         var transcript = new TaskAttemptTranscriptEntity();
         transcript.setTaskAttempt(this.taskAttemptRepository.getReferenceById(assignmentId));
-        transcript.setTurnIndex((int) this.transcriptRepository.countByTaskAttemptId(assignmentId));
+        var turnIndex = (int) this.transcriptRepository.countByTaskAttemptId(assignmentId);
+        transcript.setTurnIndex(turnIndex);
         transcript.setPrompt(this.toJson(newMessages));
         transcript.setMessageCount(messages.size());
         transcript.setResponse(this.responseTextFor(turn));
         transcript.setTokensSpent(turn.tokensSpent());
         transcript.setFinishReason(turn.finishReason());
+        transcript.setPromptTokens(turn.usage().promptTokens());
+        transcript.setCompletionTokens(turn.usage().completionTokens());
+        transcript.setPromptCharacters(turn.usage().promptCharacters());
+        this.promptBudgetMonitor.warnIfNearLimit(assignmentId, turnIndex, turn.usage());
         this.transcriptRepository.save(transcript);
     }
 

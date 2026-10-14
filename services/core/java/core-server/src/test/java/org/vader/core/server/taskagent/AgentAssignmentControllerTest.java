@@ -15,8 +15,11 @@ import org.vader.core.server.taskagent.model.InferenceRequest;
 import org.vader.core.server.taskagent.model.InferenceTurn;
 import org.vader.core.server.taskagent.model.ToolCallInvocationRequest;
 import org.vader.core.server.taskagent.model.ToolCallInvocationResult;
+import org.vader.core.server.taskagent.model.TurnUsage;
 
 class AgentAssignmentControllerTest {
+
+    private static final TurnUsage USAGE = new TurnUsage(3L, 2L, 40L);
 
     private static final String ASSIGNMENT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 
@@ -39,7 +42,7 @@ class AgentAssignmentControllerTest {
     void inference_forwardsTheConversationAndReturnsTheTurn() {
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
-        var turn = new InferenceTurn("hello", List.of(), 5L, "stop");
+        var turn = new InferenceTurn("hello", List.of(), 5L, "stop", USAGE);
         when(this.inferenceTranscriptService.recordInferenceTurn(ASSIGNMENT_ID, messages))
             .thenReturn(turn);
 

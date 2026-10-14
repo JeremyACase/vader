@@ -5,7 +5,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [0.21.0]
 ### Changed
-- The LLM request mapper carries a request's prompt fingerprint and model.
+- The LLM request mapper carries a request's prompt fingerprint and model, and the transcript
+  mapper a turn's token usage and characters sent.
 
 ## [0.20.0]
 ### Added

@@ -17,6 +17,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   so repeated runs are comparable. Every recorded LLM call now carries its prompt fingerprint
   and model, and `GET /vader/core-server/llm/configuration` reports the model, its sampling
   options and every fingerprint in effect, for a benchmark runner to record with each result.
+  Each agent turn's transcript now records its prompt and completion tokens and the characters
+  it sent, and a warning is logged when a turn nears the context window, past which Ollama
+  silently drops the agent's oldest messages -- its task message first.
 
 ## [0.34.0]
 ### Security

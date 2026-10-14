@@ -2,6 +2,8 @@ package org.vader.core.server.taskagent;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientAttributes;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -9,6 +11,8 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,6 +25,7 @@ import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.InferenceToolCall;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.TurnUsage;
 
 /**
  * Completes one turn against the chat model via Spring AI's {@link ChatClient}. Called only from
@@ -51,6 +56,9 @@ public class InferenceTurnLlmExecutor
     @Autowired
     private McpToolCallbackRegistry toolCallbackRegistry;
 
+    @Autowired
+    private PromptCharacterCounter promptCharacterCounter;
+
     @Override
     public LlmRequestKind kind() {
         return LlmRequestKind.INFERENCE_TURN;
@@ -74,15 +82,20 @@ public class InferenceTurnLlmExecutor
                 ChatClientAttributes.TOOL_CALLING_ADVISOR_AUTO_REGISTER.getKey(), false))
             .call()
             .chatResponse();
-        return toInferenceTurn(chatResponse);
+        return toInferenceTurn(chatResponse, this.promptCharacterCounter.count(messages, tools));
     }
 
-    private static InferenceTurn toInferenceTurn(final ChatResponse chatResponse) {
+    private static InferenceTurn toInferenceTurn(
+            final ChatResponse chatResponse, final long promptCharacters) {
         var output = outputOf(chatResponse);
         var content = Objects.isNull(output) ? null : output.getText();
         var toolCalls = Objects.isNull(output) ? List.<InferenceToolCall>of() : toToolCalls(output);
-        return new InferenceTurn(
-            content, toolCalls, tokensSpent(chatResponse), finishReasonOf(chatResponse));
+        var usage = usageOf(chatResponse);
+        var turnUsage = new TurnUsage(
+            countOf(usage, Usage::getPromptTokens), countOf(usage, Usage::getCompletionTokens),
+            promptCharacters);
+        return new InferenceTurn(content, toolCalls, countOf(usage, Usage::getTotalTokens),
+            finishReasonOf(chatResponse), turnUsage);
     }
 
     private static String finishReasonOf(final ChatResponse chatResponse) {
@@ -103,15 +116,16 @@ public class InferenceTurnLlmExecutor
             .toList();
     }
 
-    private static long tokensSpent(final ChatResponse chatResponse) {
-        if (Objects.isNull(chatResponse) || Objects.isNull(chatResponse.getMetadata())) {
-            return 0L;
-        }
-        var usage = chatResponse.getMetadata().getUsage();
-        if (Objects.isNull(usage) || Objects.isNull(usage.getTotalTokens())) {
-            return 0L;
-        }
-        return usage.getTotalTokens();
+    private static Optional<Usage> usageOf(final ChatResponse chatResponse) {
+        return Optional.ofNullable(chatResponse)
+            .map(ChatResponse::getMetadata)
+            .map(ChatResponseMetadata::getUsage);
+    }
+
+    /** One of the provider's usage counts, or {@code 0} when it reports none. */
+    private static long countOf(
+            final Optional<Usage> usage, final Function<Usage, Integer> count) {
+        return usage.map(count).map(Integer::longValue).orElse(0L);
     }
 
     private static List<Message> toSpringMessages(final List<ConversationMessage> messages) {

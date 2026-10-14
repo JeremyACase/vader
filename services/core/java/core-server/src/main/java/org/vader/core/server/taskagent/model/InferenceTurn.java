@@ -18,7 +18,13 @@ import java.util.List;
  *     {@code stop} for a natural end, {@code length} when the reply was cut off at the output
  *     token cap); {@code null} when the provider reports none. A {@code length} turn's content or
  *     tool calls are incomplete, however plausible they look
+ * @param usage how much of the context this turn used, for measurement only; the harness reads
+ *     {@code tokensSpent} and ignores it
  */
 public record InferenceTurn(
-    String content, List<InferenceToolCall> toolCalls, long tokensSpent, String finishReason) {
+    String content,
+    List<InferenceToolCall> toolCalls,
+    long tokensSpent,
+    String finishReason,
+    TurnUsage usage) {
 }

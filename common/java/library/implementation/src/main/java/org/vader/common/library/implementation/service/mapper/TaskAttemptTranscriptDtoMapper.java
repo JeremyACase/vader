@@ -31,6 +31,9 @@ public class TaskAttemptTranscriptDtoMapper
             to.setResponse(from.getResponse());
             to.setTokensSpent(from.getTokensSpent());
             to.setFinishReason(from.getFinishReason());
+            to.setPromptTokens(from.getPromptTokens());
+            to.setCompletionTokens(from.getCompletionTokens());
+            to.setPromptCharacters(from.getPromptCharacters());
         }
         return to;
     }

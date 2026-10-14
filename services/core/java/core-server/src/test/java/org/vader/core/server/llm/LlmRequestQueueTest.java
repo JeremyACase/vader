@@ -27,11 +27,14 @@ import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.TurnUsage;
 import org.vader.core.server.workflow.WorkflowSynthesisLlmExecutor;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 import tools.jackson.databind.ObjectMapper;
 
 class LlmRequestQueueTest {
+
+    private static final TurnUsage USAGE = new TurnUsage(3L, 2L, 40L);
 
     private static final EvaluationRequest EVALUATION_REQUEST = new EvaluationRequest(
         "user request", "objective", List.of(), "title", "description",
@@ -101,11 +104,12 @@ class LlmRequestQueueTest {
     void submit_enqueuesUnderTheExecutorsKindAndPublishesBeforeAwaitingTheResult() {
         this.respondWith(
             "{\"value\":{\"content\":\"hello\",\"toolCalls\":[],\"tokensSpent\":5,"
-                + "\"finishReason\":\"stop\"},\"unreachableReason\":null}");
+                + "\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":3,\"completionTokens\":2,"
+                + "\"promptCharacters\":40}},\"unreachableReason\":null}");
 
         var result = this.queue.submit(InferenceTurnLlmExecutor.class, userTurn("hi"));
 
-        assertThat(result).isEqualTo(new InferenceTurn("hello", List.of(), 5L, "stop"));
+        assertThat(result).isEqualTo(new InferenceTurn("hello", List.of(), 5L, "stop", USAGE));
         var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
         verify(this.messageRepository).save(messageCaptor.capture());
         assertThat(messageCaptor.getValue().getKind()).isEqualTo(LlmRequestKind.INFERENCE_TURN);

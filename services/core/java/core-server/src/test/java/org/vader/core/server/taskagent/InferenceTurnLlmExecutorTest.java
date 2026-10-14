@@ -25,6 +25,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
+import org.vader.core.server.taskagent.model.TurnUsage;
 
 class InferenceTurnLlmExecutorTest {
 
@@ -44,6 +45,8 @@ class InferenceTurnLlmExecutorTest {
         var executor = new InferenceTurnLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
         ReflectionTestUtils.setField(executor, "toolCallbackRegistry", this.toolCallbackRegistry);
+        ReflectionTestUtils.setField(
+            executor, "promptCharacterCounter", new PromptCharacterCounter());
         return executor;
     }
 
@@ -78,6 +81,15 @@ class InferenceTurnLlmExecutorTest {
         assertThat(turn.content()).isEqualTo("hello there");
         assertThat(turn.toolCalls()).isEmpty();
         assertThat(turn.tokensSpent()).isEqualTo(7L);
+    }
+
+    @Test
+    void execute_reportsPromptAndCompletionTokensAndTheCharactersSent() {
+        when(this.chatModel.call(any(Prompt.class))).thenReturn(responseWith("hello there"));
+
+        var turn = this.executor(ChatClient.builder(this.chatModel)).execute(userTurn("hi"));
+
+        assertThat(turn.usage()).isEqualTo(new TurnUsage(3L, 4L, 2L));
     }
 
     @Test
