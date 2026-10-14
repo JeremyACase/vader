@@ -1,2 +1,4 @@
 # Prompt templates are hashed into fingerprints; keep their line endings identical everywhere.
 *.st text eol=lf
+# Shell scripts run under bash, which chokes on CRLF; keep them LF on every checkout.
+*.sh text eol=lf
