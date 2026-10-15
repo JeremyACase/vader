@@ -9,6 +9,14 @@
 #          Rerun with the same --results and --skip-install: finished runs are skipped, and runs
 #          that hit an infrastructure error (core-server unreachable) are retried.
 #
+#          While a run is going, the runner reports each change in its workflow and attempts (and
+#          repeats itself every couple of minutes if nothing changes); each seed ends with a
+#          table of how it went. Everything printed is also appended to <results>/eval.log.
+#
+#          An experiment is a change to deploy/helm/configurations/eval/eval.yaml (a setting, or
+#          vader.orchestrator.local.model) followed by a baseline. A copy of the file is kept as
+#          <results>/eval.yaml, and resuming refuses to run if the file has changed since.
+#
 # Usage:   tools/scripts/local/eval-baseline.sh [options]
 #            --results DIR             default build/eval/baseline-<timestamp>
 #            --seeds "N N ..."         default "42 1337 2024 7 99"
@@ -47,7 +55,9 @@ require_commands kind helm kubectl curl docker
 require_docker_running
 mkdir -p "$RESULTS"
 RESULTS="$(cd "$RESULTS" && pwd)"
-echo "📁 Results: ${RESULTS}"
+log_to_results "$RESULTS"
+record_eval_configuration "$RESULTS"
+echo "📁 Results: ${RESULTS} (follow along with: tail -f ${RESULTS}/eval.log)"
 
 if [[ "$INSTALL" == true ]]; then
   bash tools/scripts/local/install-eval.sh

@@ -26,7 +26,7 @@ public enum PromptKey {
     EVALUATION_SYSTEM(LlmRequestKind.EVALUATION, "review/evaluation-system"),
     EVALUATION_USER(LlmRequestKind.EVALUATION, "review/evaluation-user",
         "userRequest", "planObjective", "plan", "taskTitle", "taskDescription", "succeeded",
-        "result", "failureReason", "toolEvidence", "priorUpdates"),
+        "result", "failureReason", "toolEvidence", "uploadedFiles"),
     REATTEMPT_DECISION_SYSTEM(LlmRequestKind.REATTEMPT_DECISION,
         "review/reattempt-decision-system"),
     REATTEMPT_DECISION_USER(LlmRequestKind.REATTEMPT_DECISION, "review/reattempt-decision-user",
@@ -58,7 +58,11 @@ public enum PromptKey {
     CONTEXT_DEPENDENCIES(LlmRequestKind.INFERENCE_TURN, "taskagent/context-dependencies",
         "dependencies"),
     CONTEXT_DEPENDENCY(LlmRequestKind.INFERENCE_TURN, "taskagent/context-dependency",
-        "title", "result");
+        "title", "result"),
+    CONTEXT_PREVIOUS_ATTEMPTS(LlmRequestKind.INFERENCE_TURN,
+        "taskagent/context-previous-attempts", "attempts"),
+    CONTEXT_PREVIOUS_ATTEMPT(LlmRequestKind.INFERENCE_TURN, "taskagent/context-previous-attempt",
+        "attemptNumber", "verdict");
 
     private final LlmRequestKind kind;
 

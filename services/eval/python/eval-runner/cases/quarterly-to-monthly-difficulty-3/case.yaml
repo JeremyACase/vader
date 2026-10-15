@@ -1,9 +1,9 @@
-# Level 3 of the quarterly-to-monthly ladder: L1's flow column joined by a stock column, each with
-# its method stated, so what is being measured is whether the system treats the two kinds of
-# column differently -- splitting a total, but interpolating a point-in-time count rather than
-# dividing it by three. Values are chosen so neither column needs rounding.
-id: quarterly-to-monthly-l3
-level: 3
+# Difficulty level 3 of the quarterly-to-monthly ladder: difficulty level 1's flow column joined by
+# a stock column, each with its method stated, so what is being measured is whether the system
+# treats the two kinds of column differently -- splitting a total, but interpolating a point-in-time
+# count rather than dividing it by three. Values are chosen so neither column needs rounding.
+id: quarterly-to-monthly-difficulty-3
+difficulty: 3
 prompt: |
   Attached is quarterly_metrics.csv. Its revenue column holds each quarter's total revenue; its
   headcount column holds the number of employees on the last day of each quarter. Convert it to

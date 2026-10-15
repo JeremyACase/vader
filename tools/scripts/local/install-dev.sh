@@ -15,5 +15,5 @@ require_commands kind helm kubectl docker
 require_docker_running
 
 prepare_cluster
-bash tools/scripts/local/ollama-up.sh
+VADER_CONFIGURATION="dev" bash tools/scripts/local/ollama-up.sh
 helm_install_or_upgrade dev

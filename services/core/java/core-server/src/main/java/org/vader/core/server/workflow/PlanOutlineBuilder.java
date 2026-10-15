@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.server.workflow.model.PlanStep;
@@ -13,10 +14,14 @@ import org.vader.core.server.workflow.model.PlanStep;
  * the subtasks spawned under it, siblings in the order their dependencies let them run. The
  * agent running a task needs it to do only its own share of the user's request, and the
  * evaluator needs it to judge the task on that share alone -- neither should take on work
- * another task already owns.
+ * another task already owns. Subtasks a superseded attempt spawned are left out: they are no
+ * longer part of the plan.
  */
 @Component
 public class PlanOutlineBuilder {
+
+    @Autowired
+    private LiveSubtaskFilter liveSubtaskFilter;
 
     /**
      * Outlines the plan that a task belongs to.
@@ -25,17 +30,18 @@ public class PlanOutlineBuilder {
      * @return every task in the plan, depth first
      */
     public List<PlanStep> build(final TaskEntity underReview) {
-        return outline(underReview.owningTaskGraph().getTasks(), 0, underReview).toList();
+        return this.outline(underReview.owningTaskGraph().getTasks(), 0, underReview).toList();
     }
 
-    private static Stream<PlanStep> outline(
+    private Stream<PlanStep> outline(
             final Collection<TaskEntity> siblings, final int depth, final TaskEntity underReview) {
         return siblings.stream()
             .sorted(Comparator.comparingInt(PlanOutlineBuilder::dependencyDepth))
             .flatMap(task -> Stream.concat(
                 Stream.of(new PlanStep(task.getTitle(), task.getDescription(), depth,
                     task.equals(underReview))),
-                outline(task.getSubTasks(), depth + 1, underReview)));
+                this.outline(this.liveSubtaskFilter.liveSubtasksOf(task), depth + 1,
+                    underReview)));
     }
 
     /**

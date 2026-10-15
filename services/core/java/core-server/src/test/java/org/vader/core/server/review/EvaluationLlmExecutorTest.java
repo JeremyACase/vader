@@ -27,7 +27,7 @@ class EvaluationLlmExecutorTest {
 
     private static final EvaluationRequest REQUEST = new EvaluationRequest(
         "the user request", "the objective", List.of(), "title", "description",
-        TaskAttemptStatus.SUCCEEDED, "the result", null, List.of(), null);
+        TaskAttemptStatus.SUCCEEDED, "the result", null, null, List.of());
 
     private static ChatResponse responseWith(final String assistantText) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(assistantText))));
@@ -87,7 +87,8 @@ class EvaluationLlmExecutorTest {
                 new PlanStep("Assess feasibility", "Decide if it can work.", 0, false)),
             "title", "description",
             TaskAttemptStatus.SUCCEEDED, "Let's proceed.", null,
-            List.of(), "The agent's last tool call was run_python_code: it FAILED.");
+            "The agent's last tool call was run_python_code: it FAILED.",
+            List.of("monthly_revenue.csv"));
 
         executor(ChatClient.builder(chatModel)).execute(request);
 
@@ -95,11 +96,26 @@ class EvaluationLlmExecutorTest {
         verify(chatModel).call(promptCaptor.capture());
         assertThat(promptCaptor.getValue().getContents())
             .contains("run_python_code: it FAILED")
+            .contains("- \"monthly_revenue.csv\"")
             .contains("The user's request: Can this spreadsheet work in fiscal quarters?")
             .contains("(objective: Assess a fiscal-quarter conversion)")
             .contains("- Analyze: Describe the spreadsheet.\n"
                 + "  - title: description   <-- the task under review\n"
                 + "- Assess feasibility: Decide if it can work.")
             .contains("remainingSubtasks");
+    }
+
+    @Test
+    void execute_saysSoWhenTheAttemptSavedNoFiles() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+            responseWith("{\"passed\":false,\"reasoning\":\"nothing saved\"}"));
+
+        executor(ChatClient.builder(chatModel)).execute(REQUEST);
+
+        var promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getContents()).contains("The attempt saved no files.");
     }
 }

@@ -38,7 +38,7 @@ class LlmRequestQueueTest {
 
     private static final EvaluationRequest EVALUATION_REQUEST = new EvaluationRequest(
         "user request", "objective", List.of(), "title", "description",
-        TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
+        TaskAttemptStatus.SUCCEEDED, "result", null, null, List.of());
 
     private LlmRequestOutboxMessageRepository messageRepository;
     private EventPublishingFacade eventPublishingFacade;

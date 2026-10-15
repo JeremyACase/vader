@@ -11,12 +11,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   against the variables their code supplies at startup, and each LLM call kind gets a logged
   fingerprint of its templates, the groundwork for attributing outcomes to prompt versions. The
   wording itself is unchanged.
+- A reattempt is now told what the reviewer saw go wrong in each earlier attempt, as a report to
+  check rather than instructions to follow. The reviewer judges each attempt on its own evidence
+  alone and reports what went wrong without prescribing a fix: shown its earlier verdicts, it
+  tended to repeat them instead of reading the new attempt, and steered retries with them.
+- Runtime decomposition no longer turns one failed step into a failed workflow. Steps that
+  repeat a task already in the plan are dropped before any subtask is created, and a task whose
+  subtask fails is attempted again from scratch (with the subtask's reason) while it has
+  attempts left; the subtasks of a superseded attempt no longer count toward the workflow's
+  outcome or appear in the plan agents see.
+- Plans may now be a single task, and must not contain steps that leave nothing behind (such as
+  only reading a file, which a fresh sandbox loses); the plan critique no longer rejects
+  one-task plans. The reviewer no longer fails an attempt for doing more than its own task and
+  is shown the files the attempt actually saved, and the final summary may no longer claim a
+  file that was never saved.
 ### Added
 - A new `EVAL` mode for benchmarking the system's prompts against a baseline: it runs a real
-  local model and refuses to start unless sampling is pinned (temperature 0 and a fixed seed),
-  so repeated runs are comparable. Every recorded LLM call now carries its prompt fingerprint
-  and model, and `GET /vader/core-server/llm/configuration` reports the model, its sampling
-  options and every fingerprint in effect, for a benchmark runner to record with each result.
+  local model and refuses to start unless sampling is pinned (an explicit temperature and a
+  fixed seed), so each run is a repeatable sample. Every recorded LLM call now carries its
+  prompt fingerprint and model, and `GET /vader/core-server/llm/configuration` reports the model, its sampling
+  options and every fingerprint in effect, for a benchmark runner to record with each result,
+  and `GET /vader/core-server/llm/prompts` returns the template texts behind each fingerprint.
   Each agent turn's transcript now records its prompt and completion tokens and the characters
   it sent, and a warning is logged when a turn nears the context window, past which Ollama
   silently drops the agent's oldest messages -- its task message first.

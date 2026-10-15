@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 CASES = Path(__file__).resolve().parent.parent / "cases"
-REQUIRED_KEYS = {"id", "level", "prompt", "inputs", "deliverable", "samples"}
+REQUIRED_KEYS = {"id", "difficulty", "prompt", "inputs", "deliverable", "samples"}
 EXPECTATIONS = {"good": (True, True), "lenient": (True, False), "bad": (False, False)}
 
 

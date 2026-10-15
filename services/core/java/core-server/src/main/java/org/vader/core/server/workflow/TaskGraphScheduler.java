@@ -31,14 +31,16 @@ import org.vader.core.server.taskagent.TaskAssignmentOutbox;
  * propagates permanent failure to any task that transitively depends on one, and closes out the
  * workflow once every task has reached a terminal outcome.
  *
- * <p>Never decides retries itself: a terminal attempt is enqueued for review
+ * <p>Never asks whether a retry is worthwhile: a terminal attempt is enqueued for review
  * ({@link TaskAttemptReviewOutbox}), whose pipeline calls {@link #dispatch} when a fresh attempt
  * is warranted. Review makes LLM calls, which must never block this thread -- it is shared by
  * every workflow on this replica.</p>
  *
  * <p>Includes runtime subtasks: a task whose latest verdict is {@code DECOMPOSED} waits on them,
  * and this is where {@link TaskDecompositionSaga} rolls it up or fails it -- deterministic, so
- * safe on this thread.</p>
+ * safe on this thread. A task failed by one of its subtasks is attempted again from scratch while
+ * it has attempts left, the same budget a task failed on its own gets; only the live subtasks
+ * (those of the task's latest attempt) are scheduled or count toward the workflow's outcome.</p>
  *
  * <p>{@link TaskGraphSchedulerListener} reacts to {@link WorkflowDecomposedEvent} and
  * {@link TaskAttemptSettledEvent} and calls {@link #evaluate} on this separate bean, because a
@@ -80,6 +82,9 @@ public class TaskGraphScheduler {
     @Autowired
     private TaskDecompositionSaga taskDecompositionSaga;
 
+    @Autowired
+    private LiveSubtaskFilter liveSubtaskFilter;
+
     /**
      * Re-derives every task's progress, dispatches whatever is now ready, enqueues review for
      * whatever just went terminal, and closes out the workflow if everything has settled.
@@ -93,7 +98,7 @@ public class TaskGraphScheduler {
             return;
         }
 
-        var tasks = allTasks(workflow.getTaskPlan().getTaskGraph().getTasks());
+        var tasks = this.allTasks(workflow.getTaskPlan().getTaskGraph().getTasks());
         var progress = new LinkedHashMap<String, TaskProgress>();
         tasks.forEach(task -> progress.put(task.getId(), this.computeProgress(task)));
         // Deepest first, so a subtask that was itself decomposed settles before its parent looks.
@@ -135,29 +140,30 @@ public class TaskGraphScheduler {
     }
 
     /**
-     * Every schedulable task in the graph -- the roots plus every subtask spawned at runtime by a
-     * decomposition -- each parent before its subtasks. Subtasks a plan itself nested under a
+     * Every schedulable task in the graph -- the roots plus every live subtask spawned at runtime
+     * by a decomposition -- each parent before its subtasks. Subtasks a plan itself nested under a
      * task (no spawning attempt) are left out, exactly as they were before runtime decomposition
      * existed: the planner's own tasks are the unit of work there.
      */
-    private static List<TaskEntity> allTasks(final Collection<TaskEntity> tasks) {
+    private List<TaskEntity> allTasks(final Collection<TaskEntity> tasks) {
         var all = new ArrayList<TaskEntity>();
         tasks.forEach(task -> {
             all.add(task);
-            all.addAll(allTasks(runtimeSubtasksOf(task)));
+            all.addAll(this.allTasks(this.runtimeSubtasksOf(task)));
         });
         return all;
     }
 
-    private static List<TaskEntity> runtimeSubtasksOf(final TaskEntity task) {
-        return task.getSubTasks().stream()
+    private List<TaskEntity> runtimeSubtasksOf(final TaskEntity task) {
+        return this.liveSubtaskFilter.liveSubtasksOf(task).stream()
             .filter(subtask -> Objects.nonNull(subtask.getSpawnedByAttempt()))
             .toList();
     }
 
     /**
-     * Rolls up or fails a decomposed task once its subtasks have settled, then re-derives its
-     * progress from the verdict just recorded so its dependents react in this same pass.
+     * Rolls up or fails a decomposed task once its subtasks have settled -- retrying a failed one
+     * when it has attempts left -- then re-derives its progress from the verdict just recorded so
+     * its dependents react in this same pass.
      */
     private void maybeSettleDecomposed(
             final TaskEntity task, final Map<String, TaskProgress> progress) {
@@ -175,11 +181,18 @@ public class TaskGraphScheduler {
         var allSucceeded = !subtasks.isEmpty() && subtasks.stream()
             .allMatch(subtask -> progress.get(subtask.getId()).state()
                 == TaskState.DONE_SUCCEEDED);
-        failed.ifPresent(subtask -> this.taskDecompositionSaga.compensate(attempt, subtask));
+        failed.ifPresent(subtask -> this.compensate(attempt, subtask));
         if (failed.isEmpty() && allSucceeded) {
             this.taskDecompositionSaga.rollUp(attempt);
         }
         progress.put(task.getId(), this.computeProgress(task));
+    }
+
+    private void compensate(final TaskAttemptEntity attempt, final TaskEntity failedSubtask) {
+        this.taskDecompositionSaga.compensate(attempt, failedSubtask);
+        if (this.taskDecompositionSaga.warrantsRetry(attempt)) {
+            this.dispatch(attempt.getTask(), attempt.getAttemptNumber() + 1);
+        }
     }
 
     private TaskProgress computeProgress(final TaskEntity task) {

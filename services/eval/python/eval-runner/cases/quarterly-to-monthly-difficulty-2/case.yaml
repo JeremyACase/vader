@@ -1,8 +1,9 @@
-# Level 2 of the quarterly-to-monthly ladder: L1's single flow column and stated method, but in
-# dollars and cents that mostly don't divide by three, so a run must round each month to the cent
-# and still keep every quarter's total exact -- the step a naive per-month rounding gets wrong.
-id: quarterly-to-monthly-l2
-level: 2
+# Difficulty level 2 of the quarterly-to-monthly ladder: difficulty level 1's single flow column and
+# stated method, but in dollars and cents that mostly don't divide by three, so a run must round
+# each month to the cent and still keep every quarter's total exact -- the step a naive per-month
+# rounding gets wrong.
+id: quarterly-to-monthly-difficulty-2
+difficulty: 2
 prompt: |
   Attached is quarterly_revenue.csv, which holds quarterly revenue totals in dollars and cents.
   Convert it to monthly revenue by splitting each quarter's revenue evenly across its three

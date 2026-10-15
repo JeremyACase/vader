@@ -21,5 +21,5 @@ require_docker_running
 
 prepare_cluster
 build_and_load_images
-bash tools/scripts/local/ollama-up.sh
+VADER_CONFIGURATION="dev" bash tools/scripts/local/ollama-up.sh
 helm_install_or_upgrade dev

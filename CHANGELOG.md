@@ -8,7 +8,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Groundwork for measuring and improving Vader's own prompts.** Every model-facing prompt now
   lives in a versioned template file with a fingerprint per call kind, and a new `EVAL`
   configuration (`deploy/helm/configurations/eval`) runs the real local model with pinned
-  sampling so runs can be compared against a baseline; `helm test` checks that core-server
+  sampling so runs can be compared against a baseline; the model now samples at temperature
+  0.7 (`vader.orchestrator.local.temperature`) in every mode, so a retry can take a different
+  path and each benchmark seed is a genuine sample; `helm test` checks that core-server
   reports its mode and every fingerprint, and stamps each LLM request with one. Benchmark cases
   with tested checkers live in the new `services/eval` group, and `tools/scripts/local/eval-baseline.sh`
   measures a baseline with them: every case on several seeds, graded and summarized. Each agent

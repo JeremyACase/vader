@@ -18,6 +18,10 @@ class InterfaceCoreServer(Protocol):
         """The mode, model, sampling and prompt fingerprints currently in effect."""
         ...
 
+    def prompts(self) -> JsonObject:
+        """Every call kind's prompt fingerprint and the template texts behind it."""
+        ...
+
     def submit_prompt(self, text: str, files: list[Path]) -> str:
         """Submits a client prompt with its attachments; returns the prompt's id."""
         ...

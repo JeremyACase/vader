@@ -8,9 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Refuses to start in {@link VaderMode#EVAL} unless sampling is pinned: a real local LLM at
- * temperature 0 with a fixed seed. Without that, two runs of the same benchmark differ by chance,
- * and a prompt change can't be told apart from noise.
+ * Refuses to start in {@link VaderMode#EVAL} unless sampling is pinned: a real local LLM with an
+ * explicitly configured temperature and a fixed seed. Without that, a benchmark run is neither
+ * repeatable nor attributable to the sampling it was made under.
  */
 @Component
 public class EvalModeValidator {
@@ -54,9 +54,9 @@ public class EvalModeValidator {
     }
 
     private String temperatureProblem() {
-        return Objects.equals(this.temperature, 0.0)
-            ? null
-            : "spring.ai.ollama.chat.options.temperature is " + this.temperature + ", not 0";
+        return this.temperature == null
+            ? "spring.ai.ollama.chat.options.temperature is not set"
+            : null;
     }
 
     private String seedProblem() {

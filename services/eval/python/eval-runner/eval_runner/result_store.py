@@ -5,13 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from eval_runner.prompt_set import PromptSet
 from eval_runner.run_record import RunRecord
 
 
 class ResultStore:
     """One JSON file per run, at runs/<case>/seed-<seed>.json beside the files it delivered, plus
-    summary.json. A run whose file exists and was scored is done, so an interrupted baseline
-    resumes where it stopped; one that hit an infrastructure error is run again."""
+    summary.json, plus the prompts the runs were made with, at
+    prompts/<kind>-<fingerprint>/<template>.st, so each fingerprint a result records can be read
+    as the wording it stands for. A run whose file exists and was scored is done, so an
+    interrupted baseline resumes where it stopped; one that hit an infrastructure error is run
+    again."""
 
     def __init__(self, root: Path) -> None:
         self._root = root
@@ -38,6 +42,15 @@ class ResultStore:
         path = self._root / "summary.json"
         write_json(path, summary)
         return path
+
+    def save_prompts(self, prompt_sets: list[PromptSet]) -> Path:
+        directory = self._root / "prompts"
+        for prompt_set in prompt_sets:
+            for name, text in prompt_set.templates.items():
+                path = directory / prompt_set.directory_name() / f"{name}.st"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text + "\n", encoding="utf-8", newline="\n")
+        return directory
 
     @staticmethod
     def _read(path: Path) -> RunRecord:

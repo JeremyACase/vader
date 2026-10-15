@@ -27,8 +27,9 @@ public record LlmTaskPlan(
     String objective,
 
     @JsonPropertyDescription(
-        "2 to 6 top-level tasks that together accomplish the objective, listed in the order "
-            + "they would naturally happen")
+        "1 to 6 top-level tasks that together accomplish the objective -- just one when a "
+            + "single agent can do the whole job -- listed in the order they would naturally "
+            + "happen")
     List<LlmTask> tasks) {
 
     /**

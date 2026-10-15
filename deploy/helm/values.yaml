@@ -73,7 +73,7 @@ vader:
       requestTimeoutSeconds: 300
       # Hard cap on how many tokens the model may generate in any single response (Ollama's
       # num_predict), applied to every call: decomposition, agent inference turns, evaluation,
-      # reattempt decisions, refinement, synthesis. Without it a small model at temperature 0 can
+      # reattempt decisions, refinement, synthesis. Without it a small model can
       # fall into a repetition loop and generate forever -- past requestTimeoutSeconds, and even
       # after core-server gives up, holding Ollama's only slot so every later call queues behind
       # it. A response that genuinely needs more than this is cut off and fails loudly (e.g. an
@@ -92,9 +92,15 @@ vader:
       # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
       # on 32k, so there is no benefit going above 32768.
       contextTokens: 16384
+      # Sampling temperature for every Ollama call, in every mode, so a benchmark (mode EVAL)
+      # measures the prompts under the same sampling they run with. Above 0 the model samples
+      # rather than always taking its likeliest token: a retry with the same input can take a
+      # different path, and a benchmark's seeds are genuinely different samples. 0.7 is what
+      # Qwen recommends for qwen2.5-instruct; retune with the model.
+      temperature: 0.7
       # The sampling seed every Ollama call uses in mode EVAL (ignored in every other mode).
-      # With temperature 0 it makes a benchmark repeatable; change it only to deliberately
-      # sample a different run, never between a baseline and the run compared with it.
+      # It makes each benchmark run a repeatable sample; the baseline script runs one per seed.
+      # Never compare runs made with different temperatures.
       seed: 42
       # How long the core-server Helm system test waits for each submitted prompt to be
       # decomposed into a workflow. A real model on modest hardware takes minutes per

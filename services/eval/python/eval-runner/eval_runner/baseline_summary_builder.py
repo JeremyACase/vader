@@ -30,7 +30,7 @@ class BaselineSummaryBuilder:
     def table(self, records: list[RunRecord]) -> str:
         scored = [record for record in records if record.scored()]
         rows = [
-            f"{case_id:<28} {sum(r.passed() for r in rows)}/{len(rows)} passed, "
+            f"{case_id:<36} {sum(r.passed() for r in rows)}/{len(rows)} passed, "
             f"{sum(r.strict() for r in rows)} strict, "
             f"{sum(r.outcome == RunOutcome.TIMED_OUT for r in rows)} timed out, "
             f"median {median([r.elapsed_seconds for r in rows])}s"
@@ -54,7 +54,7 @@ def by_case(records: list[RunRecord]) -> dict[str, list[RunRecord]]:
 def case_summary(records: list[RunRecord]) -> dict[str, object]:
     usages = [record.usage for record in records if record.usage is not None]
     return {
-        "level": records[0].level,
+        "difficulty": records[0].difficulty,
         "runs": len(records),
         "passed": sum(record.passed() for record in records),
         "strict": sum(record.strict() for record in records),

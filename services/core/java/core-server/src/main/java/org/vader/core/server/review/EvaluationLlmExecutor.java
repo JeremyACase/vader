@@ -66,10 +66,15 @@ public class EvaluationLlmExecutor
             .collect(Collectors.joining("\n"));
     }
 
-    private String userPromptFor(final EvaluationRequest request) {
-        var priorUpdates = request.priorUpdateDescriptions().isEmpty()
+    private static String uploadedFileList(final List<String> filenames) {
+        return filenames.isEmpty()
             ? null
-            : String.join("\n", request.priorUpdateDescriptions());
+            : filenames.stream()
+                .map(name -> "- \"" + name + "\"")
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String userPromptFor(final EvaluationRequest request) {
         var variables = new PromptVariablesBuilder()
             .with("userRequest", request.userRequest())
             .with("planObjective", request.planObjective())
@@ -80,7 +85,7 @@ public class EvaluationLlmExecutor
             .with("result", request.attemptResult())
             .with("failureReason", request.attemptFailureReason())
             .with("toolEvidence", request.lastToolCallEvidence())
-            .with("priorUpdates", priorUpdates)
+            .with("uploadedFiles", uploadedFileList(request.uploadedFilenames()))
             .build();
         return this.promptTemplateRegistry.render(PromptKey.EVALUATION_USER, variables);
     }

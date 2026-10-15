@@ -14,10 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
+import org.vader.common.model.vader.entity.TaskUpdateEntity;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.review.model.RemainingSubtask;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskRepository;
+import org.vader.core.server.workflow.TaskUpdateRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
 
 /**
@@ -32,8 +34,9 @@ import org.vader.core.server.workflow.TaskUpdateService;
  *       the attempt's {@code rollupResult}, and it is verdicted {@link TaskUpdateType#COMPLETED}.
  *       </li>
  *   <li><b>Compensate</b> -- a subtask permanently failed. The attempt is verdicted
- *       {@link TaskUpdateType#FAILED}, blocking the task's dependents exactly as if it had failed
- *       on its own.</li>
+ *       {@link TaskUpdateType#FAILED} with the subtask's own reason, exactly as if it had failed
+ *       on its own: the task is attempted again from scratch while it has attempts left, and
+ *       otherwise blocks its dependents.</li>
  * </ol>
  *
  * <p>The roll-up is deterministic rather than an LLM summary: it runs inside the scheduler's
@@ -56,11 +59,17 @@ public class TaskDecompositionSaga {
     @Autowired
     private TaskUpdateService taskUpdateService;
 
+    @Autowired
+    private TaskUpdateRepository taskUpdateRepository;
+
     @Value("${vader.task-decomposition.max-depth:1}")
     private int maxDepth;
 
     @Value("${vader.task-decomposition.max-subtasks:3}")
     private int maxSubtasks;
+
+    @Value("${vader.agent-harness.max-attempts-per-task:3}")
+    private int maxAttemptsPerTask;
 
     /**
      * Whether a task may be decomposed at all: the task is shallower than the depth cap (with the
@@ -138,7 +147,8 @@ public class TaskDecompositionSaga {
 
     /**
      * Step 3: a subtask permanently failed -- verdicts the decomposed attempt
-     * {@link TaskUpdateType#FAILED}.
+     * {@link TaskUpdateType#FAILED}, carrying the subtask's own failure reason so a fresh attempt
+     * at the task learns why.
      *
      * @param attempt the decomposed attempt
      * @param failedSubtask the subtask that failed
@@ -147,10 +157,22 @@ public class TaskDecompositionSaga {
     public void compensate(final TaskAttemptEntity attempt, final TaskEntity failedSubtask) {
         this.taskUpdateService.record(attempt.getTask(), attempt, TaskUpdateType.FAILED,
             "Subtask \"" + failedSubtask.getTitle() + "\" failed permanently, so this task's "
-                + "remaining work could not be completed.",
+                + "remaining work could not be completed: " + this.failureReasonOf(failedSubtask),
             TaskUpdateAuthor.SYSTEM);
         logger.info("Subtask {} failed; failing decomposed attempt {}",
             failedSubtask.getId(), attempt.getId());
+    }
+
+    /**
+     * Whether a task whose decomposed attempt was just compensated should be attempted again: it
+     * gets the same attempt budget as a task that failed on its own. No reattempt-decision call is
+     * made -- this runs on the scheduler's thread, which must never block on an LLM.
+     *
+     * @param attempt the compensated attempt
+     * @return {@code true} if the task has attempts left
+     */
+    public boolean warrantsRetry(final TaskAttemptEntity attempt) {
+        return attempt.getAttemptNumber() < this.maxAttemptsPerTask;
     }
 
     /**
@@ -190,6 +212,16 @@ public class TaskDecompositionSaga {
         return this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc(subtask.getId())
             .map(TaskAttemptEntity::effectiveResult)
             .orElse("(no result reported)");
+    }
+
+    /** Why a subtask failed: its latest attempt's failed verdict. */
+    private String failureReasonOf(final TaskEntity subtask) {
+        return this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc(subtask.getId())
+            .flatMap(latest -> this.taskUpdateRepository
+                .findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(latest.getId(),
+                    List.of(TaskUpdateType.FAILED, TaskUpdateType.TIMED_OUT)))
+            .map(TaskUpdateEntity::getDescription)
+            .orElse("(no reason recorded)");
     }
 
     private static String titlesOf(final List<TaskEntity> subtasks) {

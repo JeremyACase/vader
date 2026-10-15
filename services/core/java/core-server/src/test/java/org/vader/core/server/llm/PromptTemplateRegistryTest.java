@@ -121,6 +121,17 @@ class PromptTemplateRegistryTest {
     }
 
     @Test
+    void templates_coverExactlyTheKindsTemplatesAsNormalizedText() {
+        var crlf = loadedWith("Same words.\r\nSecond line.\r\n");
+
+        var templates = crlf.templates(LlmRequestKind.TASK_PLAN_REFINEMENT);
+
+        assertThat(templates.keySet()).containsExactly("orchestration/plan-refinement-system",
+            "orchestration/plan-refinement-user", "orchestration/plan-refinement-task");
+        assertThat(templates.values()).containsOnly("Same words.\nSecond line.");
+    }
+
+    @Test
     void everyTemplateLoadsFromTheClasspath() {
         var resourceLoader = new DefaultResourceLoader();
 

@@ -15,8 +15,11 @@
 # Settings (environment variables, all optional):
 #   OLLAMA_GPU             auto (default) | on | off. auto uses the GPU if Docker can see one and
 #                          falls back to CPU otherwise; on fails if it can't.
-#   OLLAMA_MODEL           default: vader.orchestrator.local.model from deploy/helm/values.yaml
-#   OLLAMA_CONTEXT_LENGTH  default: vader.orchestrator.local.contextTokens from the same file
+#   VADER_CONFIGURATION    the Helm configuration being installed (e.g. eval), set by the
+#                          install scripts: its values file is read before the chart's own, as
+#                          Helm layers it, so a configuration that sets its own model gets it
+#   OLLAMA_MODEL           default: vader.orchestrator.local.model, from those values files
+#   OLLAMA_CONTEXT_LENGTH  default: vader.orchestrator.local.contextTokens, from the same
 #   OLLAMA_PORT            host port to publish on 127.0.0.1 (default 11434)
 #   OLLAMA_IMAGE           default ollama/ollama:latest
 #
@@ -33,10 +36,22 @@ cd "$(dirname "$0")/../../.."
 # tools/scripts/lib/common.sh hard-codes, so keep the name in step with it.
 CONTAINER="vader-ollama-local"
 VOLUME="vader-ollama-models"
-VALUES_FILE="deploy/helm/values.yaml"
+VALUES_FILES=("deploy/helm/values.yaml")
+if [[ -n "${VADER_CONFIGURATION:-}" ]]; then
+  VALUES_FILES=("deploy/helm/configurations/${VADER_CONFIGURATION}/${VADER_CONFIGURATION}.yaml"
+    "${VALUES_FILES[@]}")
+fi
 
+# The first file that sets the key wins, as when Helm layers a configuration over the defaults.
 chart_value() {
-  grep -m1 -E "^[[:space:]]+$1:" "$VALUES_FILE" | sed -E "s/^[[:space:]]+$1:[[:space:]]*//; s/[\"']//g"
+  local file value=""
+  for file in "${VALUES_FILES[@]}"; do
+    if [[ -z "$value" ]]; then
+      value="$(grep -m1 -E "^[[:space:]]+$1:" "$file" \
+        | sed -E "s/^[[:space:]]+$1:[[:space:]]*//; s/[\"']//g" || true)"
+    fi
+  done
+  echo "$value"
 }
 
 OLLAMA_GPU="${OLLAMA_GPU:-auto}"

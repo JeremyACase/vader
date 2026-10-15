@@ -27,7 +27,7 @@ require_docker_running
 
 prepare_cluster
 build_and_load_images
-bash tools/scripts/local/ollama-up.sh
+VADER_CONFIGURATION="eval" bash tools/scripts/local/ollama-up.sh
 helm_install_fresh eval
 wait_for_core_server
 

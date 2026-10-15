@@ -69,11 +69,13 @@ data:
           chat:
             options:
               model: {{ .Values.vader.orchestrator.local.model }}
-              temperature: 0
+              # The same in every mode, so a benchmark measures the prompts the way they run.
+              # See vader.orchestrator.local.temperature.
+              temperature: {{ required "vader.orchestrator.local.temperature is required when orchestrator.type is local" .Values.vader.orchestrator.local.temperature }}
               {{- if eq (.Values.vader.mode | default "PROD") "EVAL" }}
-              # EVAL only: with temperature 0 and a fixed seed, a benchmark's repeated runs
-              # differ only where the model itself is nondeterministic, so a prompt change can
-              # be told apart from chance. See vader.orchestrator.local.seed.
+              # EVAL only: a fixed seed makes each benchmark run one repeatable sample of what the
+              # sampled model does, so a baseline can be re-run and extended. See
+              # vader.orchestrator.local.seed.
               seed: {{ required "vader.orchestrator.local.seed is required when vader.mode is EVAL" .Values.vader.orchestrator.local.seed }}
               {{- end }}
               # Caps every single response (Ollama's num_predict) so a runaway generation ends

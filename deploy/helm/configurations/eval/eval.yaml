@@ -1,10 +1,24 @@
 # Helm values for the "eval" Vader deployment configuration: benchmarking the system's prompts
-# against a baseline. Like dev, but with sampling pinned (see vader.orchestrator.local.seed) and
-# none of dev's debugging surfaces, so a run measures only what production would do.
+# against a baseline. Like dev, but with each run's sampling seeded (see
+# vader.orchestrator.local.seed) and none of dev's debugging surfaces, so a run measures only
+# what production would do.
 vader:
   mode: EVAL
   orchestrator:
     type: local
+    local:
+      # Doesn't fit in an 8 GB GPU, so Ollama splits it with the CPU and generates several times
+      # slower than the 7b: every timeout below is scaled to match.
+      model: qwen2.5:14b
+      requestTimeoutSeconds: 600
+  llm:
+    requestQueue:
+      # Above requestTimeoutSeconds: with one slot, a single slow call is the longest a healthy
+      # queue can go without a claim, so a shorter stall timeout fails callers behind it.
+      stallTimeoutSeconds: 660
+      maxWaitSeconds: 3600
+  agentHarness:
+    deadlineSeconds: 1800
   operators:
     enabled: true
     pythonSandbox:

@@ -21,11 +21,11 @@ import org.vader.core.server.workflow.model.PlanStep;
  *     {@code FAILED} -- this request is never built for any other status)
  * @param attemptResult the attempt's reported result, or {@code null}
  * @param attemptFailureReason the attempt's reported failure reason, or {@code null}
- * @param priorUpdateDescriptions every prior update recorded against this task, oldest first, for
- *     context on what earlier attempts already tried
  * @param lastToolCallEvidence a one-line summary of the attempt's last tool call and whether it
  *     errored, or {@code null} if it made none -- deterministic evidence the reported text alone
  *     can hide (an agent can end on a confident reply right after its code raised)
+ * @param uploadedFilenames the names of the files the attempt saved to object storage, oldest
+ *     first -- recorded by the system, so a claimed file that isn't here was never saved
  */
 public record EvaluationRequest(
     String userRequest,
@@ -36,6 +36,6 @@ public record EvaluationRequest(
     TaskAttemptStatus attemptStatus,
     String attemptResult,
     String attemptFailureReason,
-    List<String> priorUpdateDescriptions,
-    String lastToolCallEvidence) {
+    String lastToolCallEvidence,
+    List<String> uploadedFilenames) {
 }

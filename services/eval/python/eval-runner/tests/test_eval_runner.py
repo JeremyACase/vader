@@ -1,4 +1,5 @@
-"""The baseline runner's logic, against a stub core-server and the real L1 case and fixtures."""
+"""The baseline runner's logic, against a stub core-server and the real difficulty 1 case and its
+fixtures."""
 
 from __future__ import annotations
 
@@ -14,14 +15,18 @@ from eval_runner.benchmark_case import BenchmarkCase, discover_cases
 from eval_runner.case_run_service import CaseRunService, RunSettings
 from eval_runner.checker_adapter import CheckerAdapter
 from eval_runner.interface_core_server import CoreServerError, JsonObject
+from eval_runner.prompt_set import prompt_sets
 from eval_runner.result_store import ResultStore
+from eval_runner.run_progress_reporter import RunProgressReporter
 from eval_runner.run_record import Grade, RunOutcome, RunRecord, RunUsage
 from eval_runner.run_usage_collector import RunUsageCollector
 
 CASES = Path(__file__).resolve().parent.parent / "cases"
-L1 = CASES / "quarterly-to-monthly-l1"
-GOOD_DELIVERABLE = (L1 / "fixtures" / "good-even-split" / "monthly_revenue.csv").read_bytes()
-BAD_DELIVERABLE = (L1 / "fixtures" / "bad-wrong-sum" / "monthly_revenue.csv").read_bytes()
+DIFFICULTY_1 = CASES / "quarterly-to-monthly-difficulty-1"
+GOOD_DELIVERABLE = (
+    DIFFICULTY_1 / "fixtures" / "good-even-split" / "monthly_revenue.csv"
+).read_bytes()
+BAD_DELIVERABLE = (DIFFICULTY_1 / "fixtures" / "bad-wrong-sum" / "monthly_revenue.csv").read_bytes()
 
 
 class FakeClock:
@@ -60,6 +65,9 @@ class CoreServerStub:
     def configuration(self) -> JsonObject:
         return a_configuration()
 
+    def prompts(self) -> JsonObject:
+        return {}
+
     def submit_prompt(self, text: str, files: list[Path]) -> str:
         self._maybe_fail("submit")
         self.submitted.append((text, files))
@@ -78,6 +86,7 @@ class CoreServerStub:
             "task-attempt": [{"id": "attempt-1"}]
             if "task.taskGraph" in next(iter(filters))
             else [],
+            "task": [],
             "task-attempt-transcript": [
                 {"promptTokens": 900, "completionTokens": 100, "promptCharacters": 3000},
                 {"promptTokens": 1500, "completionTokens": 50, "promptCharacters": 5000},
@@ -118,8 +127,8 @@ def settings(timeout_seconds: float = 600.0) -> RunSettings:
 
 def a_record(**overrides: object) -> RunRecord:
     record = RunRecord(
-        case_id="quarterly-to-monthly-l1",
-        level=1,
+        case_id="quarterly-to-monthly-difficulty-1",
+        difficulty=1,
         seed=42,
         outcome=RunOutcome.GRADED,
         workflow_status="SUCCEEDED",
@@ -141,7 +150,9 @@ def run_l1(core_server: CoreServerStub, tmp_path: Path, timeout: float = 600.0) 
         clock=clock,
         sleep=clock.sleep,
     )
-    return service.run(BenchmarkCase.load(L1), settings(timeout), tmp_path / "deliverables")
+    return service.run(
+        BenchmarkCase.load(DIFFICULTY_1), settings(timeout), tmp_path / "deliverables"
+    )
 
 
 def test_a_settled_run_is_graded_on_the_file_it_delivered(tmp_path: Path) -> None:
@@ -153,7 +164,7 @@ def test_a_settled_run_is_graded_on_the_file_it_delivered(tmp_path: Path) -> Non
     assert record.workflow_status == "SUCCEEDED"
     assert record.strict()
     assert record.elapsed_seconds == 30.0
-    assert core_server.submitted[0][1] == [L1 / "input" / "quarterly_revenue.csv"]
+    assert core_server.submitted[0][1] == [DIFFICULTY_1 / "input" / "quarterly_revenue.csv"]
     assert (tmp_path / "deliverables" / "monthly_revenue.csv").read_bytes() == GOOD_DELIVERABLE
 
 
@@ -206,6 +217,28 @@ def test_usage_totals_every_turn_of_every_attempt(tmp_path: Path) -> None:
     )
 
 
+def test_a_run_reports_its_progress_on_every_poll(tmp_path: Path) -> None:
+    core_server = CoreServerStub(["RUNNING", "AWAITING_LLM", "SUCCEEDED"])
+    lines: list[str] = []
+    clock = FakeClock()
+    service = CaseRunService(
+        core_server,
+        CheckerAdapter(),
+        RunUsageCollector(core_server),
+        clock=clock,
+        sleep=clock.sleep,
+        progress=RunProgressReporter(core_server, emit=lines.append),
+    )
+
+    service.run(BenchmarkCase.load(DIFFICULTY_1), settings(), tmp_path / "deliverables")
+
+    assert [line.split(" · ")[0].strip() for line in lines] == [
+        "+0m00s workflow RUNNING",
+        "+0m15s workflow AWAITING_LLM",
+        "+0m30s workflow SUCCEEDED",
+    ]
+
+
 def test_failing_to_total_usage_never_discards_the_grade(tmp_path: Path) -> None:
     record = run_l1(CoreServerStub(["SUCCEEDED"], failing={"task-attempt"}), tmp_path)
 
@@ -228,9 +261,9 @@ def test_only_a_scored_run_counts_as_done(tmp_path: Path) -> None:
     store.save(a_record(seed=1))
     store.save(a_record(seed=2, outcome=RunOutcome.INFRASTRUCTURE_ERROR, grade=None))
 
-    assert store.is_done("quarterly-to-monthly-l1", 1)
-    assert not store.is_done("quarterly-to-monthly-l1", 2)
-    assert not store.is_done("quarterly-to-monthly-l1", 3)
+    assert store.is_done("quarterly-to-monthly-difficulty-1", 1)
+    assert not store.is_done("quarterly-to-monthly-difficulty-1", 2)
+    assert not store.is_done("quarterly-to-monthly-difficulty-1", 3)
 
 
 def test_the_summary_scores_only_scored_runs_and_keeps_each_seeds_verdict() -> None:
@@ -249,7 +282,7 @@ def test_the_summary_scores_only_scored_runs_and_keeps_each_seeds_verdict() -> N
     assert summary["strictRate"] == 0.25
     case = summary["cases"]
     assert isinstance(case, dict)
-    assert case["quarterly-to-monthly-l1"]["bySeed"] == {
+    assert case["quarterly-to-monthly-difficulty-1"]["bySeed"] == {
         "1": "strict",
         "2": "passed",
         "3": "failed",
@@ -272,7 +305,7 @@ def test_the_table_reads_one_line_per_case_and_an_overall_line() -> None:
     table = BaselineSummaryBuilder().table([a_record(seed=1), a_record(seed=2)])
 
     assert table.splitlines() == [
-        "quarterly-to-monthly-l1      2/2 passed, 2 strict, 0 timed out, median 120.0s",
+        "quarterly-to-monthly-difficulty-1    2/2 passed, 2 strict, 0 timed out, median 120.0s",
         "overall pass rate 1.0, strict 1.0, 0 infrastructure errors",
     ]
 
@@ -291,3 +324,28 @@ def test_cases_are_discovered_in_id_order_and_unknown_ids_are_refused() -> None:
     )
     with pytest.raises(ValueError, match="no-such-case"):
         discover_cases(CASES, ["no-such-case"])
+
+
+def a_prompts_response(**templates: str) -> JsonObject:
+    return {
+        "EVALUATION": {
+            "fingerprint": "ebbb92238368",
+            "templates": templates
+            or {"review/evaluation-system": "Judge it.", "review/evaluation-user": "<result>"},
+        }
+    }
+
+
+def test_each_fingerprints_templates_are_saved_under_its_kind_and_fingerprint(
+    tmp_path: Path,
+) -> None:
+    directory = ResultStore(tmp_path).save_prompts(prompt_sets(a_prompts_response()))
+
+    saved = directory / "EVALUATION-ebbb92238368" / "review"
+    assert (saved / "evaluation-system.st").read_text(encoding="utf-8") == "Judge it.\n"
+    assert (saved / "evaluation-user.st").read_text(encoding="utf-8") == "<result>\n"
+
+
+def test_a_template_name_that_would_escape_the_prompts_directory_is_refused() -> None:
+    with pytest.raises(CoreServerError, match="unsafe"):
+        prompt_sets(a_prompts_response(**{"../../evil": "x"}))

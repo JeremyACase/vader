@@ -11,6 +11,7 @@ from pathlib import Path
 from eval_runner.benchmark_case import BenchmarkCase
 from eval_runner.checker_adapter import CheckerAdapter
 from eval_runner.interface_core_server import CoreServerError, InterfaceCoreServer, JsonObject
+from eval_runner.run_progress_reporter import RunProgressReporter
 from eval_runner.run_record import RunOutcome, RunRecord, RunUsage
 from eval_runner.run_usage_collector import RunUsageCollector
 
@@ -40,12 +41,14 @@ class CaseRunService:
         usage_collector: RunUsageCollector,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        progress: RunProgressReporter | None = None,
     ) -> None:
         self._core_server = core_server
         self._checker = checker
         self._usage_collector = usage_collector
         self._clock = clock
         self._sleep = sleep
+        self._progress = progress
 
     def run(self, case: BenchmarkCase, settings: RunSettings, deliverables: Path) -> RunRecord:
         started = self._clock()
@@ -66,7 +69,7 @@ class CaseRunService:
         status = workflow_status(workflow)
         return RunRecord(
             case_id=case.id,
-            level=case.level,
+            difficulty=case.difficulty,
             seed=settings.seed,
             outcome=RunOutcome.GRADED if status in SETTLED_STATUSES else RunOutcome.TIMED_OUT,
             workflow_status=status,
@@ -80,10 +83,18 @@ class CaseRunService:
     def _await_settled(
         self, prompt_id: str, settings: RunSettings, started: float
     ) -> JsonObject | None:
-        workflow = self._core_server.latest_workflow(prompt_id)
+        if self._progress is not None:
+            self._progress.start()
+        workflow = self._poll(prompt_id, started)
         while not self._settled_or_expired(workflow, settings, started):
             self._sleep(settings.poll_interval_seconds)
-            workflow = self._core_server.latest_workflow(prompt_id)
+            workflow = self._poll(prompt_id, started)
+        return workflow
+
+    def _poll(self, prompt_id: str, started: float) -> JsonObject | None:
+        workflow = self._core_server.latest_workflow(prompt_id)
+        if self._progress is not None:
+            self._progress.observe(workflow, self._clock() - started)
         return workflow
 
     def _settled_or_expired(
@@ -122,7 +133,7 @@ class CaseRunService:
     ) -> RunRecord:
         return RunRecord(
             case_id=case.id,
-            level=case.level,
+            difficulty=case.difficulty,
             seed=settings.seed,
             outcome=RunOutcome.INFRASTRUCTURE_ERROR,
             workflow_status=None,

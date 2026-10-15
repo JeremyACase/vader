@@ -23,10 +23,12 @@ import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
+import org.vader.common.model.vader.entity.TaskUpdateEntity;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.review.model.RemainingSubtask;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskRepository;
+import org.vader.core.server.workflow.TaskUpdateRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
 
 class TaskDecompositionSagaTest {
@@ -34,6 +36,7 @@ class TaskDecompositionSagaTest {
     private TaskRepository taskRepository;
     private TaskAttemptRepository taskAttemptRepository;
     private TaskUpdateService taskUpdateService;
+    private TaskUpdateRepository taskUpdateRepository;
     private TaskDecompositionSaga saga;
 
     @BeforeEach
@@ -41,12 +44,16 @@ class TaskDecompositionSagaTest {
         this.taskRepository = mock(TaskRepository.class);
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
         this.taskUpdateService = mock(TaskUpdateService.class);
+        this.taskUpdateRepository = mock(TaskUpdateRepository.class);
 
         this.saga = new TaskDecompositionSaga();
         ReflectionTestUtils.setField(this.saga, "taskRepository", this.taskRepository);
         ReflectionTestUtils.setField(
             this.saga, "taskAttemptRepository", this.taskAttemptRepository);
         ReflectionTestUtils.setField(this.saga, "taskUpdateService", this.taskUpdateService);
+        ReflectionTestUtils.setField(
+            this.saga, "taskUpdateRepository", this.taskUpdateRepository);
+        ReflectionTestUtils.setField(this.saga, "maxAttemptsPerTask", 3);
         ReflectionTestUtils.setField(this.saga, "maxDepth", 1);
         ReflectionTestUtils.setField(this.saga, "maxSubtasks", 3);
         when(this.taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -183,5 +190,38 @@ class TaskDecompositionSagaTest {
         verify(this.taskUpdateService).record(
             same(parent), same(attempt), eq(TaskUpdateType.FAILED), contains("verify"),
             eq(TaskUpdateAuthor.SYSTEM));
+    }
+
+    @Test
+    void compensate_carriesTheFailedSubtasksOwnReason() {
+        var failed = task("verify");
+        failed.setId("verify-id");
+        var failedAttempt = attemptOf(failed);
+        failedAttempt.setId("verify-attempt");
+        var verdict = new TaskUpdateEntity();
+        verdict.setDescription("the month column was never built");
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("verify-id"))
+            .thenReturn(Optional.of(failedAttempt));
+        when(this.taskUpdateRepository.findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(
+                eq("verify-attempt"), any()))
+            .thenReturn(Optional.of(verdict));
+        var parent = task("clean");
+        var attempt = attemptOf(parent);
+
+        this.saga.compensate(attempt, failed);
+
+        verify(this.taskUpdateService).record(
+            same(parent), same(attempt), eq(TaskUpdateType.FAILED),
+            contains("the month column was never built"), eq(TaskUpdateAuthor.SYSTEM));
+    }
+
+    @Test
+    void warrantsRetry_onlyWhileTheTaskHasAttemptsLeft() {
+        var attempt = attemptOf(task("clean"));
+
+        attempt.setAttemptNumber(2);
+        assertThat(this.saga.warrantsRetry(attempt)).isTrue();
+        attempt.setAttemptNumber(3);
+        assertThat(this.saga.warrantsRetry(attempt)).isFalse();
     }
 }

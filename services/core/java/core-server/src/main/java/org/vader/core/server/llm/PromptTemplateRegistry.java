@@ -9,6 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -111,6 +112,20 @@ public class PromptTemplateRegistry {
      */
     public String fingerprint(final LlmRequestKind kind) {
         return this.fingerprints.get(kind);
+    }
+
+    /**
+     * The templates a call kind's fingerprint covers, exactly as hashed.
+     *
+     * @param kind the call kind
+     * @return each template's text by its name (e.g. {@code review/evaluation-system}), in the
+     *     order they are hashed
+     */
+    public Map<String, String> templates(final LlmRequestKind kind) {
+        return Arrays.stream(PromptKey.values())
+            .filter(key -> key.kind() == kind)
+            .collect(Collectors.toMap(PromptKey::templateName, this.templates::get,
+                (first, second) -> first, LinkedHashMap::new));
     }
 
     private void loadTemplate(final PromptKey key) {

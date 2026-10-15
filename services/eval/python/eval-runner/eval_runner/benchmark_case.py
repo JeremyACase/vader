@@ -11,7 +11,7 @@ import yaml
 @dataclass(frozen=True)
 class BenchmarkCase:
     id: str
-    level: int
+    difficulty: int
     prompt: str
     inputs: list[Path]
     deliverable: str
@@ -22,7 +22,7 @@ class BenchmarkCase:
         definition = yaml.safe_load((directory / "case.yaml").read_text(encoding="utf-8"))
         return cls(
             id=str(definition["id"]),
-            level=int(definition["level"]),
+            difficulty=int(definition["difficulty"]),
             prompt=str(definition["prompt"]).strip(),
             inputs=[directory / "input" / str(name) for name in definition["inputs"]],
             deliverable=str(definition["deliverable"]),

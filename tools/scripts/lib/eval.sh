@@ -7,6 +7,36 @@ EVAL_PORT="${EVAL_PORT:-18080}"
 EVAL_RUNNER_MODULE="services/eval/python/eval-runner"
 EVAL_PYTHON_IMAGE="python:3.12-slim"
 EVAL_PIP_CACHE_VOLUME="vader-eval-pip-cache"
+EVAL_VALUES_FILE="deploy/helm/configurations/eval/eval.yaml"
+
+# From here on, everything the script prints -- its own steps, the install, the runner -- also
+# goes to <results>/eval.log, each line stamped with the host's local time, so a night-long run
+# can be followed with tail -f and read again afterwards.
+log_to_results() {
+  local results="$1"
+  exec > >(stamp_lines | tee -a "${results}/eval.log") 2>&1
+}
+
+stamp_lines() {
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '%(%H:%M:%S)T %s\n' -1 "$line"
+  done
+}
+
+# Keeps a copy of the eval configuration beside the results, so they say which experiment
+# produced them. A resumed baseline must run under the same configuration: every seed
+# re-renders the release from the file as it stands, so an edit since would mix two experiments.
+record_eval_configuration() {
+  local snapshot="$1/eval.yaml"
+  if [[ -f "$snapshot" ]]; then
+    cmp -s "$snapshot" "$EVAL_VALUES_FILE" \
+      || die "${EVAL_VALUES_FILE} has changed since this baseline began (its copy is" \
+        "${snapshot}); restore it, or start a new baseline."
+  else
+    cp "$EVAL_VALUES_FILE" "$snapshot"
+  fi
+}
 
 # Re-renders the release with a new seed and restarts core-server to read it. The restart also
 # empties core-server's in-memory database, so each seed's runs start from nothing; the operator
@@ -85,7 +115,7 @@ run_eval_runner() {
   shift
   # shellcheck disable=SC2046 # the network arguments are deliberately split into words
   MSYS_NO_PATHCONV=1 docker run --rm $(runner_network_arguments) \
-    -e PYTHONDONTWRITEBYTECODE=1 \
+    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 \
     -v "$(host_path "$REPO_ROOT/$EVAL_RUNNER_MODULE"):/eval:ro" \
     -v "$(host_path "$results"):/results" \
     -v "${EVAL_PIP_CACHE_VOLUME}:/root/.cache/pip" \

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,22 +17,22 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
+import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskGraphEntity;
 import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
-import org.vader.common.model.vader.entity.TaskUpdateEntity;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
 import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.EvaluationVerdict;
 import org.vader.core.server.review.model.RemainingSubtask;
-import org.vader.core.server.workflow.PlanOutlineBuilder;
+import org.vader.core.server.storage.ObjectMetadataRepository;
+import org.vader.core.server.workflow.PlanOutlineBuilderObjectMother;
 import org.vader.core.server.workflow.TaskAttemptRepository;
-import org.vader.core.server.workflow.TaskUpdateRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
 import org.vader.core.server.workflow.model.PlanStep;
 
@@ -40,27 +41,25 @@ class EvaluatorAgentServiceTest {
     private static final String ATTEMPT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 
     private TaskAttemptRepository taskAttemptRepository;
-    private TaskUpdateRepository taskUpdateRepository;
     private TaskUpdateService taskUpdateService;
     private LlmRequestQueue requestQueue;
     private ToolCallEvidenceAdapter toolCallEvidenceAdapter;
     private TaskDecompositionSaga taskDecompositionSaga;
+    private ObjectMetadataRepository objectMetadataRepository;
     private EvaluatorAgentService service;
 
     @BeforeEach
     void setUp() {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
-        this.taskUpdateRepository = mock(TaskUpdateRepository.class);
         this.taskUpdateService = mock(TaskUpdateService.class);
         this.requestQueue = mock(LlmRequestQueue.class);
         this.toolCallEvidenceAdapter = mock(ToolCallEvidenceAdapter.class);
         this.taskDecompositionSaga = mock(TaskDecompositionSaga.class);
+        this.objectMetadataRepository = mock(ObjectMetadataRepository.class);
 
         this.service = new EvaluatorAgentService();
         ReflectionTestUtils.setField(
             this.service, "taskAttemptRepository", this.taskAttemptRepository);
-        ReflectionTestUtils.setField(
-            this.service, "taskUpdateRepository", this.taskUpdateRepository);
         ReflectionTestUtils.setField(this.service, "taskUpdateService", this.taskUpdateService);
         ReflectionTestUtils.setField(this.service, "requestQueue", this.requestQueue);
         ReflectionTestUtils.setField(
@@ -68,7 +67,9 @@ class EvaluatorAgentServiceTest {
         ReflectionTestUtils.setField(
             this.service, "taskDecompositionSaga", this.taskDecompositionSaga);
         ReflectionTestUtils.setField(
-            this.service, "planOutlineBuilder", new PlanOutlineBuilder());
+            this.service, "planOutlineBuilder", PlanOutlineBuilderObjectMother.withoutAttempts());
+        ReflectionTestUtils.setField(
+            this.service, "objectMetadataRepository", this.objectMetadataRepository);
     }
 
     private TaskEntity task() {
@@ -77,8 +78,6 @@ class EvaluatorAgentServiceTest {
         task.setTitle("title");
         task.setDescription("description");
         inPlanForRequest(task, "the user request");
-        when(this.taskUpdateRepository.findByTaskIdOrderByCreatedAtAsc("t1"))
-            .thenReturn(List.of());
         return task;
     }
 
@@ -115,15 +114,9 @@ class EvaluatorAgentServiceTest {
 
     @Test
     void evaluate_whenTheLlmPasses_recordsCompletedVerdict() {
-        var task = new TaskEntity();
-        task.setId("t1");
-        task.setTitle("title");
-        task.setDescription("description");
-        inPlanForRequest(task, "the user request");
+        var task = this.task();
         var attempt = attempt(task, TaskAttemptStatus.SUCCEEDED);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        when(this.taskUpdateRepository.findByTaskIdOrderByCreatedAtAsc("t1"))
-            .thenReturn(List.of());
         when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
             .thenReturn(new EvaluationVerdict(true, "genuinely done"));
 
@@ -137,15 +130,9 @@ class EvaluatorAgentServiceTest {
 
     @Test
     void evaluate_whenTheLlmFails_recordsFailedVerdict() {
-        var task = new TaskEntity();
-        task.setId("t1");
-        task.setTitle("title");
-        task.setDescription("description");
-        inPlanForRequest(task, "the user request");
+        var task = this.task();
         var attempt = attempt(task, TaskAttemptStatus.SUCCEEDED);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        when(this.taskUpdateRepository.findByTaskIdOrderByCreatedAtAsc("t1"))
-            .thenReturn(List.of());
         when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
             .thenReturn(new EvaluationVerdict(false, "actually incomplete"));
 
@@ -158,19 +145,10 @@ class EvaluatorAgentServiceTest {
     }
 
     @Test
-    void evaluate_includesPriorUpdatesAndAttemptOutcomeInTheRequest() {
-        var task = new TaskEntity();
-        task.setId("t1");
-        task.setTitle("title");
-        task.setDescription("description");
-        inPlanForRequest(task, "the user request");
+    void evaluate_includesThePlanAndAttemptOutcomeInTheRequest() {
+        var task = this.task();
         var attempt = attempt(task, TaskAttemptStatus.FAILED);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        var priorUpdate = new TaskUpdateEntity();
-        priorUpdate.setType(TaskUpdateType.UPDATE);
-        priorUpdate.setDescription("tried approach A");
-        when(this.taskUpdateRepository.findByTaskIdOrderByCreatedAtAsc("t1"))
-            .thenReturn(List.of(priorUpdate));
         when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
             .thenReturn(new EvaluationVerdict(false, "still broken"));
 
@@ -186,8 +164,6 @@ class EvaluatorAgentServiceTest {
         assertThat(request.taskTitle()).isEqualTo("title");
         assertThat(request.attemptStatus()).isEqualTo(TaskAttemptStatus.FAILED);
         assertThat(request.attemptFailureReason()).isEqualTo("the failure reason");
-        assertThat(request.priorUpdateDescriptions()).hasSize(1)
-            .first().asString().contains("tried approach A");
     }
 
     @Test
@@ -206,6 +182,40 @@ class EvaluatorAgentServiceTest {
             .decompose(same(attempt), eq(remainingSteps()), eq("code never ran"));
         verify(this.taskUpdateService, never())
             .record(any(), any(), eq(TaskUpdateType.FAILED), any(), any());
+    }
+
+    @Test
+    void evaluate_dropsRemainingStepsThatRepeatPlannedTasks() {
+        var task = this.task();
+        var attempt = attempt(task, TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.taskDecompositionSaga.canDecompose(task)).thenReturn(true);
+        var repeat = new RemainingSubtask("  Title! ", "Redo the whole task.");
+        var steps = new ArrayList<>(remainingSteps());
+        steps.add(0, repeat);
+        when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
+            .thenReturn(new EvaluationVerdict(false, "code never ran", steps));
+
+        this.service.evaluate(ATTEMPT_ID);
+
+        verify(this.taskDecompositionSaga)
+            .decompose(same(attempt), eq(remainingSteps()), eq("code never ran"));
+    }
+
+    @Test
+    void evaluate_whenEveryRemainingStepIsAlreadyPlanned_failsInsteadOfDecomposing() {
+        var task = this.task();
+        var attempt = attempt(task, TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        when(this.taskDecompositionSaga.canDecompose(task)).thenReturn(true);
+        when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
+            .thenReturn(new EvaluationVerdict(false, "not done",
+                List.of(new RemainingSubtask("title", "Do the task again."))));
+
+        var result = this.service.evaluate(ATTEMPT_ID);
+
+        assertThat(result).isEqualTo(TaskUpdateType.FAILED);
+        verify(this.taskDecompositionSaga, never()).decompose(any(), any(), any());
     }
 
     @Test
@@ -256,6 +266,26 @@ class EvaluatorAgentServiceTest {
         var requestCaptor = ArgumentCaptor.forClass(EvaluationRequest.class);
         verify(this.requestQueue).submit(eq(EvaluationLlmExecutor.class), requestCaptor.capture());
         assertThat(requestCaptor.getValue().lastToolCallEvidence()).contains("FAILED");
+    }
+
+    @Test
+    void evaluate_includesTheFilesTheAttemptSavedInTheRequest() {
+        var task = this.task();
+        var attempt = attempt(task, TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+        var saved = new ObjectMetadataEntity();
+        saved.setOriginalFilename("monthly_revenue.csv");
+        when(this.objectMetadataRepository.findByTaskAttemptIdOrderByCreatedAtAsc(ATTEMPT_ID))
+            .thenReturn(List.of(saved));
+        when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
+            .thenReturn(new EvaluationVerdict(true, "saved"));
+
+        this.service.evaluate(ATTEMPT_ID);
+
+        var requestCaptor = ArgumentCaptor.forClass(EvaluationRequest.class);
+        verify(this.requestQueue).submit(eq(EvaluationLlmExecutor.class), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().uploadedFilenames())
+            .containsExactly("monthly_revenue.csv");
     }
 
     @Test

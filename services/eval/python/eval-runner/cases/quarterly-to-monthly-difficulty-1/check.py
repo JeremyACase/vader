@@ -1,4 +1,4 @@
-"""Grades one run of quarterly-to-monthly-l1 from the files it delivered.
+"""Grades one run of quarterly-to-monthly-difficulty-1 from the files it delivered.
 
 A run passes when it delivered monthly_revenue.csv covering exactly the input's months, in order,
 with every quarter's months summing to that quarter's revenue -- the invariant any correct

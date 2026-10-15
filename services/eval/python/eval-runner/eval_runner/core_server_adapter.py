@@ -42,6 +42,9 @@ class CoreServerAdapter:
     def configuration(self) -> JsonObject:
         return as_object(json.loads(self._read("/vader/core-server/llm/configuration")))
 
+    def prompts(self) -> JsonObject:
+        return as_object(json.loads(self._read("/vader/core-server/llm/prompts")))
+
     def submit_prompt(self, text: str, files: list[Path]) -> str:
         form = MultipartFormBuilder().add_field("text", text)
         for path in files:

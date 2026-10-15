@@ -23,15 +23,15 @@ class EvalModeValidatorTest {
     }
 
     @Test
-    void requirePinnedSampling_acceptsEvalWithLocalModelZeroTemperatureAndSeed() {
-        var validator = validator(VaderMode.EVAL, "local", 0.0, Instancio.create(Integer.class));
+    void requirePinnedSampling_acceptsEvalWithLocalModelTemperatureAndSeed() {
+        var validator = validator(VaderMode.EVAL, "local", 0.7, Instancio.create(Integer.class));
 
         assertThatCode(validator::requirePinnedSampling).doesNotThrowAnyException();
     }
 
     @Test
     void requirePinnedSampling_rejectsEvalWithoutSeed() {
-        var validator = validator(VaderMode.EVAL, "local", 0.0, null);
+        var validator = validator(VaderMode.EVAL, "local", 0.7, null);
 
         assertThatThrownBy(validator::requirePinnedSampling)
             .isInstanceOf(IllegalStateException.class)
@@ -39,12 +39,12 @@ class EvalModeValidatorTest {
     }
 
     @Test
-    void requirePinnedSampling_rejectsEvalAboveTemperatureZero() {
-        var validator = validator(VaderMode.EVAL, "local", 0.7, 42);
+    void requirePinnedSampling_rejectsEvalWithoutTemperature() {
+        var validator = validator(VaderMode.EVAL, "local", null, 42);
 
         assertThatThrownBy(validator::requirePinnedSampling)
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("temperature is 0.7");
+            .hasMessageContaining("temperature is not set");
     }
 
     @Test
@@ -53,7 +53,7 @@ class EvalModeValidatorTest {
 
         assertThatThrownBy(validator::requirePinnedSampling)
             .hasMessageContaining("orchestrator.type is scripted")
-            .hasMessageContaining("temperature is null")
+            .hasMessageContaining("temperature is not set")
             .hasMessageContaining("seed is not set");
     }
 

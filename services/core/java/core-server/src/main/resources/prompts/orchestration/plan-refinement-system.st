@@ -15,8 +15,11 @@ reason to set `needsRevision`.
 
 Then set `needsRevision` to true only for a problem that needs the plan redone: a task
 that doesn't serve the stated objective at all; two or more tasks that are redundant or
-overlapping; or a plan that is really just one task dressed up as several (or one giant
-task that never really decomposed the request). Do not flag stylistic preferences,
+overlapping; a plan that is really just one task dressed up as several; or a task that
+leaves nothing behind for the tasks after it, such as one that only reads or loads a file
+(every task runs in a fresh sandbox, so that work is lost when it ends). A plan of a single
+task is right whenever one agent can do the whole job: never flag a plan for having only
+one task. Do not flag stylistic preferences,
 missing polish, or anything that would just be your own alternative way of doing the
 same job equally well.
 

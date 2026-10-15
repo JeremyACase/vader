@@ -1,8 +1,10 @@
 package org.vader.core.server.taskagent;
 
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,25 +12,34 @@ import org.springframework.stereotype.Component;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
+import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.llm.PromptKey;
 import org.vader.core.server.llm.PromptTemplateRegistry;
 import org.vader.core.server.llm.PromptVariablesBuilder;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
 import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
+import org.vader.core.server.workflow.TaskUpdateRepository;
 
 /**
  * Composes the background a task's own short description never carries on its own: the
  * original client-submitted request, any files attached to it, the plan the task is one step of,
- * the larger task a runtime subtask is one step of, and the results of any prerequisite tasks --
- * without this, a task like "ensure the report is well-structured" has no way to discover what
- * report, since the planner never restates it in every subtask.
+ * the larger task a runtime subtask is one step of, the results of any prerequisite tasks, and
+ * why any earlier attempts at this same task were rejected -- without this, a task like "ensure
+ * the report is well-structured" has no way to discover what report, since the planner never
+ * restates it in every subtask.
  */
 @Component
 public class AssignmentContextBuilder {
 
+    private static final List<TaskUpdateType> FAILED_VERDICTS =
+        List.of(TaskUpdateType.FAILED, TaskUpdateType.TIMED_OUT);
+
     @Autowired
     private TaskAttemptRepository taskAttemptRepository;
+
+    @Autowired
+    private TaskUpdateRepository taskUpdateRepository;
 
     @Autowired
     private PlanOutlineBuilder planOutlineBuilder;
@@ -55,7 +66,8 @@ public class AssignmentContextBuilder {
                 this.attachedFilesSection(clientPrompt),
                 this.planSection(task),
                 this.parentSection(task),
-                this.dependencySection(task))
+                this.dependencySection(task),
+                this.previousAttemptsSection(task))
             .filter(Objects::nonNull)
             .toList();
         return String.join("\n\n", sections);
@@ -159,6 +171,37 @@ public class AssignmentContextBuilder {
                     .build());
         }
         return result;
+    }
+
+    /**
+     * For a reattempt: the reviewer's reason for rejecting each earlier attempt at this task,
+     * oldest first. Without it a retry receives exactly the prompt its predecessor did and, but
+     * for sampling, repeats it. Only attempts with a failed verdict appear, so the attempt now
+     * starting -- and one still awaiting review -- never does.
+     */
+    private String previousAttemptsSection(final TaskEntity task) {
+        String result = null;
+        var lines = this.taskAttemptRepository.findByTaskIdOrderByAttemptNumberDesc(task.getId())
+            .stream()
+            .sorted(Comparator.comparing(TaskAttemptEntity::getAttemptNumber))
+            .map(this::previousAttemptLine)
+            .flatMap(Optional::stream)
+            .toList();
+        if (!lines.isEmpty()) {
+            result = this.promptTemplateRegistry.render(PromptKey.CONTEXT_PREVIOUS_ATTEMPTS,
+                new PromptVariablesBuilder().with("attempts", String.join("\n", lines)).build());
+        }
+        return result;
+    }
+
+    private Optional<String> previousAttemptLine(final TaskAttemptEntity attempt) {
+        return this.taskUpdateRepository
+            .findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(attempt.getId(), FAILED_VERDICTS)
+            .map(verdict -> this.promptTemplateRegistry.render(PromptKey.CONTEXT_PREVIOUS_ATTEMPT,
+                new PromptVariablesBuilder()
+                    .with("attemptNumber", attempt.getAttemptNumber())
+                    .with("verdict", verdict.getDescription())
+                    .build()));
     }
 
     private static Set<TaskEntity> effectiveDependencies(final TaskEntity task) {

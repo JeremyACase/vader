@@ -27,7 +27,7 @@ class LlmConfigurationControllerTest {
             this.controller, "promptTemplateRegistry", this.promptTemplateRegistry);
         ReflectionTestUtils.setField(this.controller, "llmModelNameResolver", modelNameResolver);
         ReflectionTestUtils.setField(this.controller, "mode", VaderMode.EVAL);
-        ReflectionTestUtils.setField(this.controller, "temperature", 0.0);
+        ReflectionTestUtils.setField(this.controller, "temperature", 0.7);
         ReflectionTestUtils.setField(this.controller, "seed", 42);
         ReflectionTestUtils.setField(this.controller, "contextTokens", 16384);
         ReflectionTestUtils.setField(this.controller, "maxOutputTokens", 2048);
@@ -39,7 +39,7 @@ class LlmConfigurationControllerTest {
 
         assertThat(configuration.mode()).isEqualTo(VaderMode.EVAL);
         assertThat(configuration.model()).isEqualTo("qwen2.5:7b");
-        assertThat(configuration.temperature()).isEqualTo(0.0);
+        assertThat(configuration.temperature()).isEqualTo(0.7);
         assertThat(configuration.seed()).isEqualTo(42);
         assertThat(configuration.contextTokens()).isEqualTo(16384);
         assertThat(configuration.maxOutputTokens()).isEqualTo(2048);
@@ -52,5 +52,19 @@ class LlmConfigurationControllerTest {
         assertThat(fingerprints).containsOnlyKeys(LlmRequestKind.values());
         Arrays.stream(LlmRequestKind.values()).forEach(kind -> assertThat(fingerprints.get(kind))
             .isEqualTo(this.promptTemplateRegistry.fingerprint(kind)));
+    }
+
+    @Test
+    void prompts_pairEveryCallKindsFingerprintWithItsTemplates() {
+        var prompts = this.controller.prompts();
+
+        assertThat(prompts).containsOnlyKeys(LlmRequestKind.values());
+        Arrays.stream(LlmRequestKind.values()).forEach(kind -> assertThat(
+            prompts.get(kind).fingerprint()).isEqualTo(
+                this.controller.configuration().promptFingerprints().get(kind)));
+        assertThat(prompts.get(LlmRequestKind.EVALUATION).templates()).containsOnlyKeys(
+            "review/evaluation-system", "review/evaluation-user");
+        assertThat(prompts.get(LlmRequestKind.DECOMPOSITION).templates()
+            .get("orchestration/decomposition")).startsWith("You are Vader, a planning assistant.");
     }
 }

@@ -13,5 +13,5 @@ Description: <taskDescription>
 Evidence from the agent's tool-call log (recorded by the system, not by the agent):
 <if(toolEvidence)><toolEvidence><else>The agent made no tool calls.<endif>
 
-Prior updates already recorded against this task:
-<if(priorUpdates)><priorUpdates><else>(none)<endif>
+Files the attempt saved for the user (recorded by the system, not by the agent):
+<if(uploadedFiles)><uploadedFiles><else>The attempt saved no files.<endif>

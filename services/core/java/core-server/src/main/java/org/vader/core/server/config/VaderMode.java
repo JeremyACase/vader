@@ -27,7 +27,7 @@ public enum VaderMode {
     TEST,
     /**
      * Benchmarking the system's prompts against a baseline. Real LLM only, with sampling pinned
-     * (temperature 0 and a fixed seed) so repeated runs are comparable.
+     * (an explicit temperature and a fixed seed) so each run is a repeatable sample.
      */
     EVAL,
 }

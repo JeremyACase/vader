@@ -83,7 +83,7 @@ class ScriptedChatModelStubTest {
     private static EvaluationRequest evaluationOf(final TaskAttemptStatus status) {
         return new EvaluationRequest(
             "user request", "objective", List.of(), "title", "description", status, "result",
-            "reason", List.of(), null);
+            "reason", null, List.of());
     }
 
     private static ConversationMessage message(final ConversationRole role, final String content) {

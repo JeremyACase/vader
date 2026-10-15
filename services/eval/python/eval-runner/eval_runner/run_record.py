@@ -37,7 +37,7 @@ class RunUsage:
 @dataclass(frozen=True)
 class RunRecord:
     case_id: str
-    level: int
+    difficulty: int
     seed: int
     outcome: RunOutcome
     workflow_status: str | None
@@ -66,7 +66,7 @@ class RunRecord:
         configuration = data.get("configuration")
         return cls(
             case_id=str(data["case_id"]),
-            level=int(str(data["level"])),
+            difficulty=int(str(data["difficulty"])),
             seed=int(str(data["seed"])),
             outcome=RunOutcome(str(data["outcome"])),
             workflow_status=optional_text(data.get("workflow_status")),

@@ -18,8 +18,10 @@ from eval_runner.benchmark_case import BenchmarkCase, discover_cases
 from eval_runner.case_run_service import CaseRunService, RunSettings
 from eval_runner.checker_adapter import CheckerAdapter
 from eval_runner.core_server_adapter import CoreServerAdapter
-from eval_runner.interface_core_server import JsonObject
+from eval_runner.interface_core_server import CoreServerError, JsonObject
+from eval_runner.prompt_set import prompt_sets
 from eval_runner.result_store import ResultStore
+from eval_runner.run_progress_reporter import RunProgressReporter
 from eval_runner.run_record import RunRecord
 from eval_runner.run_usage_collector import RunUsageCollector
 
@@ -61,7 +63,13 @@ def run(arguments: argparse.Namespace, store: ResultStore) -> int:
             run_timeout_seconds=arguments.run_timeout_minutes * 60,
             poll_interval_seconds=arguments.poll_seconds,
         )
-        service = CaseRunService(core_server, CheckerAdapter(), RunUsageCollector(core_server))
+        save_prompts(core_server, store)
+        service = CaseRunService(
+            core_server,
+            CheckerAdapter(),
+            RunUsageCollector(core_server),
+            progress=RunProgressReporter(core_server),
+        )
         pending = [
             case
             for case in discover_cases(CASES_ROOT, arguments.cases)
@@ -69,7 +77,18 @@ def run(arguments: argparse.Namespace, store: ResultStore) -> int:
         ]
         for case in pending:
             run_case(service, store, case, settings)
+        print_seed_table(store, arguments.seed)
     return MISCONFIGURED if problems else 0
+
+
+def save_prompts(core_server: CoreServerAdapter, store: ResultStore) -> None:
+    """Best effort: the prompts explain a result but aren't part of it, so a core-server too old
+    to report them still gets measured."""
+    try:
+        directory = store.save_prompts(prompt_sets(core_server.prompts()))
+        print(f"prompts saved to {directory}", flush=True)
+    except CoreServerError as error:
+        print(f"prompts not saved: {error}", file=sys.stderr, flush=True)
 
 
 def run_case(
@@ -79,6 +98,12 @@ def run_case(
     record = service.run(case, settings, store.deliverables_dir(case.id, settings.seed))
     store.save(record)
     print(f"  {describe(record)}", flush=True)
+
+
+def print_seed_table(store: ResultStore, seed: int) -> None:
+    """How this seed went, case by case, so a long run can be read as it goes."""
+    records = [record for record in store.load_all() if record.seed == seed]
+    print(f"Seed {seed}:\n{BaselineSummaryBuilder().table(records)}", flush=True)
 
 
 def describe(record: RunRecord) -> str:
