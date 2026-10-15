@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0]
 ### Added
-- The first benchmark case, quarterly-to-monthly-l1: split quarterly revenue evenly into a
-  monthly CSV. Its checker grades a run's delivered files by invariants (complete, ordered
-  months; quarterly totals preserved) plus a strict pass for following the request exactly, and
-  is itself tested against good, lenient and bad fixture outputs.
+- The benchmark cases EVAL runs measure prompts against: a three-rung quarterly-to-monthly
+  ladder, from an even split of whole-dollar revenue (level 1), through cent-exact rounding
+  that must keep every quarter's total (level 2), to a headcount column that must be carried as
+  a point-in-time count rather than split like revenue (level 3). Each case's checker grades a
+  run's delivered files by invariants any correct conversion keeps, plus a strict pass for
+  following the request exactly, and is itself tested against good, lenient and bad fixtures.

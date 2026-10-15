@@ -3,6 +3,20 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0]
+### Added
+- **Groundwork for measuring and improving Vader's own prompts.** Every model-facing prompt now
+  lives in a versioned template file with a fingerprint per call kind, and a new `EVAL`
+  configuration (`deploy/helm/configurations/eval`) runs the real local model with pinned
+  sampling so runs can be compared against a baseline; `helm test` checks that core-server
+  reports its mode and every fingerprint, and stamps each LLM request with one. Benchmark cases with tested checkers live in the new `eval/` module.
+  Each agent turn's token usage is recorded, with a warning as it nears the context window.
+### Changed
+- The local cluster scripts moved to `tools/scripts/local/`: one short script per goal
+  (`install-dev.sh`, `install-dev-from-source.sh`, `install-eval.sh`, `uninstall.sh`, plus the
+  Ollama and Helm-repo helpers) over shared helpers in `tools/scripts/lib/`, runnable from any
+  directory. `install-eval.sh` always builds from source and starts from a fresh release.
+
 ## [0.23.0]
 ### Added
 - **Security scans gate every change.** PRs and pushes to main now run CodeQL, Semgrep, Trivy

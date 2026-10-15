@@ -1,0 +1,16 @@
+# Level 2 of the quarterly-to-monthly ladder: L1's single flow column and stated method, but in
+# dollars and cents that mostly don't divide by three, so a run must round each month to the cent
+# and still keep every quarter's total exact -- the step a naive per-month rounding gets wrong.
+id: quarterly-to-monthly-l2
+level: 2
+prompt: |
+  Attached is quarterly_revenue.csv, which holds quarterly revenue totals in dollars and cents.
+  Convert it to monthly revenue by splitting each quarter's revenue evenly across its three
+  months, in whole cents: round each of the quarter's first two months to the nearest cent, and
+  make its last month whatever brings the three to exactly the quarter's revenue. Deliver the
+  result as monthly_revenue.csv with exactly two columns: month (formatted YYYY-MM) and revenue
+  (written with two decimal places), one row per month in chronological order.
+inputs:
+  - quarterly_revenue.csv
+deliverable: monthly_revenue.csv
+samples: 5
