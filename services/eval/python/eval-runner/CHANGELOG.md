@@ -13,3 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a point-in-time count rather than split like revenue (level 3). Each case's checker grades a
   run's delivered files by invariants any correct conversion keeps, plus a strict pass for
   following the request exactly, and is itself tested against good, lenient and bad fixtures.
+- A baseline runner that submits each case to a live EVAL release, waits for its workflow,
+  grades what it delivered and totals the tokens it spent, writing one result per case and seed
+  plus a summary with each seed's verdict, so a later run can be compared pair by pair. Runs that
+  only hit an unreachable core-server are retried rather than scored.

@@ -1,0 +1,4 @@
+# What the checkers and the baseline runner need at run time. The checkers run in the sandbox
+# image, so pandas is pinned to the sandbox server's range.
+pandas>=2.2,<3
+pyyaml>=6,<7

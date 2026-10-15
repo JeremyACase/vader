@@ -9,4 +9,4 @@ include ':services:core:ts:core-ui'
 include ':services:core:rust:core-agent-harness'
 include ':services:core:python:core-python-sandbox-server'
 
-include ':eval'
+include ':services:eval:python:eval-runner'

@@ -2,8 +2,8 @@ plugins {
     id 'base'
 }
 
-// Benchmark cases for EVAL mode: each case's checker, and the tests proving every checker grades
-// its own fixtures correctly. Runs dockerized, like core-python-sandbox-server's build.
+// Benchmark cases for EVAL mode -- each case's checker, and the tests proving every checker grades
+// its own fixtures correctly -- and the runner that measures a baseline with them. Runs dockerized, like core-python-sandbox-server's build.
 def pythonImage = 'python:3.12-slim'
 def pipCacheVolume = 'vader-eval-pip-cache'
 
@@ -29,7 +29,7 @@ tasks.register('ruffFormatCheck', Exec) {
 // One mypy run per checker: every case's checker is a module named check, which a single run
 // would reject as duplicates.
 tasks.register('mypyCheck', Exec) {
-    commandLine dockerRunPython('mypy tests && for checker in cases/*/check.py; do mypy "$checker" || exit 1; done')
+    commandLine dockerRunPython('mypy eval_runner tests && for checker in cases/*/check.py; do mypy "$checker" || exit 1; done')
 }
 
 tasks.register('pytestEval', Exec) {

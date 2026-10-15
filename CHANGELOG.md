@@ -9,8 +9,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   lives in a versioned template file with a fingerprint per call kind, and a new `EVAL`
   configuration (`deploy/helm/configurations/eval`) runs the real local model with pinned
   sampling so runs can be compared against a baseline; `helm test` checks that core-server
-  reports its mode and every fingerprint, and stamps each LLM request with one. Benchmark cases with tested checkers live in the new `eval/` module.
-  Each agent turn's token usage is recorded, with a warning as it nears the context window.
+  reports its mode and every fingerprint, and stamps each LLM request with one. Benchmark cases
+  with tested checkers live in the new `services/eval` group, and `tools/scripts/local/eval-baseline.sh`
+  measures a baseline with them: every case on several seeds, graded and summarized. Each agent
+  turn's token usage is recorded, with a warning as it nears the context window.
 ### Changed
 - The local cluster scripts moved to `tools/scripts/local/`: one short script per goal
   (`install-dev.sh`, `install-dev-from-source.sh`, `install-eval.sh`, `uninstall.sh`, plus the

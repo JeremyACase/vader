@@ -2,13 +2,13 @@
 # Installs the Vader Helm release, always pointed at the local Ollama ollama-up.sh runs. Sourced
 # after common.sh, never run.
 
-# Usage: helm_release_command install|upgrade <configuration>
+# Usage: helm_release_command install|upgrade <configuration> [extra helm arguments...]
 helm_release_command() {
   local verb="$1" configuration="$2"
   helm "$verb" "$VADER_RELEASE" deploy/helm/ \
     --values "deploy/helm/configurations/${configuration}/${configuration}.yaml" \
     --set vader.orchestrator.local.externalBaseUrl="$LOCAL_OLLAMA_URL" \
-    -n "$VADER_NAMESPACE"
+    -n "$VADER_NAMESPACE" "${@:3}"
 }
 
 release_exists() {

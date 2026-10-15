@@ -15,6 +15,7 @@ prompts and displays results.
 | `services/core/java/core-server` | Spring Boot service (orchestration, operators, storage, MCP) |
 | `services/core/ts/core-ui` | Angular frontend |
 | `services/core/rust/core-agent-harness` | Ephemeral k8s Job: executes exactly one task-graph subtask. All LLM calls are proxied through `core-server` — the harness never talks to an LLM directly. |
+| `services/eval/python/eval-runner` | Not part of the runtime: the benchmark cases EVAL mode measures prompts against (inputs, a checker per case, fixtures proving each checker), and the runner that scores a live EVAL release on them. Dockerized like the other Python module. |
 | `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server executing agent-submitted code as a subprocess against a persistent per-pod workspace, reachable only from `core-server`. |
 
 ### core-server package layout
@@ -102,6 +103,7 @@ local GPU Ollama, and run from any directory.
 | `install-dev.sh` | Install or upgrade from the published images, dev configuration |
 | `install-dev-from-source.sh` | Build every image from the working tree, then install or upgrade with dev |
 | `install-eval.sh` | Build from the working tree and install a **fresh** EVAL release (any existing release, its database and leftover harness Jobs/sandboxes are wiped first) |
+| `eval-baseline.sh` | Install a fresh EVAL release, run every benchmark case once per seed, grade each run with its checker, and write per-run results plus `summary.json` to `build/eval/` (resumable with `--skip-install --results DIR`) |
 | `uninstall.sh [--cluster]` | Remove the release and operator-created workloads; `--cluster` also deletes the KIND cluster |
 | `ollama-up.sh` / `ollama-down.sh` | Start or remove the local GPU Ollama |
 
