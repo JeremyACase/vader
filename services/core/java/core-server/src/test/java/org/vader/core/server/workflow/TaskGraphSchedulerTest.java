@@ -16,6 +16,8 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
@@ -160,11 +162,12 @@ class TaskGraphSchedulerTest {
         assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.AWAITING_LLM);
     }
 
-    @Test
-    void evaluate_forTerminalWorkflow_doesNothing() {
+    @ParameterizedTest
+    @EnumSource(value = WorkflowStatus.class, names = {"SUCCEEDED", "FAILED", "CANCELLED"})
+    void evaluate_forTerminalWorkflow_doesNothing(final WorkflowStatus status) {
         var task = task("t1");
         var workflow = runningWorkflowWithOneTask(task);
-        workflow.setStatus(WorkflowStatus.FAILED);
+        workflow.setStatus(status);
         when(this.workflowRepository.findById(WORKFLOW_ID)).thenReturn(Optional.of(workflow));
 
         this.scheduler.evaluate(WORKFLOW_ID);

@@ -11,7 +11,9 @@ metadata:
     # ScriptedChatModelStub's upload marker is planned as one task whose real harness Job runs
     # code in a real sandbox to write scripted-report.md, then uploads it. The test then finds
     # the stored object through the task attempt that produced it and downloads it through the
-    # REST endpoint -- never knowing or caring which storage strategy the release runs.
+    # REST endpoint -- never knowing or caring which storage strategy the release runs. The same
+    # code writes scripted-notes.md, which the agent never uploads: core-server must save it when
+    # the attempt succeeds, and must not save the already-uploaded report a second time.
 spec:
   restartPolicy: Never
   containers:
@@ -25,11 +27,12 @@ spec:
           WORKFLOW_QUERY="$SERVER/vader/core-server/data/workflow/query/params"
           TOOL_CALL_QUERY="$SERVER/vader/core-server/data/task-attempt-tool-call/query/params"
           OM_QUERY="$SERVER/vader/core-server/data/object-metadata/query/params"
-          # Must match ScriptedChatModelStub's UPLOAD_SCRIPT_MARKER, UPLOADED_REPORT_FILENAME and
-          # UPLOADED_REPORT_CONTENT.
+          # Must match ScriptedChatModelStub's UPLOAD_SCRIPT_MARKER, UPLOADED_REPORT_FILENAME,
+          # UPLOADED_REPORT_CONTENT and UNUPLOADED_NOTES_FILENAME.
           MARKER="[scripted:upload-object]"
           REPORT_FILENAME="scripted-report.md"
           REPORT_CONTENT="# Scripted report"
+          NOTES_FILENAME="scripted-notes.md"
 
           echo "== Health check =="
           STATUS=000
@@ -112,6 +115,14 @@ spec:
           [ "$(cat "$OUT_FILE")" = "$REPORT_CONTENT" ] \
             || { echo "❌ downloaded content '$(cat "$OUT_FILE")' did not match"; exit 1; }
           echo "✅ downloaded bytes match the file written in the sandbox"
+
+          echo "== A file the agent wrote but never uploaded is saved once the attempt succeeds =="
+          echo "$OM_BODY" | grep -qF "\"originalFilename\":\"$NOTES_FILENAME\"" \
+            || { echo "❌ $NOTES_FILENAME was not saved for attempt $ATTEMPT_ID"; exit 1; }
+          REPORT_COUNT=$(echo "$OM_BODY" | grep -oF "\"originalFilename\":\"$REPORT_FILENAME\"" | wc -l)
+          [ "$REPORT_COUNT" -eq 1 ] \
+            || { echo "❌ $REPORT_FILENAME was saved $REPORT_COUNT times, expected once"; exit 1; }
+          echo "✅ the unuploaded file was saved, and the uploaded one was not saved again"
 
           echo "🎉 object-upload system test passed"
 {{- end }}

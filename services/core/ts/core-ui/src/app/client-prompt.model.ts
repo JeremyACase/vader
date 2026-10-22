@@ -41,8 +41,9 @@ export interface TaskPlan {
 /**
  * Equivalent of org.vader.common.model.vader.entity.WorkflowStatus. `AWAITING_LLM` is not
  * terminal: the workflow is paused until the LLM answers again, then returns to `RUNNING`.
+ * `CANCELLED` is terminal: the workflow was stopped on request before it settled.
  */
-export type WorkflowStatus = 'RUNNING' | 'AWAITING_LLM' | 'SUCCEEDED' | 'FAILED';
+export type WorkflowStatus = 'RUNNING' | 'AWAITING_LLM' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
 /**
  * Equivalent of org.vader.common.model.vader.dto.Workflow: the decomposition the server

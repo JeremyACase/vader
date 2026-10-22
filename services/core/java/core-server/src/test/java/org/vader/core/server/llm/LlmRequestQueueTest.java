@@ -27,6 +27,7 @@ import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.taskagent.model.TurnUsage;
 import org.vader.core.server.workflow.WorkflowSynthesisLlmExecutor;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
@@ -87,8 +88,9 @@ class LlmRequestQueueTest {
             .thenReturn(Optional.of(java.time.OffsetDateTime.now()));
     }
 
-    private static List<ConversationMessage> userTurn(final String text) {
-        return List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null));
+    private static InferenceTurnRequest userTurn(final String text) {
+        return new InferenceTurnRequest(
+            List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null)), 1);
     }
 
     private void respondWith(final String responseJson) {

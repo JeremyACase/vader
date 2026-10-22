@@ -5,7 +5,7 @@ use crate::prompts::AssignmentNudges;
 
 /// The tool whose `code` argument counts as "executed" when checking a final answer for code the
 /// model never ran.
-const RUN_PYTHON_CODE_TOOL: &str = "run_python_code";
+pub const RUN_PYTHON_CODE_TOOL: &str = "run_python_code";
 
 /// Why a would-be final answer looks unfinished, which picks the nudge sent back for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +68,47 @@ impl UnfinishedAnswerGuard {
         }
         nudge
     }
+}
+
+/// The last Python-tagged fenced block in a would-be final answer that no `run_python_code` call
+/// has executed yet, which the harness runs on the model's behalf rather than accept or nudge the
+/// answer: a small model that drifts into describing code instead of calling the tool tends to
+/// answer a nudge with more description. Only blocks tagged as Python count -- an untagged or
+/// other-language block may be data or output, not code to run -- and only the last one, since
+/// successive blocks in one reply are usually revisions of the same step.
+pub fn unrun_python_code(answer: &str, messages: &[ConversationMessage]) -> Option<String> {
+    let executed = executed_code(messages);
+    python_code_blocks(answer)
+        .into_iter()
+        .filter(|block| !without_whitespace(block).is_empty())
+        .rfind(|block| {
+            let block = without_whitespace(block);
+            !executed.iter().any(|code| code.contains(&block))
+        })
+}
+
+fn python_code_blocks(answer: &str) -> Vec<String> {
+    answer
+        .split("```")
+        .skip(1)
+        .step_by(2)
+        .filter_map(python_block_body)
+        .collect()
+}
+
+/// The block's body when its opening fence names Python, otherwise `None`.
+fn python_block_body(block: &str) -> Option<String> {
+    block
+        .split_once('\n')
+        .filter(|(tag, _)| is_python_tag(tag))
+        .map(|(_, body)| body.to_string())
+}
+
+fn is_python_tag(tag: &str) -> bool {
+    matches!(
+        tag.trim().to_ascii_lowercase().as_str(),
+        "python" | "py" | "python3"
+    )
 }
 
 /// An unresolved tool error takes priority: code in the reply is usually the model's proposed fix
@@ -296,6 +337,43 @@ mod tests {
         };
         assert_eq!(UnfinishedAnswer::UnexecutedCode.nudge(&nudges), "run it");
         assert_eq!(UnfinishedAnswer::UnresolvedError.nudge(&nudges), "fix it");
+    }
+
+    #[test]
+    fn finds_python_the_model_never_ran() {
+        let answer = answer_with_code(CODE);
+        assert_eq!(unrun_python_code(&answer, &[]), Some(format!("{CODE}\n")));
+    }
+
+    #[test]
+    fn finds_no_python_once_it_has_been_run() {
+        let messages = vec![run_python_call(CODE), python_result(0)];
+        assert_eq!(unrun_python_code(&answer_with_code(CODE), &messages), None);
+    }
+
+    #[test]
+    fn ignores_blocks_not_tagged_as_python() {
+        let answer = "The result:\n```csv\nmonth,revenue\n2024-01,40000\n```\n```\nx = 1\n```";
+        assert_eq!(unrun_python_code(answer, &[]), None);
+    }
+
+    #[test]
+    fn picks_the_last_unrun_python_block() {
+        let answer = "```python\nfirst()\n```\nor rather\n```py\nsecond()\n```";
+        assert_eq!(
+            unrun_python_code(answer, &[]).as_deref(),
+            Some("second()\n")
+        );
+    }
+
+    #[test]
+    fn skips_a_last_block_that_was_already_run() {
+        let messages = vec![run_python_call("second()"), python_result(0)];
+        let answer = "```python\nfirst()\n```\nthen\n```python\nsecond()\n```";
+        assert_eq!(
+            unrun_python_code(answer, &messages).as_deref(),
+            Some("first()\n")
+        );
     }
 
     #[test]

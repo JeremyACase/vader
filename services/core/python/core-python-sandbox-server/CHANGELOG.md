@@ -5,6 +5,11 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+### Added
+- `GET /workspace/files` lists the workspace's files by name, size and SHA-256, without their
+  content, so `core-server` can save what an agent's code wrote when its attempt ends.
+
 ## [0.4.1]
 ### Security
 - The image applies Debian security patches at build time, so a stale base image does not ship

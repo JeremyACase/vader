@@ -1,1 +1,1 @@
-- "<filename>" (type: <contentType>) -- already in your Python working directory; open it by exactly this filename with run_python_code.
+- "<filename>" (type: <contentType><if(producedBy)>, saved by "<producedBy>"<endif>) -- already in your Python working directory; open it by exactly this filename with run_python_code.

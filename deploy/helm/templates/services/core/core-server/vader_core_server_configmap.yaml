@@ -67,6 +67,10 @@ data:
           # one entirely.
           base-url: {{ .Values.vader.orchestrator.local.externalBaseUrl | default (printf "http://vader-ollama:%v" .Values.vader.components.core.ollama.service.port) }}
           chat:
+            {{- if not (kindIs "invalid" .Values.vader.orchestrator.local.think) }}
+            # See vader.orchestrator.local.think.
+            think: {{ .Values.vader.orchestrator.local.think | toString | upper | quote }}
+            {{- end }}
             options:
               model: {{ .Values.vader.orchestrator.local.model }}
               # The same in every mode, so a benchmark measures the prompts the way they run.

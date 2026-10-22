@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
-import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
 import org.vader.core.server.sandbox.model.SandboxExecutionResult;
@@ -29,9 +28,10 @@ import org.vader.core.server.workflow.TaskAttemptRepository;
  * <p>The sandbox is provisioned lazily, on the attempt's first code run rather than at dispatch:
  * a task that never runs Python (e.g. "summarize the findings") never costs a pod. That first run
  * blocks for the sandbox's startup (bounded by {@link PythonSandboxService#ensureReady}); every
- * later run finds it already there. Before every run, each file attached to the original request
- * is staged if it isn't already in the workspace, under the name {@link WorkspaceFileNaming}
- * assigns it -- the same name the task agent's own context tells it to open.</p>
+ * later run finds it already there. Before every run, each file {@link TaskWorkspaceFileResolver}
+ * resolves for the task -- attached to the original request, or saved by a task it builds on -- is
+ * staged if nothing of that name is in the workspace yet, under the same name the task agent's
+ * own context tells it to open. A file the agent itself wrote under that name is left alone.</p>
  *
  * <p>An upload copies a workspace file into object storage through {@link ObjectStorageService},
  * so the agent never learns which storage strategy is active; the stored object is linked to
@@ -41,7 +41,7 @@ import org.vader.core.server.workflow.TaskAttemptRepository;
  *
  * <p>Neither operation is transactional as a whole, since each blocks on the sandbox over the
  * network: only the database reads and the object-storage write run in transactions, each short.
- * Resolving the attached files walks lazy associations, so it runs in a
+ * Resolving the workspace files walks lazy associations, so it runs in a
  * {@link TransactionTemplate} -- {@code @Transactional} is bypassed on self-calls.</p>
  */
 @Service
@@ -63,6 +63,9 @@ public class TaskAttemptSandboxService {
     private ObjectStorageService objectStorageService;
 
     @Autowired
+    private TaskWorkspaceFileResolver taskWorkspaceFileResolver;
+
+    @Autowired
     private PlatformTransactionManager transactionManager;
 
     private TransactionTemplate transaction;
@@ -73,8 +76,8 @@ public class TaskAttemptSandboxService {
     }
 
     /**
-     * Runs code in the calling attempt's own sandbox, provisioning it and staging the request's
-     * attached files first if needed.
+     * Runs code in the calling attempt's own sandbox, provisioning it and staging its workspace
+     * files first if needed.
      *
      * @param taskAttemptId the calling attempt's id
      * @param code the Python source to run
@@ -122,21 +125,9 @@ public class TaskAttemptSandboxService {
         this.sandboxService.delete(TaskAttemptSandboxNaming.resolve(taskAttemptId));
     }
 
-    /**
-     * The files attached to a client prompt, with the names they are (or will be) staged under.
-     *
-     * @param clientPrompt the original request
-     * @return one entry per attached file
-     */
-    public static List<WorkspaceFile> workspaceFilesFor(final ClientPromptEntity clientPrompt) {
-        return WorkspaceFileNaming.assign(clientPrompt.getFiles());
-    }
-
     private List<WorkspaceFile> workspaceFilesFor(final String taskAttemptId) {
-        var attempt = this.requireAttempt(taskAttemptId);
-        var clientPrompt =
-            attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow().getClientPrompt();
-        return workspaceFilesFor(clientPrompt);
+        var task = this.requireAttempt(taskAttemptId).getTask();
+        return this.taskWorkspaceFileResolver.filesFor(task);
     }
 
     private TaskAttemptEntity requireAttempt(final String taskAttemptId) {

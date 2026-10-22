@@ -21,6 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
+import org.vader.core.server.sandbox.model.SandboxFileInfo;
 
 class SandboxExecutionClientTest {
 
@@ -276,5 +277,33 @@ class SandboxExecutionClientTest {
             .hasMessageContaining("new-sandbox-127")
             .hasMessageContaining("ConnectException")
             .hasMessageNotContaining(": null");
+    }
+
+    @Test
+    void listFiles_readsTheSandboxsWorkspaceListing() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(
+                "[{\"filename\":\"out.csv\",\"size\":3,\"sha256\":\"abc\"}]",
+                MediaType.APPLICATION_JSON));
+
+        var files = this.client.listFiles("vader-sandbox-a");
+
+        assertThat(files).containsExactly(new SandboxFileInfo("out.csv", 3L, "abc"));
+        this.mockServer.verify();
+    }
+
+    @Test
+    void listFiles_whenTheSandboxFails_throwsSandboxExecutionException() {
+        this.mockServer
+            .expect(requestTo(
+                "http://vader-sandbox-a.vader.svc.cluster.local:8888/workspace/files"))
+            .andRespond(withServerError());
+
+        assertThatThrownBy(() -> this.client.listFiles("vader-sandbox-a"))
+            .isInstanceOf(SandboxExecutionException.class)
+            .hasMessageContaining("vader-sandbox-a");
     }
 }

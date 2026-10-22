@@ -12,14 +12,15 @@ import pytest
 from eval_runner.__main__ import configuration_problems
 from eval_runner.baseline_summary_builder import BaselineSummaryBuilder
 from eval_runner.benchmark_case import BenchmarkCase, discover_cases
-from eval_runner.case_run_service import CaseRunService, RunSettings
-from eval_runner.checker_adapter import CheckerAdapter
+from eval_runner.case_run_service import CaseRun, CaseRunService, RunSettings
+from eval_runner.checker_adapter import CheckerAdapter, CheckerError
 from eval_runner.interface_core_server import CoreServerError, JsonObject
 from eval_runner.prompt_set import prompt_sets
 from eval_runner.result_store import ResultStore
 from eval_runner.run_progress_reporter import RunProgressReporter
 from eval_runner.run_record import Grade, RunOutcome, RunRecord, RunUsage
-from eval_runner.run_usage_collector import RunUsageCollector
+from eval_runner.run_trace import AttemptTrace, RunTrace
+from eval_runner.run_trace_collector import RunTraceCollector
 
 CASES = Path(__file__).resolve().parent.parent / "cases"
 DIFFICULTY_1 = CASES / "quarterly-to-monthly-difficulty-1"
@@ -61,6 +62,7 @@ class CoreServerStub:
         self.objects: list[JsonObject] = [{"id": f"old-{index}"} for index in range(existing)]
         self.failing = failing or set()
         self.submitted: list[tuple[str, list[Path]]] = []
+        self.cancelled: list[str] = []
 
     def configuration(self) -> JsonObject:
         return a_configuration()
@@ -77,20 +79,40 @@ class CoreServerStub:
 
     def latest_workflow(self, client_prompt_id: str) -> JsonObject | None:
         status = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
-        return {"id": "workflow-1", "status": status}
+        return {"id": "workflow-1", "status": status, "taskPlan": {"objective": "convert it"}}
+
+    def cancel_workflow(self, workflow_id: str) -> None:
+        self._maybe_fail("cancel")
+        self.cancelled.append(workflow_id)
 
     def query_all(self, entity: str, filters: dict[str, str]) -> list[JsonObject]:
         self._maybe_fail(entity)
+        planner_task = "task.taskGraph" in next(iter(filters))
         rows: dict[str, list[JsonObject]] = {
             "object-metadata": list(self.objects),
-            "task-attempt": [{"id": "attempt-1"}]
-            if "task.taskGraph" in next(iter(filters))
+            "task-attempt": [{"id": "attempt-1"}] if planner_task else [],
+            "task-update": [
+                {"type": "COMPLETED", "createdAt": "2026-10-20T00:00:02.5Z"},
+                {"type": "CREATED", "createdAt": "2026-10-20T00:00:01.25Z"},
+            ]
+            if planner_task
             else [],
             "task": [],
             "task-attempt-transcript": [
-                {"promptTokens": 900, "completionTokens": 100, "promptCharacters": 3000},
-                {"promptTokens": 1500, "completionTokens": 50, "promptCharacters": 5000},
+                {
+                    "turnIndex": 1,
+                    "promptTokens": 1500,
+                    "completionTokens": 50,
+                    "promptCharacters": 5000,
+                },
+                {
+                    "turnIndex": 0,
+                    "promptTokens": 900,
+                    "completionTokens": 100,
+                    "promptCharacters": 3000,
+                },
             ],
+            "task-attempt-tool-call": [{"toolName": "run_python_code"}],
         }
         return rows[entity]
 
@@ -142,11 +164,15 @@ def a_record(**overrides: object) -> RunRecord:
 
 
 def run_l1(core_server: CoreServerStub, tmp_path: Path, timeout: float = 600.0) -> RunRecord:
+    return run_l1_traced(core_server, tmp_path, timeout).record
+
+
+def run_l1_traced(core_server: CoreServerStub, tmp_path: Path, timeout: float = 600.0) -> CaseRun:
     clock = FakeClock()
     service = CaseRunService(
         core_server,
         CheckerAdapter(),
-        RunUsageCollector(core_server),
+        RunTraceCollector(core_server),
         clock=clock,
         sleep=clock.sleep,
     )
@@ -194,6 +220,29 @@ def test_a_workflow_still_running_at_the_timeout_never_counts_as_a_pass(tmp_path
     assert record.scored()
 
 
+def test_a_workflow_still_running_at_the_timeout_is_cancelled(tmp_path: Path) -> None:
+    core_server = CoreServerStub(["RUNNING"])
+
+    run_l1(core_server, tmp_path, timeout=60.0)
+
+    assert core_server.cancelled == ["workflow-1"]
+
+
+def test_a_settled_workflow_is_not_cancelled(tmp_path: Path) -> None:
+    core_server = CoreServerStub(["SUCCEEDED"])
+
+    run_l1(core_server, tmp_path)
+
+    assert core_server.cancelled == []
+
+
+def test_a_failed_cancellation_still_records_the_timed_out_run(tmp_path: Path) -> None:
+    record = run_l1(CoreServerStub(["RUNNING"], failing={"cancel"}), tmp_path, timeout=60.0)
+
+    assert record.outcome == RunOutcome.TIMED_OUT
+    assert record.grade is not None
+
+
 def test_an_unreachable_core_server_is_recorded_as_infrastructure_not_scored(
     tmp_path: Path,
 ) -> None:
@@ -202,6 +251,41 @@ def test_an_unreachable_core_server_is_recorded_as_infrastructure_not_scored(
     assert record.outcome == RunOutcome.INFRASTRUCTURE_ERROR
     assert record.error == "submit unreachable"
     assert not record.scored()
+
+
+class RaisingCheckerAdapter(CheckerAdapter):
+    def grade(self, case: BenchmarkCase, deliverables: Path) -> Grade:
+        raise CheckerError(f"the checker of {case.id} raised ValueError: boom")
+
+
+def test_a_checker_that_raises_costs_only_that_run_its_grade(tmp_path: Path) -> None:
+    core_server = CoreServerStub(["SUCCEEDED"])
+    service = CaseRunService(core_server, RaisingCheckerAdapter(), RunTraceCollector(core_server))
+
+    record = service.run(
+        BenchmarkCase.load(DIFFICULTY_1), settings(), tmp_path / "deliverables"
+    ).record
+
+    assert record.outcome == RunOutcome.CHECKER_ERROR
+    assert record.grade is None
+    assert record.workflow_status == "SUCCEEDED"
+    assert record.error is not None and "ValueError: boom" in record.error
+    assert not record.scored()
+    assert (tmp_path / "deliverables" / "monthly_revenue.csv").read_bytes() == GOOD_DELIVERABLE
+
+
+def test_the_adapter_reports_anything_a_checker_raises_as_a_checker_error(
+    tmp_path: Path,
+) -> None:
+    case_dir = tmp_path / "raising-case"
+    case_dir.mkdir()
+    (case_dir / "check.py").write_text(
+        "def check(deliverables, inputs):\n    raise KeyError('month')\n", encoding="utf-8"
+    )
+    case = dataclasses.replace(BenchmarkCase.load(DIFFICULTY_1), directory=case_dir)
+
+    with pytest.raises(CheckerError, match="raised KeyError"):
+        CheckerAdapter().grade(case, tmp_path)
 
 
 def test_usage_totals_every_turn_of_every_attempt(tmp_path: Path) -> None:
@@ -224,7 +308,7 @@ def test_a_run_reports_its_progress_on_every_poll(tmp_path: Path) -> None:
     service = CaseRunService(
         core_server,
         CheckerAdapter(),
-        RunUsageCollector(core_server),
+        RunTraceCollector(core_server),
         clock=clock,
         sleep=clock.sleep,
         progress=RunProgressReporter(core_server, emit=lines.append),
@@ -239,11 +323,67 @@ def test_a_run_reports_its_progress_on_every_poll(tmp_path: Path) -> None:
     ]
 
 
-def test_failing_to_total_usage_never_discards_the_grade(tmp_path: Path) -> None:
-    record = run_l1(CoreServerStub(["SUCCEEDED"], failing={"task-attempt"}), tmp_path)
+def test_failing_to_trace_the_workflow_never_discards_the_grade(tmp_path: Path) -> None:
+    case_run = run_l1_traced(CoreServerStub(["SUCCEEDED"], failing={"task-attempt"}), tmp_path)
 
-    assert record.usage is None
-    assert record.strict()
+    assert case_run.trace is None
+    assert case_run.record.usage is None
+    assert case_run.record.strict()
+
+
+def test_the_trace_holds_the_plan_each_attempts_turns_in_order_and_the_verdicts(
+    tmp_path: Path,
+) -> None:
+    trace = run_l1_traced(CoreServerStub(["SUCCEEDED"]), tmp_path).trace
+
+    assert trace is not None
+    assert trace.workflow["taskPlan"] == {"objective": "convert it"}
+    assert [attempt.attempt["id"] for attempt in trace.attempts] == ["attempt-1"]
+    assert [turn["turnIndex"] for turn in trace.attempts[0].turns] == [0, 1]
+    assert trace.attempts[0].tool_calls == [{"toolName": "run_python_code"}]
+    assert [update["type"] for update in trace.task_updates] == ["CREATED", "COMPLETED"]
+
+
+def a_trace(attempt_id: str = "attempt-1") -> RunTrace:
+    return RunTrace(
+        workflow={"id": "workflow-1", "taskPlan": {"objective": "convert it"}},
+        attempts=[AttemptTrace({"id": attempt_id}, [{"turnIndex": 0}], [])],
+        task_updates=[{"type": "COMPLETED", "author": "EVALUATOR"}],
+    )
+
+
+def test_a_trace_is_saved_beside_its_run_as_plan_attempts_and_verdicts(tmp_path: Path) -> None:
+    store = ResultStore(tmp_path)
+
+    store.save_trace("quarterly-to-monthly-difficulty-1", 42, a_trace())
+
+    directory = store.trace_dir("quarterly-to-monthly-difficulty-1", 42)
+    assert json.loads((directory / "workflow.json").read_text())["taskPlan"] == {
+        "objective": "convert it"
+    }
+    assert json.loads((directory / "attempts.json").read_text()) == [
+        {"attempt": {"id": "attempt-1"}, "turns": [{"turnIndex": 0}], "tool_calls": []}
+    ]
+    assert json.loads((directory / "task-updates.json").read_text()) == [
+        {"type": "COMPLETED", "author": "EVALUATOR"}
+    ]
+
+
+def test_a_retried_run_never_keeps_the_trace_of_an_earlier_try(tmp_path: Path) -> None:
+    store = ResultStore(tmp_path)
+    store.save_trace("quarterly-to-monthly-difficulty-1", 42, a_trace("earlier"))
+
+    store.save_trace("quarterly-to-monthly-difficulty-1", 42, None)
+
+    assert not store.trace_dir("quarterly-to-monthly-difficulty-1", 42).exists()
+
+
+def test_a_trace_is_never_mistaken_for_a_run_record(tmp_path: Path) -> None:
+    store = ResultStore(tmp_path)
+    store.save(a_record())
+    store.save_trace("quarterly-to-monthly-difficulty-1", 42, a_trace())
+
+    assert store.load_all() == [a_record()]
 
 
 def test_a_record_survives_the_round_trip_through_its_file(tmp_path: Path) -> None:
@@ -260,9 +400,11 @@ def test_only_a_scored_run_counts_as_done(tmp_path: Path) -> None:
     store = ResultStore(tmp_path)
     store.save(a_record(seed=1))
     store.save(a_record(seed=2, outcome=RunOutcome.INFRASTRUCTURE_ERROR, grade=None))
+    store.save(a_record(seed=4, outcome=RunOutcome.CHECKER_ERROR, grade=None))
 
     assert store.is_done("quarterly-to-monthly-difficulty-1", 1)
     assert not store.is_done("quarterly-to-monthly-difficulty-1", 2)
+    assert not store.is_done("quarterly-to-monthly-difficulty-1", 4)
     assert not store.is_done("quarterly-to-monthly-difficulty-1", 3)
 
 
@@ -273,11 +415,13 @@ def test_the_summary_scores_only_scored_runs_and_keeps_each_seeds_verdict() -> N
         a_record(seed=3, grade=Grade(passed=False, strict=False, reasons=["sum"])),
         a_record(seed=4, outcome=RunOutcome.TIMED_OUT),
         a_record(seed=5, outcome=RunOutcome.INFRASTRUCTURE_ERROR, grade=None, usage=None),
+        a_record(seed=6, outcome=RunOutcome.CHECKER_ERROR, grade=None),
     ]
 
     summary = BaselineSummaryBuilder().build(records)
 
     assert summary["infrastructureErrors"] == 1
+    assert summary["checkerErrors"] == 1
     assert summary["passRate"] == 0.5
     assert summary["strictRate"] == 0.25
     case = summary["cases"]
@@ -306,7 +450,7 @@ def test_the_table_reads_one_line_per_case_and_an_overall_line() -> None:
 
     assert table.splitlines() == [
         "quarterly-to-monthly-difficulty-1    2/2 passed, 2 strict, 0 timed out, median 120.0s",
-        "overall pass rate 1.0, strict 1.0, 0 infrastructure errors",
+        "overall pass rate 1.0, strict 1.0, 0 infrastructure errors, 0 checker errors",
     ]
 
 

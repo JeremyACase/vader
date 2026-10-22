@@ -25,6 +25,7 @@ import org.vader.core.server.operators.ManagedResource;
 import org.vader.core.server.sandbox.model.PythonSandboxSpec;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
 import org.vader.core.server.sandbox.model.SandboxExecutionResult;
+import org.vader.core.server.sandbox.model.SandboxFileInfo;
 import org.vader.core.server.sandbox.model.SandboxInfo;
 import org.vader.core.server.storage.ObjectContent;
 import org.vader.core.server.storage.ObjectStorageService;
@@ -239,5 +240,22 @@ class PythonSandboxServiceTest {
         this.service.stageObjectIfAbsent("vader-sandbox-a", "obj-1", "sales.csv");
 
         verify(this.executionClient).stageFile("vader-sandbox-a", "sales.csv", bytes);
+    }
+
+    @Test
+    void listFiles_listsTheWorkspaceOfManagedSandboxes() {
+        var files = List.of(new SandboxFileInfo("out.csv", 3L, "abc"));
+        when(this.operator.manages("vader-sandbox-a")).thenReturn(true);
+        when(this.executionClient.listFiles("vader-sandbox-a")).thenReturn(files);
+
+        assertThat(this.service.listFiles("vader-sandbox-a")).isEqualTo(files);
+    }
+
+    @Test
+    void listFiles_forSandboxesNeverCreated_isEmptyWithoutCallingThem() {
+        when(this.operator.manages("vader-sandbox-a")).thenReturn(false);
+
+        assertThat(this.service.listFiles("vader-sandbox-a")).isEmpty();
+        verify(this.executionClient, never()).listFiles(any());
     }
 }

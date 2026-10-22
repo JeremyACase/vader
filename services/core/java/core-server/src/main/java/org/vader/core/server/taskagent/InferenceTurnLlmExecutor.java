@@ -25,6 +25,7 @@ import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.InferenceToolCall;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.taskagent.model.TurnUsage;
 
 /**
@@ -38,6 +39,9 @@ import org.vader.core.server.taskagent.model.TurnUsage;
  * requested tool call comes back in {@link InferenceTurn#toolCalls()} for the harness to invoke
  * and fold into the next turn.</p>
  *
+ * <p>Each turn samples with its attempt's options (see {@link AttemptSamplingOptionsBuilder}), so
+ * a retry is a fresh sample rather than a replay of the attempt before it.</p>
+ *
  * <p>Reads content, tool calls and token usage from a single {@code chatResponse()}: calling a
  * second terminal method on the same {@code CallResponseSpec} re-runs its consumed advisor chain
  * and fails with {@code No CallAdvisors available to execute}.</p>
@@ -48,7 +52,7 @@ import org.vader.core.server.taskagent.model.TurnUsage;
  */
 @Service
 public class InferenceTurnLlmExecutor
-    implements InterfaceLlmExecutor<List<ConversationMessage>, InferenceTurn> {
+    implements InterfaceLlmExecutor<InferenceTurnRequest, InferenceTurn> {
 
     @Autowired
     private ChatClient.Builder chatClientBuilder;
@@ -59,6 +63,9 @@ public class InferenceTurnLlmExecutor
     @Autowired
     private PromptCharacterCounter promptCharacterCounter;
 
+    @Autowired
+    private AttemptSamplingOptionsBuilder attemptSamplingOptionsBuilder;
+
     @Override
     public LlmRequestKind kind() {
         return LlmRequestKind.INFERENCE_TURN;
@@ -67,19 +74,24 @@ public class InferenceTurnLlmExecutor
     /**
      * Completes one turn.
      *
-     * @param messages the running conversation so far
+     * @param request the running conversation so far, and the attempt it belongs to
      * @return the model's response: either a final answer, or a request to call tools
      */
     @Override
-    public InferenceTurn execute(final List<ConversationMessage> messages) {
+    public InferenceTurn execute(final InferenceTurnRequest request) {
+        var messages = request.messages();
         var tools = this.toolCallbackRegistry.forAudience(AgentToolAudience.TASK_EXECUTION);
         // The harness executes tool calls itself, so the client must hand them back unexecuted
         // rather than auto-registering its tool-calling advisor.
-        var chatResponse = this.chatClientBuilder.build().prompt()
+        var prompt = this.chatClientBuilder.build().prompt()
             .messages(toSpringMessages(messages))
             .toolCallbacks(tools)
             .advisors(advisors -> advisors.param(
-                ChatClientAttributes.TOOL_CALLING_ADVISOR_AUTO_REGISTER.getKey(), false))
+                ChatClientAttributes.TOOL_CALLING_ADVISOR_AUTO_REGISTER.getKey(), false));
+        var chatResponse = this.attemptSamplingOptionsBuilder
+            .forAttempt(request.attemptNumber())
+            .map(options -> prompt.options(options))
+            .orElse(prompt)
             .call()
             .chatResponse();
         return toInferenceTurn(chatResponse, this.promptCharacterCounter.count(messages, tools));

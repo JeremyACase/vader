@@ -27,6 +27,7 @@ import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.taskagent.model.TurnUsage;
 import tools.jackson.databind.ObjectMapper;
 
@@ -90,10 +91,10 @@ class LlmRequestInboxTest {
 
     @Test
     void handle_decodesGenericRequestTypesAndStoresTheResponse() throws Exception {
-        var messages = List.of(
-            new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
-        var message = this.messageOf(LlmRequestKind.INFERENCE_TURN, messages);
-        when(this.inferenceTurnExecutor.execute(messages))
+        var request = new InferenceTurnRequest(
+            List.of(new ConversationMessage(ConversationRole.USER, "hi", null, null, null)), 2);
+        var message = this.messageOf(LlmRequestKind.INFERENCE_TURN, request);
+        when(this.inferenceTurnExecutor.execute(request))
             .thenReturn(new InferenceTurn("hello", List.of(), 5L, "stop", USAGE));
 
         ReflectionTestUtils.invokeMethod(this.inbox, "handle", message);

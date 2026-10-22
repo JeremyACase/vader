@@ -41,6 +41,9 @@ class ProgressStub:
     def latest_workflow(self, client_prompt_id: str) -> JsonObject | None:
         return WORKFLOW
 
+    def cancel_workflow(self, workflow_id: str) -> None:
+        pass
+
     def query_all(self, entity: str, filters: dict[str, str]) -> list[JsonObject]:
         if self.failing:
             raise CoreServerError("connection refused")

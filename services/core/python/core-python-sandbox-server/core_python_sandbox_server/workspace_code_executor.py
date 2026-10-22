@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 import subprocess
 import sys
 from pathlib import Path
 
-from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult
+from core_python_sandbox_server.models import (
+    ExecutionRequest,
+    ExecutionResult,
+    WorkspaceFileInfo,
+)
 
 SUBMITTED_CODE_FILENAME = "_submitted_code.py"
 
@@ -111,6 +116,23 @@ class WorkspaceCodeExecutor:
         path = self._safe_path(filename)
         return path if path.is_file() else None
 
+    def list_files(self) -> list[WorkspaceFileInfo]:
+        """Describes every file at the top of the workspace, by name, size and SHA-256.
+
+        Lets core-server save the files an agent's code wrote without the agent having to name
+        them, and tell them apart from files staged in unchanged. Hidden files and the submitted
+        script itself are left out.
+        """
+        return [
+            self._describe(path) for path in sorted(self._workspace.iterdir()) if _is_listed(path)
+        ]
+
+    @staticmethod
+    def _describe(path: Path) -> WorkspaceFileInfo:
+        with path.open("rb") as content:
+            digest = hashlib.file_digest(content, "sha256").hexdigest()
+        return WorkspaceFileInfo(filename=path.name, size=path.stat().st_size, sha256=digest)
+
     def _stage_files(self, files: dict[str, str]) -> None:
         for filename, encoded_content in files.items():
             self.stage_file(filename, base64.b64decode(encoded_content))
@@ -122,3 +144,7 @@ class WorkspaceCodeExecutor:
             logger.warning("rejected file path escaping the workspace: %s", filename)
             raise ValueError(f"'{filename}' escapes the workspace directory")
         return candidate
+
+
+def _is_listed(path: Path) -> bool:
+    return path.is_file() and not path.name.startswith(".") and path.name != SUBMITTED_CODE_FILENAME

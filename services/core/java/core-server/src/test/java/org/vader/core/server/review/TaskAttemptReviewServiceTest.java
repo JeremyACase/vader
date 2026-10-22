@@ -21,6 +21,7 @@ import org.vader.common.model.vader.entity.TaskPlanEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.common.model.vader.entity.WorkflowEntity;
+import org.vader.common.model.vader.entity.WorkflowStatus;
 import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.llm.OrchestratorUnavailableException;
 import org.vader.core.server.workflow.TaskAttemptRepository;
@@ -186,6 +187,20 @@ class TaskAttemptReviewServiceTest {
         assertThatThrownBy(() -> this.service.review(ATTEMPT_ID))
             .isInstanceOf(OrchestratorUnavailableException.class);
         verify(this.retryService, never()).resumeIfNoLongerWaiting(any());
+        verify(this.eventPublishingFacade, never()).publish(any());
+    }
+
+    @Test
+    void review_ofAttemptInCancelledWorkflow_makesNoLlmCallAndPublishesNothing() {
+        var attempt = attemptInWorkflow(TaskAttemptStatus.SUCCEEDED);
+        attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow()
+            .setStatus(WorkflowStatus.CANCELLED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.review(ATTEMPT_ID);
+
+        verify(this.evaluatorAgentService, never()).evaluate(any());
+        verify(this.reattemptDecisionService, never()).decideReattempt(any());
         verify(this.eventPublishingFacade, never()).publish(any());
     }
 }

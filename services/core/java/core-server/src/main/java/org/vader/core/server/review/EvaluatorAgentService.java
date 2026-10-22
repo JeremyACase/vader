@@ -5,7 +5,6 @@ import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
@@ -15,7 +14,6 @@ import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.EvaluationVerdict;
 import org.vader.core.server.review.model.RemainingSubtask;
-import org.vader.core.server.storage.ObjectMetadataRepository;
 import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
@@ -57,7 +55,7 @@ public class EvaluatorAgentService {
     private ToolCallEvidenceAdapter toolCallEvidenceAdapter;
 
     @Autowired
-    private ObjectMetadataRepository objectMetadataRepository;
+    private SavedFilePreviewBuilder savedFilePreviewBuilder;
 
     @Autowired
     private TaskDecompositionSaga taskDecompositionSaga;
@@ -124,14 +122,7 @@ public class EvaluatorAgentService {
             taskTitle, taskDescription, attempt.getStatus(),
             attempt.getResult(), attempt.getFailureReason(),
             this.toolCallEvidenceAdapter.lastToolCallEvidence(attempt.getId()),
-            this.uploadedFilenames(attempt.getId()));
-    }
-
-    private List<String> uploadedFilenames(final String attemptId) {
-        return this.objectMetadataRepository.findByTaskAttemptIdOrderByCreatedAtAsc(attemptId)
-            .stream()
-            .map(ObjectMetadataEntity::getOriginalFilename)
-            .toList();
+            this.savedFilePreviewBuilder.build(attempt.getId()));
     }
 
     private static String planObjectiveOf(final TaskEntity task) {

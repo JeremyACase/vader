@@ -30,6 +30,7 @@ class TaskAttemptReviewInboxTest {
     private QueueMessageProcessor processor;
     private TaskAttemptReviewService reviewService;
     private TaskAttemptReviewRetryService retryService;
+    private TaskAttemptReviewFallbackService fallbackService;
     private TaskAttemptReviewInbox inbox;
 
     @BeforeEach
@@ -38,11 +39,13 @@ class TaskAttemptReviewInboxTest {
         this.processor = mock(QueueMessageProcessor.class);
         this.reviewService = mock(TaskAttemptReviewService.class);
         this.retryService = mock(TaskAttemptReviewRetryService.class);
+        this.fallbackService = mock(TaskAttemptReviewFallbackService.class);
         this.inbox = new TaskAttemptReviewInbox();
         ReflectionTestUtils.setField(this.inbox, "messageRepository", this.messageRepository);
         ReflectionTestUtils.setField(this.inbox, "processor", this.processor);
         ReflectionTestUtils.setField(this.inbox, "reviewService", this.reviewService);
         ReflectionTestUtils.setField(this.inbox, "retryService", this.retryService);
+        ReflectionTestUtils.setField(this.inbox, "fallbackService", this.fallbackService);
     }
 
     private static TaskAttemptReviewOutboxMessageEntity reviewMessage() {
@@ -95,20 +98,22 @@ class TaskAttemptReviewInboxTest {
         assertThat(reasonCaptor.getValue()).contains("Could not reach the local LLM");
         verify(this.processor, never()).markFailed(any(), anyString(), anyString());
         verify(this.processor, never()).markProcessed(any(), anyString());
+        verify(this.fallbackService, never()).settleUnreviewed(anyString());
     }
 
     @Test
-    void drain_whenReviewFailsForAnyOtherReason_stillMarksItFailed() {
+    void drain_whenReviewFailsForAnyOtherReason_marksItFailedAndSettlesTheAttemptUnreviewed() {
         var message = reviewMessage();
         when(this.messageRepository.findDue(any(), any(), any())).thenReturn(List.of(message));
         claimViaTheInboxesFinderOnce();
-        doThrow(new IllegalStateException("bug"))
+        doThrow(new IllegalStateException("unparseable reply"))
             .when(this.reviewService).review(message.getTaskAttempt().getId());
 
         this.inbox.drain();
 
         verify(this.processor).markFailed(
             eq(this.messageRepository), eq(message.getId()), anyString());
+        verify(this.fallbackService).settleUnreviewed(message.getTaskAttempt().getId());
         verify(this.retryService, never()).deferForLlmOutage(anyString(), anyString());
     }
 }

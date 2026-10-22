@@ -1,6 +1,7 @@
 package org.vader.core.server.taskagent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -117,5 +118,39 @@ class TaskAttemptLifecycleServiceTest {
 
         assertThat(response.objective()).isEqualTo("Run the corrected cleaning code.");
         assertThat(response.prompts()).isEqualTo(prompts);
+    }
+
+    @Test
+    void cancel_failsAnOpenAttemptWithTheReasonAndPublishesItsSettlement() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.cancel(ATTEMPT_ID, "Cancelled: the workflow was cancelled.");
+
+        assertThat(attempt.getStatus()).isEqualTo(TaskAttemptStatus.FAILED);
+        assertThat(attempt.getFailureReason()).isEqualTo("Cancelled: the workflow was cancelled.");
+        verify(this.eventPublishingFacade).publish(any(TaskAttemptSettledEvent.class));
+    }
+
+    @Test
+    void cancel_leavesAnAlreadySettledAttemptAlone() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        attempt.setStatus(TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.cancel(ATTEMPT_ID, "Cancelled: the workflow was cancelled.");
+
+        assertThat(attempt.getStatus()).isEqualTo(TaskAttemptStatus.SUCCEEDED);
+        verify(this.eventPublishingFacade, never()).publish(any());
+    }
+
+    @Test
+    void specFor_refusesAnAttemptCancelledBeforeItsJobWasCreated() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        attempt.setStatus(TaskAttemptStatus.FAILED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        assertThatThrownBy(() -> this.service.specFor(ATTEMPT_ID))
+            .isInstanceOf(AssignmentAlreadyTerminalException.class);
     }
 }

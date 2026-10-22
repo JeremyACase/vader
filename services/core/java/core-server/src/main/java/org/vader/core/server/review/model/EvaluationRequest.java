@@ -24,8 +24,9 @@ import org.vader.core.server.workflow.model.PlanStep;
  * @param lastToolCallEvidence a one-line summary of the attempt's last tool call and whether it
  *     errored, or {@code null} if it made none -- deterministic evidence the reported text alone
  *     can hide (an agent can end on a confident reply right after its code raised)
- * @param uploadedFilenames the names of the files the attempt saved to object storage, oldest
- *     first -- recorded by the system, so a claimed file that isn't here was never saved
+ * @param savedFiles the files the attempt saved to object storage, oldest first, each with the
+ *     opening lines of its content when it is text -- recorded by the system, so a claimed file
+ *     that isn't here was never saved, and one that is can be checked against the request
  */
 public record EvaluationRequest(
     String userRequest,
@@ -37,5 +38,5 @@ public record EvaluationRequest(
     String attemptResult,
     String attemptFailureReason,
     String lastToolCallEvidence,
-    List<String> uploadedFilenames) {
+    List<SavedFilePreview> savedFiles) {
 }

@@ -9,6 +9,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and the model it went to, so every call can be attributed to the prompt version and model
   that produced it. An agent turn's transcript records its prompt and completion tokens and the
   characters it sent, to show how close each turn came to the context window.
+- A workflow can now be `CANCELLED`: stopped on request before it settled.
 
 ## [0.23.1]
 ### Fixed

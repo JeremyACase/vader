@@ -1,6 +1,7 @@
 package org.vader.core.server.taskagent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
@@ -21,10 +23,16 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.taskagent.model.TurnUsage;
 
 class InferenceTurnLlmExecutorTest {
@@ -42,7 +50,16 @@ class InferenceTurnLlmExecutorTest {
     }
 
     private InferenceTurnLlmExecutor executor(final ChatClient.Builder builder) {
+        return this.executor(builder, this.chatModel);
+    }
+
+    private InferenceTurnLlmExecutor executor(
+            final ChatClient.Builder builder, final ChatModel model) {
+        var samplingOptionsBuilder = new AttemptSamplingOptionsBuilder();
+        ReflectionTestUtils.setField(samplingOptionsBuilder, "chatModel", model);
         var executor = new InferenceTurnLlmExecutor();
+        ReflectionTestUtils.setField(
+            executor, "attemptSamplingOptionsBuilder", samplingOptionsBuilder);
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
         ReflectionTestUtils.setField(executor, "toolCallbackRegistry", this.toolCallbackRegistry);
         ReflectionTestUtils.setField(
@@ -50,8 +67,14 @@ class InferenceTurnLlmExecutorTest {
         return executor;
     }
 
-    private static List<ConversationMessage> userTurn(final String text) {
-        return List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null));
+    private static InferenceTurnRequest userTurn(final String text) {
+        return attemptTurn(text, 1);
+    }
+
+    private static InferenceTurnRequest attemptTurn(final String text, final int attemptNumber) {
+        return new InferenceTurnRequest(
+            List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null)),
+            attemptNumber);
     }
 
     private static ChatResponse responseWith(final String assistantText) {
@@ -136,5 +159,33 @@ class InferenceTurnLlmExecutorTest {
         executor.execute(userTurn("second"));
 
         verify(builder, times(2)).build();
+    }
+
+    /**
+     * Drives a real Ollama chat model, stopped right after it builds its request, to pin both
+     * halves of the per-attempt seed: the attempt's seed reaches Ollama, and the model's other
+     * defaults survive alongside it.
+     */
+    @Test
+    void execute_samplesAnAttemptWithItsOwnSeedAndKeepsTheModelsDefaults() {
+        var ollamaApi = mock(OllamaApi.class);
+        when(ollamaApi.chat(any())).thenThrow(new IllegalStateException("request captured"));
+        var ollamaModel = OllamaChatModel.builder()
+            .ollamaApi(ollamaApi)
+            .options(OllamaChatOptions.builder().model("any-model").numPredict(2048).seed(42)
+                .build())
+            .retryTemplate(new RetryTemplate(RetryPolicy.withMaxRetries(0)))
+            .build();
+        var executor = this.executor(ChatClient.builder(ollamaModel), ollamaModel);
+
+        assertThatThrownBy(() -> executor.execute(attemptTurn("hi", 3)))
+            .hasStackTraceContaining("request captured");
+
+        var requestCaptor = ArgumentCaptor.forClass(OllamaApi.ChatRequest.class);
+        verify(ollamaApi).chat(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().model()).isEqualTo("any-model");
+        assertThat(requestCaptor.getValue().options())
+            .containsEntry("seed", 44)
+            .containsEntry("num_predict", 2048);
     }
 }

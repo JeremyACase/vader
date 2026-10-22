@@ -15,6 +15,7 @@ import org.vader.core.server.llm.PromptVariablesBuilder;
 import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.EvaluationVerdict;
+import org.vader.core.server.review.model.SavedFilePreview;
 import org.vader.core.server.workflow.model.PlanStep;
 
 /**
@@ -66,12 +67,25 @@ public class EvaluationLlmExecutor
             .collect(Collectors.joining("\n"));
     }
 
-    private static String uploadedFileList(final List<String> filenames) {
-        return filenames.isEmpty()
+    private String savedFileList(final List<SavedFilePreview> files) {
+        return files.isEmpty()
             ? null
-            : filenames.stream()
-                .map(name -> "- \"" + name + "\"")
+            : files.stream()
+                .map(this::savedFileEntry)
                 .collect(Collectors.joining("\n"));
+    }
+
+    private String savedFileEntry(final SavedFilePreview file) {
+        var variables = new PromptVariablesBuilder()
+            .with("filename", file.filename())
+            .with("contentType", file.contentType())
+            .with("size", file.size())
+            .with("preview", file.preview())
+            .with("truncated", file.truncated())
+            .with("binary", file.binary())
+            .with("empty", file.size() == 0)
+            .build();
+        return this.promptTemplateRegistry.render(PromptKey.EVALUATION_SAVED_FILE, variables);
     }
 
     private String userPromptFor(final EvaluationRequest request) {
@@ -85,7 +99,7 @@ public class EvaluationLlmExecutor
             .with("result", request.attemptResult())
             .with("failureReason", request.attemptFailureReason())
             .with("toolEvidence", request.lastToolCallEvidence())
-            .with("uploadedFiles", uploadedFileList(request.uploadedFilenames()))
+            .with("savedFiles", this.savedFileList(request.savedFiles()))
             .build();
         return this.promptTemplateRegistry.render(PromptKey.EVALUATION_USER, variables);
     }

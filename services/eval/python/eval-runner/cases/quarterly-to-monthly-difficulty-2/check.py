@@ -1,13 +1,14 @@
 """Grades one run of quarterly-to-monthly-difficulty-2 from the files it delivered.
 
-A run passes when it delivered monthly_revenue.csv covering exactly the input's months, in order,
+A run passes when it delivered monthly_revenue.csv naming each of the input's months exactly once,
 with every month in whole cents and within two cents of an even split, and every quarter's
 months adding up to that quarter's revenue to the cent -- the invariant that rounding each month
 on its own breaks whenever a quarter doesn't divide by three. Two cents, because any remainder
-placement (rounding down and giving the last month the rest, say) is a correct conversion. It is
-also strict when it followed the request to the letter: exactly the requested columns, revenue
-written with two decimal places, the first two months rounded to the nearest cent and the last
-month taking the rest.
+placement (rounding down and giving the last month the rest, say) is a correct conversion. Months
+are judged by the month each label names, however it is spelled, and columns by what they hold.
+It is also strict when it followed the request to the letter: exactly the requested columns,
+months spelled YYYY-MM and in chronological order, revenue written with two decimal places, the
+first two months rounded to the nearest cent and the last month taking the rest.
 
 Amounts are compared as whole cents, never floats, so "exact" means exact. Prints one JSON
 object -- {"passed": ..., "strict": ..., "reasons": [...]} -- and exits 0 whether or not the run
@@ -27,13 +28,29 @@ from pathlib import Path
 
 import pandas as pd
 
+# The grading every quarterly-to-monthly case shares lives beside the cases; a checker is loaded
+# by its path or run as a script, so neither puts that directory on the import path for it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from monthly_grading.monthly_table import (  # noqa: E402
+    DeliverableError,
+    MonthlyTable,
+    read_monthly_table,
+)
+from monthly_grading.monthly_table_checks import (  # noqa: E402
+    coverage_problems,
+    presentation_problems,
+)
+
 DELIVERABLE = "monthly_revenue.csv"
 INPUT = "quarterly_revenue.csv"
 EXPECTED_COLUMNS = ["month", "revenue"]
-MONTH_PATTERN = re.compile(r"\d{4}-\d{2}")
 QUARTER_PATTERN = re.compile(r"(\d{4})-Q([1-4])")
 TWO_DECIMALS_PATTERN = re.compile(r"-?\d+\.\d{2}")
 CENT = Decimal("0.01")
+# How far from a whole cent an amount may be and still be one: a cent amount computed in binary
+# floating point and written at full precision, like 41666.670000000006, is still that cent.
+FLOAT_NOISE = Decimal("0.000001")
 
 
 @dataclass(frozen=True)
@@ -45,17 +62,10 @@ class CheckResult:
 
 @dataclass(frozen=True)
 class MonthlyDeliverable:
-    """The delivered file, parsed: its column names, and its rows in file order -- each revenue
-    both as written and in cents."""
+    """The delivered file as read, and its revenue in cents in file order."""
 
-    columns: list[str]
-    months: list[pd.Period]
-    revenue_text: list[str]
+    table: MonthlyTable
     revenue_cents: list[int]
-
-
-class DeliverableError(Exception):
-    """The delivered file is missing or unreadable, so nothing else about it can be judged."""
 
 
 def check(deliverables: Path, inputs: Path) -> CheckResult:
@@ -74,41 +84,17 @@ def check(deliverables: Path, inputs: Path) -> CheckResult:
 
 
 def read_deliverable(path: Path) -> MonthlyDeliverable:
-    if not path.is_file():
-        raise DeliverableError(f"{DELIVERABLE} was not delivered")
-    frame = read_csv(path)
-    missing = [column for column in EXPECTED_COLUMNS if column not in frame.columns]
-    if missing:
-        raise DeliverableError(f"{DELIVERABLE} is missing columns {missing}")
-    revenue_text = [str(value).strip() for value in frame["revenue"]]
+    table = read_monthly_table(path, ["revenue"])
     return MonthlyDeliverable(
-        columns=list(frame.columns),
-        months=[parse_month(value) for value in frame["month"]],
-        revenue_text=revenue_text,
-        revenue_cents=[parse_cents(text) for text in revenue_text],
+        table=table, revenue_cents=[parse_cents(text) for text in table.values["revenue"]]
     )
-
-
-def read_csv(path: Path) -> pd.DataFrame:
-    try:
-        frame = pd.read_csv(path, dtype=str, skipinitialspace=True)
-    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as error:
-        raise DeliverableError(f"{DELIVERABLE} is not a readable CSV: {error}") from error
-    return frame.rename(columns=lambda column: str(column).strip())
-
-
-def parse_month(value: object) -> pd.Period:
-    text = str(value).strip()
-    if not MONTH_PATTERN.fullmatch(text):
-        raise DeliverableError(f"month {text!r} is not formatted YYYY-MM")
-    return pd.Period(text, freq="M")
 
 
 def parse_cents(text: str) -> int:
     amount = parse_decimal(text)
-    if not amount.is_finite() or amount != amount.quantize(CENT):
+    if not amount.is_finite() or abs(amount - amount.quantize(CENT)) > FLOAT_NOISE:
         raise DeliverableError(f"revenue {text!r} is not an amount in whole cents")
-    return int(amount * 100)
+    return int(amount.quantize(CENT) * 100)
 
 
 def parse_decimal(text: str) -> Decimal:
@@ -158,28 +144,10 @@ def structural_problems(
     deliverable: MonthlyDeliverable, quarterly: dict[pd.Period, int]
 ) -> list[str]:
     return (
-        coverage_problems(deliverable.months, list(expected_monthly(quarterly)))
-        + order_problems(deliverable.months)
+        coverage_problems(deliverable.table.months, list(expected_monthly(quarterly)))
         + quarter_sum_problems(deliverable, quarterly)
         + uneven_split_problems(deliverable, quarterly)
     )
-
-
-def coverage_problems(months: list[pd.Period], expected_months: list[pd.Period]) -> list[str]:
-    delivered = set(months)
-    missing = [str(month) for month in expected_months if month not in delivered]
-    unexpected = sorted({str(month) for month in delivered if month not in set(expected_months)})
-    duplicated = sorted({str(month) for month in months if months.count(month) > 1})
-    return (
-        ([f"missing months {missing}"] if missing else [])
-        + ([f"unexpected months {unexpected}"] if unexpected else [])
-        + ([f"duplicated months {duplicated}"] if duplicated else [])
-    )
-
-
-def order_problems(months: list[pd.Period]) -> list[str]:
-    in_order = all(earlier < later for earlier, later in zip(months, months[1:], strict=False))
-    return [] if in_order else ["months are not in chronological order"]
 
 
 def quarter_sum_problems(
@@ -196,7 +164,7 @@ def quarter_sum_problems(
 
 def quarter_sums(deliverable: MonthlyDeliverable) -> dict[pd.Period, int]:
     sums: dict[pd.Period, int] = {}
-    for month, cents in zip(deliverable.months, deliverable.revenue_cents, strict=True):
+    for month, cents in zip(deliverable.table.months, deliverable.revenue_cents, strict=True):
         quarter = month.asfreq("Q")
         sums[quarter] = sums.get(quarter, 0) + cents
     return sums
@@ -208,20 +176,17 @@ def uneven_split_problems(
     # |cents - total / 3| <= 2, kept in integers as |3 * cents - total| <= 6.
     uneven = [
         str(month)
-        for month, cents in zip(deliverable.months, deliverable.revenue_cents, strict=True)
+        for month, cents in zip(deliverable.table.months, deliverable.revenue_cents, strict=True)
         if abs(3 * cents - quarterly.get(month.asfreq("Q"), 0)) > 6
     ]
     return [f"months more than two cents from an even split: {uneven}"] if uneven else []
 
 
 def strict_problems(deliverable: MonthlyDeliverable, quarterly: dict[pd.Period, int]) -> list[str]:
-    columns = (
-        []
-        if deliverable.columns == EXPECTED_COLUMNS
-        else [f"columns are {deliverable.columns}, requested exactly {EXPECTED_COLUMNS}"]
-    )
     unformatted = [
-        text for text in deliverable.revenue_text if not TWO_DECIMALS_PATTERN.fullmatch(text)
+        text
+        for text in deliverable.table.values["revenue"]
+        if not TWO_DECIMALS_PATTERN.fullmatch(text)
     ]
     formatting = (
         [f"revenue not written with two decimal places: {unformatted}"] if unformatted else []
@@ -229,7 +194,7 @@ def strict_problems(deliverable: MonthlyDeliverable, quarterly: dict[pd.Period, 
     expected = expected_monthly(quarterly)
     misplaced = [
         str(month)
-        for month, cents in zip(deliverable.months, deliverable.revenue_cents, strict=True)
+        for month, cents in zip(deliverable.table.months, deliverable.revenue_cents, strict=True)
         if cents != expected[month]
     ]
     remainder = (
@@ -237,7 +202,8 @@ def strict_problems(deliverable: MonthlyDeliverable, quarterly: dict[pd.Period, 
         if misplaced
         else []
     )
-    return columns + formatting + remainder
+    presentation = presentation_problems(deliverable.table, EXPECTED_COLUMNS)
+    return presentation + formatting + remainder
 
 
 def format_cents(cents: int) -> str:

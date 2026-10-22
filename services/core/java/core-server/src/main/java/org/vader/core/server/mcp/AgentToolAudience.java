@@ -18,9 +18,9 @@ public enum AgentToolAudience {
     TASK_EXECUTION,
 
     /**
-     * A higher-level agent reasoning about the system as a whole -- today, prompt decomposition
-     * ({@code DecompositionLlmExecutor}); later, a supervisor capable of things like
-     * alleviating back pressure by provisioning more resources. Never gets sandbox code execution.
+     * A higher-level agent reasoning about the system as a whole, such as a future supervisor
+     * capable of alleviating back pressure by provisioning more resources. Nothing is offered
+     * these tools yet: the planner is deliberately given none. Never gets sandbox code execution.
      */
     ORCHESTRATION,
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 
 import pytest
 
@@ -207,3 +208,29 @@ def test_workspace_file_rejects_path_traversal(tmp_path):
 
     with pytest.raises(ValueError, match="escapes the workspace"):
         executor.workspace_file("../evil.bin")
+
+
+def test_list_files_describes_what_code_wrote(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    executor.execute(ExecutionRequest(code="open('out.csv', 'w').write('a,b')"))
+
+    listed = executor.list_files()
+
+    assert [(file.filename, file.size) for file in listed] == [("out.csv", 3)]
+    assert listed[0].sha256 == hashlib.sha256(b"a,b").hexdigest()
+
+
+def test_list_files_leaves_out_the_script_hidden_files_and_directories(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    executor.execute(
+        ExecutionRequest(code="import os; os.mkdir('cache'); open('.secret', 'w').write('x')")
+    )
+
+    assert executor.list_files() == []
+
+
+def test_list_files_includes_staged_files(tmp_path):
+    executor = WorkspaceCodeExecutor(tmp_path, max_timeout_seconds=5)
+    executor.stage_file("input.csv", b"q,r")
+
+    assert [file.filename for file in executor.list_files()] == ["input.csv"]

@@ -82,3 +82,15 @@ def test_get_on_a_missing_file_returns_404():
     response = client.get(f"/workspace/files/never-written-{uuid.uuid4()}.xlsx")
 
     assert response.status_code == 404
+
+
+def test_list_files_reports_a_file_code_wrote_without_its_content():
+    filename = f"listed-{uuid.uuid4()}.csv"
+    client.post("/execute", json={"code": f"open('{filename}', 'w').write('a,b')"})
+
+    response = client.get("/workspace/files")
+
+    assert response.status_code == 200
+    listed = {file["filename"]: file for file in response.json()}
+    assert listed[filename]["size"] == 3
+    assert set(listed[filename]) == {"filename", "size", "sha256"}

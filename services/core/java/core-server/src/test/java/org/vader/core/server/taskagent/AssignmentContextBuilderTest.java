@@ -18,6 +18,8 @@ import org.vader.common.model.vader.entity.TaskUpdateEntity;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
+import org.vader.core.server.sandbox.TaskWorkspaceFileResolverObjectMother;
+import org.vader.core.server.storage.ObjectMetadataRepository;
 import org.vader.core.server.workflow.PlanOutlineBuilderObjectMother;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskUpdateRepository;
@@ -28,13 +30,18 @@ class AssignmentContextBuilderTest {
 
     private TaskAttemptRepository taskAttemptRepository;
     private TaskUpdateRepository taskUpdateRepository;
+    private ObjectMetadataRepository objectMetadataRepository;
     private AssignmentContextBuilder builder;
 
     @BeforeEach
     void setUp() {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
         this.taskUpdateRepository = mock(TaskUpdateRepository.class);
+        this.objectMetadataRepository = mock(ObjectMetadataRepository.class);
         this.builder = new AssignmentContextBuilder();
+        ReflectionTestUtils.setField(this.builder, "taskWorkspaceFileResolver",
+            TaskWorkspaceFileResolverObjectMother.over(
+                this.taskAttemptRepository, this.objectMetadataRepository));
         ReflectionTestUtils.setField(
             this.builder, "taskAttemptRepository", this.taskAttemptRepository);
         ReflectionTestUtils.setField(
@@ -145,6 +152,36 @@ class AssignmentContextBuilderTest {
         assertThat(context)
             .contains("Draft the report")
             .contains("Here is the draft report...");
+    }
+
+    @Test
+    void build_withTheSandboxEnabled_listsFilesPrerequisitesSavedAsInTheWorkingDirectory() {
+        ReflectionTestUtils.setField(
+            this.builder, "taskAttemptSandboxService", mock(TaskAttemptSandboxService.class));
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        var dependency = new TaskEntity();
+        dependency.setId("dep-task-id");
+        dependency.setTitle("Split revenue");
+        attempt.getTask().setDependsOn(Set.of(dependency));
+        var dependencyAttempt = new TaskAttemptEntity();
+        dependencyAttempt.setId("dep-attempt-id");
+        dependencyAttempt.setTask(dependency);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("dep-task-id"))
+            .thenReturn(Optional.of(dependencyAttempt));
+        var saved = new ObjectMetadataEntity();
+        saved.setOriginalFilename("monthly.csv");
+        saved.setContentType("text/csv");
+        saved.setTaskAttempt(dependencyAttempt);
+        when(this.objectMetadataRepository.findByTaskAttemptIdOrderByCreatedAtAsc("dep-attempt-id"))
+            .thenReturn(List.of(saved));
+
+        var context = this.builder.build(attempt.getTask());
+
+        assertThat(context)
+            .contains("Files saved by the earlier tasks your task builds on")
+            .contains("- \"monthly.csv\" (type: text/csv, saved by \"Split revenue\") -- already in"
+                + " your Python working directory")
+            .doesNotContain("Files attached to the original request");
     }
 
     @Test

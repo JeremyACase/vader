@@ -29,7 +29,9 @@ import org.vader.core.server.messaging.OutboxMessageRepository;
  * <p>A review that fails because the LLM is unavailable is never marked {@code FAILED} -- that
  * would leave the workflow stuck in {@code RUNNING}. {@link TaskAttemptReviewRetryService} puts it
  * back for a later retry and marks the workflow {@code AWAITING_LLM}; {@link #pop} claims only
- * reviews whose retry time has come. Any other failure is marked {@code FAILED}.</p>
+ * reviews whose retry time has come. Any other failure is marked {@code FAILED}, and
+ * {@link TaskAttemptReviewFallbackService} settles the attempt as unreviewed, for the same
+ * reason: nothing else would ever record its verdict.</p>
  */
 @Service
 public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutboxMessageEntity> {
@@ -51,6 +53,9 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
 
     @Autowired
     private TaskAttemptReviewRetryService retryService;
+
+    @Autowired
+    private TaskAttemptReviewFallbackService fallbackService;
 
     @Autowired
     @Qualifier("taskAttemptReviewInboxExecutor")
@@ -97,6 +102,7 @@ public class TaskAttemptReviewInbox extends AbstractInbox<TaskAttemptReviewOutbo
             this.retryService.deferForLlmOutage(message.getId(), failure.getMessage());
         } else {
             super.onHandleFailure(message, failure);
+            this.fallbackService.settleUnreviewed(message.getTaskAttempt().getId());
         }
     }
 

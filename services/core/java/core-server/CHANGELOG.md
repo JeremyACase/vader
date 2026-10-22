@@ -25,6 +25,44 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   one-task plans. The reviewer no longer fails an attempt for doing more than its own task and
   is shown the files the attempt actually saved, and the final summary may no longer claim a
   file that was never saved.
+- The reviewer now checks a saved file's values against the rules the user's request states,
+  taken in the request's own words, by working a few rows out from each rule and comparing,
+  rather than accepting the agent's account or values that merely look plausible.
+- The planner is no longer offered the database query tools. It read them as the agents'
+  toolset and planned a simple file conversion as impossible, since none of them handle files;
+  it now plans only from what its prompt says the agents can do.
+- A review that fails for any reason but an LLM outage, such as a verdict or reattempt decision
+  the model returned as malformed JSON, no longer leaves its workflow running forever. The
+  attempt counts as failed, unreviewed, and its task is re-attempted while attempts remain.
+- Files now carry over between tasks: everything a task's prerequisites saved with
+  `upload_object` (and, for a runtime subtask, what the attempt it continues saved) is staged in
+  its sandbox beside the request's own files and listed in its context, newest version of each
+  name first. Before, each sandbox started with only the request's files, so a plan split into
+  steps could never hand one step's output to the next. The planner, reviewer and agent prompts
+  say so, and the reviewer no longer proposes steps that only read or load data.
+- A retry now samples afresh in EVAL mode: each attempt offsets the pinned seed by its number
+  (the first keeps it), so a retry no longer replays the attempt before it, while a benchmark run
+  stays repeatable. The agent is also told that every `run_python_code` call is a fresh Python
+  process in which only files persist, and that `upload_object` is a tool, not a Python function.
+- When an attempt succeeds, core-server saves every file its code left in the sandbox that is not
+  already stored unchanged, before the sandbox is deleted. A model that does the work but never
+  calls `upload_object` -- the commonest way a benchmark run failed to deliver -- still delivers
+  it, to the reviewer, to the tasks that build on it and to the user. Needs
+  `core-python-sandbox-server` 0.5.0 for its workspace listing.
+- The reviewer now sees the opening lines of every text file an attempt saved, not only its
+  name, so it can judge what a file holds against the request rather than only that it exists.
+  Any text previews, whatever its extension or recorded type; binary files are listed by type
+  and size only, and previews share a fixed budget so many files cannot crowd out the review.
+  The reviewer also holds a plan's last task to delivering every file the request asks for,
+  under the name the request gives it, so an off-target plan can no longer end in a workflow
+  that succeeds without delivering.
+- A single-file transform -- one attached file in, one deliverable file out -- now always runs
+  as one task. The planner names the files it will deliver, and a plan that splits such a job
+  anyway is merged into one task carrying every step in order. Small planners split these jobs
+  despite being told not to, and each split added a hand-off that could fail the whole workflow.
+- A reasoning model's thinking can now be switched on, off or to a level with
+  `vader.orchestrator.local.think`; left empty, nothing is sent, as before. The EVAL
+  configuration now benchmarks qwen3.5:9b with thinking off.
 ### Added
 - A new `EVAL` mode for benchmarking the system's prompts against a baseline: it runs a real
   local model and refuses to start unless sampling is pinned (an explicit temperature and a
@@ -35,6 +73,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Each agent turn's transcript now records its prompt and completion tokens and the characters
   it sent, and a warning is logged when a turn nears the context window, past which Ollama
   silently drops the agent's oldest messages -- its task message first.
+- `POST /vader/core-server/workflow/{id}/cancel` stops a workflow still in progress: it becomes
+  `CANCELLED`, its open attempts are failed (removing their harness Jobs and sandboxes), and no
+  further attempt is dispatched or reviewed, so an abandoned workflow stops spending LLM time.
 
 ## [0.34.0]
 ### Security

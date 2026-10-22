@@ -17,7 +17,8 @@ class BaselineSummaryBuilder:
         scored = [record for record in records if record.scored()]
         return {
             "runs": len(records),
-            "infrastructureErrors": len(records) - len(scored),
+            "infrastructureErrors": count(records, RunOutcome.INFRASTRUCTURE_ERROR),
+            "checkerErrors": count(records, RunOutcome.CHECKER_ERROR),
             "passRate": rate(scored, RunRecord.passed),
             "strictRate": rate(scored, RunRecord.strict),
             "configuration": configuration_summary(scored),
@@ -39,9 +40,14 @@ class BaselineSummaryBuilder:
         footer = (
             f"overall pass rate {rate(scored, RunRecord.passed)}, "
             f"strict {rate(scored, RunRecord.strict)}, "
-            f"{len(records) - len(scored)} infrastructure errors"
+            f"{count(records, RunOutcome.INFRASTRUCTURE_ERROR)} infrastructure errors, "
+            f"{count(records, RunOutcome.CHECKER_ERROR)} checker errors"
         )
         return "\n".join([*rows, footer])
+
+
+def count(records: list[RunRecord], outcome: RunOutcome) -> int:
+    return sum(record.outcome == outcome for record in records)
 
 
 def by_case(records: list[RunRecord]) -> dict[str, list[RunRecord]]:

@@ -1,12 +1,14 @@
 """Grades one run of quarterly-to-monthly-difficulty-3 from the files it delivered.
 
-A run passes when it delivered monthly_metrics.csv covering exactly the input's months, in order,
+A run passes when it delivered monthly_metrics.csv naming each of the input's months exactly once,
 with revenue treated as a flow -- every quarter's months summing to that quarter's revenue -- and
 headcount treated as a stock: each quarter's last month carries that quarter's headcount, and no
 month leaves the range between the quarter-end headcounts either side of it. Those invariants hold
-for any sensible stock conversion and fail for a headcount divided or summed like revenue. It is
-also strict when it followed the request to the letter: exactly the requested columns, an even
-revenue split, and headcount interpolated linearly as asked.
+for any sensible stock conversion and fail for a headcount divided or summed like revenue. Months
+are judged by the month each label names, however it is spelled, and columns by what they hold.
+It is also strict when it followed the request to the letter: exactly the requested columns,
+months spelled YYYY-MM and in chronological order, an even revenue split, and headcount
+interpolated linearly as asked.
 
 Prints one JSON object -- {"passed": ..., "strict": ..., "reasons": [...]} -- and exits 0 whether
 or not the run passed, so a non-zero exit always means the checker itself failed. Needs only the
@@ -25,10 +27,23 @@ from pathlib import Path
 
 import pandas as pd
 
+# The grading every quarterly-to-monthly case shares lives beside the cases; a checker is loaded
+# by its path or run as a script, so neither puts that directory on the import path for it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from monthly_grading.monthly_table import (  # noqa: E402
+    DeliverableError,
+    MonthlyTable,
+    read_monthly_table,
+)
+from monthly_grading.monthly_table_checks import (  # noqa: E402
+    coverage_problems,
+    presentation_problems,
+)
+
 DELIVERABLE = "monthly_metrics.csv"
 INPUT = "quarterly_metrics.csv"
 EXPECTED_COLUMNS = ["month", "revenue", "headcount"]
-MONTH_PATTERN = re.compile(r"\d{4}-\d{2}")
 QUARTER_PATTERN = re.compile(r"(\d{4})-Q([1-4])")
 # Leaves room for a run that rounds each month's revenue to cents.
 QUARTER_SUM_TOLERANCE = 0.015
@@ -44,10 +59,9 @@ class CheckResult:
 
 @dataclass(frozen=True)
 class MonthlyDeliverable:
-    """The delivered file, parsed: its column names as written, and its rows in file order."""
+    """The delivered file as read, and its revenue and headcount as numbers in file order."""
 
-    columns: list[str]
-    months: list[pd.Period]
+    table: MonthlyTable
     revenue: list[float]
     headcount: list[float]
 
@@ -69,10 +83,6 @@ class ExpectedMonth:
     quarter_end: bool
 
 
-class DeliverableError(Exception):
-    """The delivered file is missing or unreadable, so nothing else about it can be judged."""
-
-
 def check(deliverables: Path, inputs: Path) -> CheckResult:
     try:
         deliverable = read_deliverable(deliverables / DELIVERABLE)
@@ -89,40 +99,19 @@ def check(deliverables: Path, inputs: Path) -> CheckResult:
 
 
 def read_deliverable(path: Path) -> MonthlyDeliverable:
-    if not path.is_file():
-        raise DeliverableError(f"{DELIVERABLE} was not delivered")
-    frame = read_csv(path)
-    missing = [column for column in EXPECTED_COLUMNS if column not in frame.columns]
-    if missing:
-        raise DeliverableError(f"{DELIVERABLE} is missing columns {missing}")
+    table = read_monthly_table(path, ["revenue", "headcount"])
     return MonthlyDeliverable(
-        columns=list(frame.columns),
-        months=[parse_month(value) for value in frame["month"]],
-        revenue=[parse_number("revenue", value) for value in frame["revenue"]],
-        headcount=[parse_number("headcount", value) for value in frame["headcount"]],
+        table=table,
+        revenue=[parse_number("revenue", text) for text in table.values["revenue"]],
+        headcount=[parse_number("headcount", text) for text in table.values["headcount"]],
     )
 
 
-def read_csv(path: Path) -> pd.DataFrame:
+def parse_number(column: str, text: str) -> float:
     try:
-        frame = pd.read_csv(path, dtype=str, skipinitialspace=True)
-    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as error:
-        raise DeliverableError(f"{DELIVERABLE} is not a readable CSV: {error}") from error
-    return frame.rename(columns=lambda column: str(column).strip())
-
-
-def parse_month(value: object) -> pd.Period:
-    text = str(value).strip()
-    if not MONTH_PATTERN.fullmatch(text):
-        raise DeliverableError(f"month {text!r} is not formatted YYYY-MM")
-    return pd.Period(text, freq="M")
-
-
-def parse_number(column: str, value: object) -> float:
-    try:
-        return float(str(value).strip())
+        return float(text)
     except ValueError as error:
-        raise DeliverableError(f"{column} {value!r} is not a number") from error
+        raise DeliverableError(f"{column} {text!r} is not a number") from error
 
 
 def read_quarterly(path: Path) -> dict[pd.Period, QuarterlyRow]:
@@ -173,35 +162,17 @@ def structural_problems(
     deliverable: MonthlyDeliverable, expected: dict[pd.Period, ExpectedMonth]
 ) -> list[str]:
     return (
-        coverage_problems(deliverable.months, list(expected))
-        + order_problems(deliverable.months)
+        coverage_problems(deliverable.table.months, list(expected))
         + quarter_sum_problems(deliverable, expected)
         + quarter_end_headcount_problems(deliverable, expected)
         + headcount_range_problems(deliverable, expected)
     )
 
 
-def coverage_problems(months: list[pd.Period], expected_months: list[pd.Period]) -> list[str]:
-    delivered = set(months)
-    missing = [str(month) for month in expected_months if month not in delivered]
-    unexpected = sorted({str(month) for month in delivered if month not in set(expected_months)})
-    duplicated = sorted({str(month) for month in months if months.count(month) > 1})
-    return (
-        ([f"missing months {missing}"] if missing else [])
-        + ([f"unexpected months {unexpected}"] if unexpected else [])
-        + ([f"duplicated months {duplicated}"] if duplicated else [])
-    )
-
-
-def order_problems(months: list[pd.Period]) -> list[str]:
-    in_order = all(earlier < later for earlier, later in zip(months, months[1:], strict=False))
-    return [] if in_order else ["months are not in chronological order"]
-
-
 def quarter_sum_problems(
     deliverable: MonthlyDeliverable, expected: dict[pd.Period, ExpectedMonth]
 ) -> list[str]:
-    delivered = quarter_sums(zip(deliverable.months, deliverable.revenue, strict=True))
+    delivered = quarter_sums(zip(deliverable.table.months, deliverable.revenue, strict=True))
     wanted = quarter_sums(
         (month, month_expected.revenue) for month, month_expected in expected.items()
     )
@@ -227,7 +198,7 @@ def delivered_headcounts(
     there at all are left to the coverage check."""
     return [
         (month, headcount, expected[month])
-        for month, headcount in zip(deliverable.months, deliverable.headcount, strict=True)
+        for month, headcount in zip(deliverable.table.months, deliverable.headcount, strict=True)
         if month in expected
     ]
 
@@ -268,14 +239,9 @@ def within_range(headcount: float, month_expected: ExpectedMonth) -> bool:
 def strict_problems(
     deliverable: MonthlyDeliverable, expected: dict[pd.Period, ExpectedMonth]
 ) -> list[str]:
-    columns = (
-        []
-        if deliverable.columns == EXPECTED_COLUMNS
-        else [f"columns are {deliverable.columns}, requested exactly {EXPECTED_COLUMNS}"]
-    )
     uneven = [
         str(month)
-        for month, revenue in zip(deliverable.months, deliverable.revenue, strict=True)
+        for month, revenue in zip(deliverable.table.months, deliverable.revenue, strict=True)
         if abs(revenue - expected[month].revenue) > MONTH_TOLERANCE
     ]
     not_interpolated = [
@@ -284,7 +250,7 @@ def strict_problems(
         if abs(headcount - month_expected.headcount) > MONTH_TOLERANCE
     ]
     return (
-        columns
+        presentation_problems(deliverable.table, EXPECTED_COLUMNS)
         + ([f"revenue not split evenly from its quarter: {uneven}"] if uneven else [])
         + ([f"headcount not interpolated linearly: {not_interpolated}"] if not_interpolated else [])
     )

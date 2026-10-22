@@ -29,10 +29,12 @@ import org.vader.core.server.review.EvaluationLlmExecutor;
 import org.vader.core.server.review.ReattemptDecisionLlmExecutor;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.ReattemptDecisionRequest;
+import org.vader.core.server.taskagent.AttemptSamplingOptionsBuilder;
 import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
 import org.vader.core.server.taskagent.PromptCharacterCounter;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.workflow.WorkflowSynthesisLlmExecutor;
 import org.vader.core.server.workflow.model.TaskOutcome;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
@@ -44,6 +46,7 @@ import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 class ScriptedChatModelStubTest {
 
     private ChatClient.Builder chatClientBuilder;
+    private AttemptSamplingOptionsBuilder attemptSamplingOptionsBuilder;
     private McpToolCallbackRegistry toolCallbackRegistry;
 
     @BeforeEach
@@ -51,6 +54,8 @@ class ScriptedChatModelStubTest {
         var stub = new ScriptedChatModelStub();
         ReflectionTestUtils.setField(stub, "mode", VaderMode.TEST);
         this.chatClientBuilder = ChatClient.builder(stub);
+        this.attemptSamplingOptionsBuilder = new AttemptSamplingOptionsBuilder();
+        ReflectionTestUtils.setField(this.attemptSamplingOptionsBuilder, "chatModel", stub);
         this.toolCallbackRegistry = mock(McpToolCallbackRegistry.class);
         var tool = mock(ToolCallback.class);
         when(tool.getToolDefinition()).thenReturn(ToolDefinition.builder()
@@ -76,8 +81,14 @@ class ScriptedChatModelStubTest {
         if (ReflectionUtils.findField(executor.getClass(), "promptCharacterCounter") != null) {
             ReflectionTestUtils.setField(
                 executor, "promptCharacterCounter", new PromptCharacterCounter());
+            ReflectionTestUtils.setField(
+                executor, "attemptSamplingOptionsBuilder", this.attemptSamplingOptionsBuilder);
         }
         return this.wired(executor);
+    }
+
+    private static InferenceTurnRequest firstAttempt(final ConversationMessage... messages) {
+        return new InferenceTurnRequest(List.of(messages), 1);
     }
 
     private static EvaluationRequest evaluationOf(final TaskAttemptStatus status) {
@@ -92,7 +103,7 @@ class ScriptedChatModelStubTest {
 
     @Test
     void decomposition_parsesIntoTheFourTaskBirthdayPlan() {
-        var executor = this.wiredWithTools(new DecompositionLlmExecutor());
+        var executor = this.wired(new DecompositionLlmExecutor());
 
         var plan = executor.execute(new DecompositionRequest("anything at all", List.of(), null));
 
@@ -163,7 +174,7 @@ class ScriptedChatModelStubTest {
     void inferenceTurn_firstRequestsTheScriptedTool() {
         var executor = this.wiredWithTools(new InferenceTurnLlmExecutor());
 
-        var turn = executor.execute(List.of(message(ConversationRole.USER, "do the task")));
+        var turn = executor.execute(firstAttempt(message(ConversationRole.USER, "do the task")));
 
         assertThat(turn.toolCalls()).singleElement()
             .satisfies(call -> assertThat(call.name())
@@ -179,7 +190,7 @@ class ScriptedChatModelStubTest {
             null, "scripted-call-1", ScriptedChatModelStub.SCRIPTED_TOOL_NAME);
 
         var turn = executor.execute(
-            List.of(message(ConversationRole.USER, "do the task"), toolResult));
+            firstAttempt(message(ConversationRole.USER, "do the task"), toolResult));
 
         assertThat(turn.content()).isEqualTo(ScriptedChatModelStub.INFERENCE_ANSWER);
         assertThat(turn.toolCalls()).isEmpty();
@@ -187,7 +198,7 @@ class ScriptedChatModelStubTest {
 
     @Test
     void decomposition_ofTheUploadMarkerPrompt_plansOneTask() {
-        var executor = this.wiredWithTools(new DecompositionLlmExecutor());
+        var executor = this.wired(new DecompositionLlmExecutor());
 
         var plan = executor.execute(new DecompositionRequest(
             "Write a report. " + ScriptedChatModelStub.UPLOAD_SCRIPT_MARKER, List.of(), null));
@@ -206,15 +217,16 @@ class ScriptedChatModelStubTest {
         var uploadResult = new ConversationMessage(
             ConversationRole.TOOL, "{\"id\":\"x\"}", null, "scripted-call-2", "upload_object");
 
-        var first = executor.execute(List.of(task));
-        var second = executor.execute(List.of(task, codeResult));
-        var last = executor.execute(List.of(task, codeResult, uploadResult));
+        var first = executor.execute(firstAttempt(task));
+        var second = executor.execute(firstAttempt(task, codeResult));
+        var last = executor.execute(firstAttempt(task, codeResult, uploadResult));
 
         assertThat(first.toolCalls()).singleElement().satisfies(call -> {
             assertThat(call.name()).isEqualTo("run_python_code");
             assertThat(call.argumentsJson())
                 .contains(ScriptedChatModelStub.UPLOADED_REPORT_FILENAME)
-                .contains(ScriptedChatModelStub.UPLOADED_REPORT_CONTENT);
+                .contains(ScriptedChatModelStub.UPLOADED_REPORT_CONTENT)
+                .contains(ScriptedChatModelStub.UNUPLOADED_NOTES_FILENAME);
         });
         assertThat(second.toolCalls()).singleElement().satisfies(call -> {
             assertThat(call.name()).isEqualTo("upload_object");
@@ -227,7 +239,7 @@ class ScriptedChatModelStubTest {
 
     @Test
     void decomposition_ofTheInjectionMarkerPrompt_plansOneTask() {
-        var executor = this.wiredWithTools(new DecompositionLlmExecutor());
+        var executor = this.wired(new DecompositionLlmExecutor());
 
         var plan = executor.execute(new DecompositionRequest(
             "Summarize this. " + ScriptedChatModelStub.INJECTION_SCRIPT_MARKER, List.of(), null));
@@ -243,8 +255,8 @@ class ScriptedChatModelStubTest {
         var updateResult = new ConversationMessage(
             ConversationRole.TOOL, "\"Recorded\"", null, "scripted-call-1", "post_task_update");
 
-        var first = executor.execute(List.of(task));
-        var second = executor.execute(List.of(task, updateResult));
+        var first = executor.execute(firstAttempt(task));
+        var second = executor.execute(firstAttempt(task, updateResult));
 
         assertThat(first.toolCalls()).singleElement().satisfies(call -> {
             assertThat(call.name()).isEqualTo("post_task_update");

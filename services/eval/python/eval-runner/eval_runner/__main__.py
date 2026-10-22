@@ -23,7 +23,7 @@ from eval_runner.prompt_set import prompt_sets
 from eval_runner.result_store import ResultStore
 from eval_runner.run_progress_reporter import RunProgressReporter
 from eval_runner.run_record import RunRecord
-from eval_runner.run_usage_collector import RunUsageCollector
+from eval_runner.run_trace_collector import RunTraceCollector
 
 CASES_ROOT = Path(__file__).resolve().parent.parent / "cases"
 MISCONFIGURED = 2
@@ -67,7 +67,7 @@ def run(arguments: argparse.Namespace, store: ResultStore) -> int:
         service = CaseRunService(
             core_server,
             CheckerAdapter(),
-            RunUsageCollector(core_server),
+            RunTraceCollector(core_server),
             progress=RunProgressReporter(core_server),
         )
         pending = [
@@ -95,9 +95,11 @@ def run_case(
     service: CaseRunService, store: ResultStore, case: BenchmarkCase, settings: RunSettings
 ) -> None:
     print(f"▶ {case.id} on seed {settings.seed}", flush=True)
-    record = service.run(case, settings, store.deliverables_dir(case.id, settings.seed))
-    store.save(record)
-    print(f"  {describe(record)}", flush=True)
+    case_run = service.run(case, settings, store.deliverables_dir(case.id, settings.seed))
+    # The trace goes first, so a run that counts as done always has the trace it was graded with.
+    store.save_trace(case.id, settings.seed, case_run.trace)
+    store.save(case_run.record)
+    print(f"  {describe(case_run.record)}", flush=True)
 
 
 def print_seed_table(store: ResultStore, seed: int) -> None:

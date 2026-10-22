@@ -13,6 +13,7 @@ import org.vader.core.server.operators.ManagedResource;
 import org.vader.core.server.sandbox.model.PythonSandboxSpec;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
 import org.vader.core.server.sandbox.model.SandboxExecutionResult;
+import org.vader.core.server.sandbox.model.SandboxFileInfo;
 import org.vader.core.server.sandbox.model.SandboxInfo;
 import org.vader.core.server.sandbox.model.StagedObjectInfo;
 import org.vader.core.server.storage.ObjectStorageService;
@@ -167,6 +168,17 @@ public class PythonSandboxService {
      */
     public byte[] fetchFile(final String name, final String filename) {
         return this.executionClient.fetchFile(name, filename);
+    }
+
+    /**
+     * Lists the files in a sandbox's workspace by name, size and SHA-256. A sandbox that was
+     * never created -- e.g. for an attempt that never ran code -- holds none.
+     *
+     * @param name the exact sandbox name
+     * @return the workspace's files; empty if the sandbox does not exist
+     */
+    public List<SandboxFileInfo> listFiles(final String name) {
+        return this.operator.manages(name) ? this.executionClient.listFiles(name) : List.of();
     }
 
     /**

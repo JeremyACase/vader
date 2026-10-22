@@ -30,6 +30,11 @@ class InterfaceCoreServer(Protocol):
         """The newest workflow for a prompt, or None until decomposition has created one."""
         ...
 
+    def cancel_workflow(self, workflow_id: str) -> None:
+        """Stops a workflow still in progress, so it stops competing for the LLM with the next
+        run; one that already settled is left as it is."""
+        ...
+
     def query_all(self, entity: str, filters: dict[str, str]) -> list[JsonObject]:
         """Every row of an entity's query endpoint matching the filters, across all pages."""
         ...

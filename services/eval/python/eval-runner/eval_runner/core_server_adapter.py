@@ -20,9 +20,10 @@ PAGE_SIZE = 100
 class CoreServerAdapter:
     """Talks to core-server over HTTP with only the standard library.
 
-    Reads are retried a few times, because a long benchmark reaches core-server through a
-    port-forward that can drop and be restarted under it. The prompt submission is never retried:
-    a retry after a lost response would submit the same prompt twice.
+    Reads and cancellations are retried a few times, because a long benchmark reaches core-server
+    through a port-forward that can drop and be restarted under it, and cancelling twice is
+    harmless. The prompt submission is never retried: a retry after a lost response would submit
+    the same prompt twice.
     """
 
     def __init__(
@@ -62,6 +63,11 @@ class CoreServerAdapter:
         filters = {"clientPrompt.id": client_prompt_id, "sort-by-fields": "createdAt"}
         content = page_content(self._query_page("workflow", filters, 0, 1))
         return content[0] if content else None
+
+    def cancel_workflow(self, workflow_id: str) -> None:
+        path = f"/vader/core-server/workflow/{urllib.parse.quote(workflow_id)}/cancel"
+        request = urllib.request.Request(self._base_url + path, data=b"", method="POST")
+        self._read_with_retries(request, self._read_attempts)
 
     def query_all(self, entity: str, filters: dict[str, str]) -> list[JsonObject]:
         rows: list[JsonObject] = []

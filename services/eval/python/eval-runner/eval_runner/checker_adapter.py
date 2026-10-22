@@ -11,15 +11,26 @@ from eval_runner.benchmark_case import BenchmarkCase
 from eval_runner.run_record import Grade
 
 
+class CheckerError(Exception):
+    """A case's checker raised instead of returning a verdict."""
+
+
 class CheckerAdapter:
     """Loads a case's checker as a module and adapts its verdict to a Grade.
 
     Every case's checker is a module named check, so each is registered under a name unique to
-    its case rather than imported normally.
+    its case rather than imported normally. A checker is the benchmark's own code, so anything
+    it raises is reported as a CheckerError: one checker bug costs one run its grade, never the
+    rest of the baseline.
     """
 
     def grade(self, case: BenchmarkCase, deliverables: Path) -> Grade:
-        result = self._checker_of(case).check(deliverables, case.directory / "input")
+        try:
+            result = self._checker_of(case).check(deliverables, case.directory / "input")
+        except Exception as error:
+            raise CheckerError(
+                f"the checker of {case.id} raised {type(error).__name__}: {error}"
+            ) from error
         return Grade(
             passed=bool(result.passed),
             strict=bool(result.strict),

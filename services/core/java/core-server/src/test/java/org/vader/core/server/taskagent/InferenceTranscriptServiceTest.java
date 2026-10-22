@@ -19,6 +19,7 @@ import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceToolCall;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.taskagent.model.TurnUsage;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import tools.jackson.databind.ObjectMapper;
@@ -68,14 +69,16 @@ class InferenceTranscriptServiceTest {
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
-        when(this.inferenceGateway.complete(messages))
+        when(this.inferenceGateway.complete(
+            new InferenceTurnRequest(messages, attempt.getAttemptNumber())))
             .thenReturn(new InferenceTurn("hello", List.of(), 5L, "stop", USAGE));
 
         this.service.recordInferenceTurn(ATTEMPT_ID, messages);
 
         var order = inOrder(this.inferenceGateway, this.transactionManager,
             this.transcriptRepository);
-        order.verify(this.inferenceGateway).complete(messages);
+        order.verify(this.inferenceGateway)
+            .complete(new InferenceTurnRequest(messages, attempt.getAttemptNumber()));
         order.verify(this.transactionManager).getTransaction(any());
         order.verify(this.transcriptRepository).save(any());
         order.verify(this.transactionManager).commit(any());
@@ -88,7 +91,9 @@ class InferenceTranscriptServiceTest {
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
         var turn = new InferenceTurn("hello", List.of(), 5L, "stop", USAGE);
-        when(this.inferenceGateway.complete(messages)).thenReturn(turn);
+        when(this.inferenceGateway.complete(
+            new InferenceTurnRequest(messages, attempt.getAttemptNumber())))
+            .thenReturn(turn);
 
         var result = this.service.recordInferenceTurn(ATTEMPT_ID, messages);
 
@@ -125,7 +130,8 @@ class InferenceTranscriptServiceTest {
             new ConversationMessage(
                 ConversationRole.TOOL, "{\"filename\":\"a.csv\"}", null, "call-1",
                 "stage_object"));
-        when(this.inferenceGateway.complete(messages))
+        when(this.inferenceGateway.complete(
+            new InferenceTurnRequest(messages, attempt.getAttemptNumber())))
             .thenReturn(new InferenceTurn("done", List.of(), 5L, "stop", USAGE));
 
         this.service.recordInferenceTurn(ATTEMPT_ID, messages);
@@ -147,7 +153,8 @@ class InferenceTranscriptServiceTest {
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null));
         var toolCalls = List.of(new InferenceToolCall("call-1", "get_object_content", "{}"));
-        when(this.inferenceGateway.complete(messages))
+        when(this.inferenceGateway.complete(
+            new InferenceTurnRequest(messages, attempt.getAttemptNumber())))
             .thenReturn(new InferenceTurn(null, toolCalls, 5L, "stop", USAGE));
 
         this.service.recordInferenceTurn(ATTEMPT_ID, messages);
@@ -165,7 +172,8 @@ class InferenceTranscriptServiceTest {
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null));
         var toolCalls = List.of(new InferenceToolCall("", "run_python_code", "{\"code\":\"1\"}"));
-        when(this.inferenceGateway.complete(messages))
+        when(this.inferenceGateway.complete(
+            new InferenceTurnRequest(messages, attempt.getAttemptNumber())))
             .thenReturn(new InferenceTurn("", toolCalls, 5L, "stop", USAGE));
 
         this.service.recordInferenceTurn(ATTEMPT_ID, messages);
@@ -182,7 +190,8 @@ class InferenceTranscriptServiceTest {
         var messages = List.of(
             new ConversationMessage(ConversationRole.USER, "analyze the file", null, null, null));
         var toolCalls = List.of(new InferenceToolCall("", "run_python_code", "{}"));
-        when(this.inferenceGateway.complete(messages))
+        when(this.inferenceGateway.complete(
+            new InferenceTurnRequest(messages, attempt.getAttemptNumber())))
             .thenReturn(
                 new InferenceTurn("Let me look at the sheets.", toolCalls, 5L, "stop", USAGE));
 

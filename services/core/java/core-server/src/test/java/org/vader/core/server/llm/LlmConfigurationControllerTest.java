@@ -63,7 +63,7 @@ class LlmConfigurationControllerTest {
             prompts.get(kind).fingerprint()).isEqualTo(
                 this.controller.configuration().promptFingerprints().get(kind)));
         assertThat(prompts.get(LlmRequestKind.EVALUATION).templates()).containsOnlyKeys(
-            "review/evaluation-system", "review/evaluation-user");
+            "review/evaluation-saved-file", "review/evaluation-system", "review/evaluation-user");
         assertThat(prompts.get(LlmRequestKind.DECOMPOSITION).templates()
             .get("orchestration/decomposition")).startsWith("You are Vader, a planning assistant.");
     }

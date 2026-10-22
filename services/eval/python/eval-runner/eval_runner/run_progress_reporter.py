@@ -7,7 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from eval_runner.interface_core_server import CoreServerError, InterfaceCoreServer, JsonObject
-from eval_runner.run_usage_collector import ATTEMPT_WORKFLOW_PATHS, number
+from eval_runner.run_trace import number
+from eval_runner.run_trace_collector import ATTEMPT_WORKFLOW_PATHS
 
 HEARTBEAT_SECONDS = 120.0
 SETTLED_ATTEMPT_STATUSES = frozenset({"SUCCEEDED", "FAILED", "TIMED_OUT"})

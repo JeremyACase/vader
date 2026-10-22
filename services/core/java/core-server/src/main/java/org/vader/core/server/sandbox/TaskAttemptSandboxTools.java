@@ -45,12 +45,16 @@ public class TaskAttemptSandboxTools {
         name = "run_python_code",
         description = "Run Python code in your own Python sandbox and return its stdout/stderr/"
             + "exit code. Any files attached to the original request are already in the "
-            + "working directory -- open them by the filename your task context gives. The "
-            + "working directory persists across calls for the rest of this task, so a file you "
-            + "write in one call is still there for the next. You see only what the code prints, "
-            + "plus the value of a bare expression on its last line (shown as a notebook would), "
-            + "so print anything else you want to see. The sandbox has no network access: use "
-            + "the standard library, pandas or openpyxl; nothing else can be installed.")
+            + "working directory -- open them by the filename your task context gives. Every "
+            + "call is a fresh Python process: variables, imports and functions from earlier "
+            + "calls are gone, so each call must import what it uses and re-read any file it "
+            + "needs. Only files carry over -- the working directory persists for the rest of "
+            + "this task, so a file you write in one call is still there for the next. You see "
+            + "only what the code prints, plus the value of a bare expression on its last line, "
+            + "so print anything else you want to see. upload_object is a separate tool, not a "
+            + "Python function: call it directly, never from this code. The sandbox has no "
+            + "network access: use the standard library, pandas or openpyxl; nothing else can be "
+            + "installed.")
     public SandboxExecutionResult runPythonCode(
         @ToolParam(description = "The Python source to run.")
         final String code,

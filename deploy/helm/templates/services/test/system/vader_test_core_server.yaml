@@ -178,6 +178,29 @@ spec:
             || { echo "❌ decomposition request $LLM_ID is not stamped with $DECOMPOSITION_FP"; exit 1; }
           echo "✅ LLM configuration reports every prompt fingerprint, and requests are stamped with them"
 
+          echo "== Workflow cancellation =="
+          # $WF still holds the page of the workflow just awaited; its first "id" is the workflow's
+          # own, since every key ahead of it alphabetically is a plain value.
+          WF_ID=$(echo "$WF" | grep -o '"id":"[^"]*"' | head -1 | sed 's/"id":"\([^"]*\)"/\1/')
+          [ -n "$WF_ID" ] || { echo "❌ no workflow id in $WF"; exit 1; }
+          CANCEL_URL="$SERVER/vader/core-server/workflow/$WF_ID/cancel"
+          CANCEL=$(curl -s --max-time 30 -X POST "$CANCEL_URL" || true)
+          echo "🔍 $CANCEL"
+          # Already settled (the scripted model can finish it first) is left as it is.
+          echo "$CANCEL" | grep -Eq '"status":"(CANCELLED|SUCCEEDED|FAILED)"' \
+            || { echo "❌ cancel did not leave workflow $WF_ID terminal: $CANCEL"; exit 1; }
+          AGAIN=$(curl -s --max-time 30 -X POST "$CANCEL_URL" || true)
+          echo "$AGAIN" | grep -q '"cancelledAttempts":0' \
+            || { echo "❌ cancelling again stopped attempts: $AGAIN"; exit 1; }
+          WF_NOW=$(curl -s --max-time 10 "$WORKFLOW_QUERY?page=0&size=1&id=$WF_ID" || true)
+          STATUS_NOW=$(echo "$CANCEL" | sed -n 's/.*"status":"\([A-Z]*\)".*/\1/p')
+          echo "$WF_NOW" | grep -q "\"status\":\"$STATUS_NOW\"" \
+            || { echo "❌ workflow $WF_ID does not read $STATUS_NOW: $WF_NOW"; exit 1; }
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST "$SERVER/vader/core-server/workflow/bogus-id/cancel" || true)
+          [ "$STATUS" = "404" ] || { echo "❌ unknown workflow: expected 404, got $STATUS"; exit 1; }
+          echo "✅ cancel stops a workflow, is idempotent, and rejects unknown workflows"
+
           echo "== Validation: 6 files should be rejected with 400 =="
           i=1; while [ $i -le 6 ]; do printf "content %d" $i > "/tmp/excess-file-$i.txt"; i=$((i+1)); done
           BODY_FILE=$(mktemp)

@@ -29,15 +29,17 @@ import org.vader.core.server.config.VaderMode;
  *
  * <p>Structured calls are recognized by the JSON schema Spring AI appends to the prompt, i.e. by
  * the output contract the reply has to satisfy. An inference turn is recognized as a prompt
- * that carries tools but asks for no schema (decomposition carries tools too, but always asks
- * for its plan's schema) and plays a script of tool calls, one per turn, then gives the final
+ * that carries tools but asks for no schema and plays a script of tool calls, one per turn, then
+ * gives the final
  * answer: by default a single {@value #SCRIPTED_TOOL_NAME} call so the harness exercises its tool
  * loop. Anything else (synthesis) gets plain text.</p>
  *
  * <p>A prompt containing {@value #UPLOAD_SCRIPT_MARKER} is planned as one task whose script
  * writes {@value #UPLOADED_REPORT_FILENAME} in the sandbox and uploads it with
  * {@code upload_object}, so the Helm system test can check the upload path end to end without
- * giving every other scripted task a sandbox pod.</p>
+ * giving every other scripted task a sandbox pod. The same code also writes
+ * {@value #UNUPLOADED_NOTES_FILENAME}, which it never uploads, so the test can check that
+ * core-server saves it when the attempt succeeds -- and saves the uploaded report only once.</p>
  *
  * <p>A prompt containing {@value #INJECTION_SCRIPT_MARKER} is planned as one task whose script
  * plays a prompt-injected agent: it posts an update aimed at {@value #INJECTED_FOREIGN_ID} rather
@@ -63,6 +65,12 @@ public class ScriptedChatModelStub implements ChatModel {
 
     /** The content the upload script writes to {@link #UPLOADED_REPORT_FILENAME}. */
     public static final String UPLOADED_REPORT_CONTENT = "# Scripted report";
+
+    /** A file the upload script writes alongside the report but never uploads itself. */
+    public static final String UNUPLOADED_NOTES_FILENAME = "scripted-notes.md";
+
+    /** The content the upload script writes to {@link #UNUPLOADED_NOTES_FILENAME}. */
+    public static final String UNUPLOADED_NOTES_CONTENT = "# Scripted notes";
 
     /** A client prompt containing this plays the prompt-injection script. */
     public static final String INJECTION_SCRIPT_MARKER = "[scripted:prompt-injection]";
@@ -159,7 +167,8 @@ public class ScriptedChatModelStub implements ChatModel {
         new AssistantMessage.ToolCall(
             "scripted-call-1", TOOL_CALL_TYPE, "run_python_code",
             "{\"code\": \"open('" + UPLOADED_REPORT_FILENAME + "', 'w').write('"
-                + UPLOADED_REPORT_CONTENT + "')\"}"),
+                + UPLOADED_REPORT_CONTENT + "'); open('" + UNUPLOADED_NOTES_FILENAME
+                + "', 'w').write('" + UNUPLOADED_NOTES_CONTENT + "')\"}"),
         new AssistantMessage.ToolCall(
             "scripted-call-2", TOOL_CALL_TYPE, "upload_object",
             "{\"filename\": \"" + UPLOADED_REPORT_FILENAME + "\"}"));

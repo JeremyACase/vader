@@ -136,7 +136,8 @@ public class TaskGraphScheduler {
      * must keep dispatching and reviewing everything else that doesn't depend on it.
      */
     private static boolean isTerminal(final WorkflowStatus status) {
-        return status == WorkflowStatus.SUCCEEDED || status == WorkflowStatus.FAILED;
+        return status == WorkflowStatus.SUCCEEDED || status == WorkflowStatus.FAILED
+            || status == WorkflowStatus.CANCELLED;
     }
 
     /**

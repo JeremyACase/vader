@@ -12,8 +12,6 @@ import org.vader.core.server.llm.PromptKey;
 import org.vader.core.server.llm.PromptTemplateRegistry;
 import org.vader.core.server.llm.PromptVariablesBuilder;
 import org.vader.core.server.llm.interfaces.InterfaceLlmExecutor;
-import org.vader.core.server.mcp.AgentToolAudience;
-import org.vader.core.server.mcp.McpToolCallbackRegistry;
 import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 import org.vader.core.server.orchestration.model.LlmTaskPlan;
@@ -23,10 +21,8 @@ import org.vader.core.server.orchestration.model.LlmTaskPlan;
  * only from inside {@link LlmRequestInbox#handle}; {@code LlmTaskPlanAdapter} submits the request
  * through {@link LlmRequestQueue}.
  *
- * <p>Every tool tagged {@link AgentToolAudience#ORCHESTRATION} (via
- * {@link McpToolCallbackRegistry#forAudience}) is offered to the model, so it may call them while
- * it plans -- this is the "higher-level agent" role: it never gets sandbox code execution, only
- * tools for reasoning about system state.</p>
+ * <p>The planner is offered no tools: what it plans around is what the task agents can do, which
+ * its prompt states, and a tool list of its own would read as that list.</p>
  *
  * <p>Builds a fresh {@link ChatClient} per call: one shared instance corrupts its advisor chain
  * under concurrent calls (spring-projects/spring-ai#3537). Building one is cheap -- it wraps the
@@ -38,9 +34,6 @@ public class DecompositionLlmExecutor
 
     @Autowired
     private ChatClient.Builder chatClientBuilder;
-
-    @Autowired
-    private McpToolCallbackRegistry toolCallbackRegistry;
 
     @Autowired
     private PromptTemplateRegistry promptTemplateRegistry;
@@ -59,11 +52,9 @@ public class DecompositionLlmExecutor
      */
     @Override
     public LlmTaskPlan execute(final DecompositionRequest request) {
-        var toolCallbacks = this.toolCallbackRegistry.forAudience(AgentToolAudience.ORCHESTRATION);
         return this.chatClientBuilder.build().prompt()
             .system(this.instructionsFor(request))
             .user(request.clientPromptText())
-            .toolCallbacks(toolCallbacks)
             .call()
             .entity(LlmTaskPlan.class);
     }

@@ -1,5 +1,7 @@
 package org.vader.core.server.sandbox;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +14,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.vader.core.server.sandbox.model.SandboxExecutionRequest;
 import org.vader.core.server.sandbox.model.SandboxExecutionResult;
+import org.vader.core.server.sandbox.model.SandboxFileInfo;
 
 /**
  * Proxies a code-execution request to one Python sandbox pod's own HTTP server
@@ -32,6 +35,8 @@ public class SandboxExecutionClient {
         "http://{name}.{namespace}.svc.cluster.local:{port}/execute";
     private static final String HEALTH_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/health";
+    private static final String WORKSPACE_FILES_URI =
+        "http://{name}.{namespace}.svc.cluster.local:{port}/workspace/files";
     private static final String WORKSPACE_FILE_URI =
         "http://{name}.{namespace}.svc.cluster.local:{port}/workspace/files/{filename}";
 
@@ -127,6 +132,30 @@ public class SandboxExecutionClient {
                     + describe(e), e);
         }
         return Objects.requireNonNullElse(content, new byte[0]);
+    }
+
+    /**
+     * Lists the files in a sandbox's workspace by name, size and SHA-256, never their content.
+     *
+     * @param sandboxName the exact sandbox name
+     * @return the workspace's files; empty if it holds none
+     * @throws SandboxExecutionException if the sandbox is unreachable or returns an error
+     */
+    public List<SandboxFileInfo> listFiles(final String sandboxName) {
+        SandboxFileInfo[] files;
+        try {
+            files = this.sandboxExecutionRestClient.get()
+                .uri(WORKSPACE_FILES_URI, sandboxName, this.namespace, EXEC_PORT)
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .body(SandboxFileInfo[].class);
+        } catch (IllegalArgumentException e) {
+            throw invalidSandboxName(sandboxName, e);
+        } catch (RestClientException e) {
+            throw new SandboxExecutionException(
+                "Could not list the files in sandbox '" + sandboxName + "': " + describe(e), e);
+        }
+        return Arrays.asList(Objects.requireNonNullElse(files, new SandboxFileInfo[0]));
     }
 
     /**

@@ -15,6 +15,10 @@ class RunOutcome(StrEnum):
     # core-server was unreachable or erroring. Says nothing about the prompts, so it is retried on
     # the next invocation and left out of every rate.
     INFRASTRUCTURE_ERROR = "infrastructure_error"
+    # The case's checker raised instead of returning a verdict: a bug in the benchmark, not a
+    # result. Run again on the next invocation and left out of every rate, like an infrastructure
+    # error, but counted apart from them.
+    CHECKER_ERROR = "checker_error"
 
 
 @dataclass(frozen=True)
@@ -54,7 +58,7 @@ class RunRecord:
         return self.passed() and self.grade is not None and self.grade.strict
 
     def scored(self) -> bool:
-        return self.outcome != RunOutcome.INFRASTRUCTURE_ERROR
+        return self.outcome not in UNSCORED_OUTCOMES
 
     def to_json(self) -> dict[str, object]:
         return asdict(self)
@@ -76,6 +80,9 @@ class RunRecord:
             configuration=configuration if isinstance(configuration, dict) else {},
             error=optional_text(data.get("error")),
         )
+
+
+UNSCORED_OUTCOMES = frozenset({RunOutcome.INFRASTRUCTURE_ERROR, RunOutcome.CHECKER_ERROR})
 
 
 def optional_text(value: object) -> str | None:

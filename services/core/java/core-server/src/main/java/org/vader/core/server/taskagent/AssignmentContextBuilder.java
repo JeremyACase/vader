@@ -17,6 +17,8 @@ import org.vader.core.server.llm.PromptKey;
 import org.vader.core.server.llm.PromptTemplateRegistry;
 import org.vader.core.server.llm.PromptVariablesBuilder;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
+import org.vader.core.server.sandbox.TaskWorkspaceFileResolver;
+import org.vader.core.server.sandbox.model.WorkspaceFile;
 import org.vader.core.server.workflow.PlanOutlineBuilder;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskUpdateRepository;
@@ -24,7 +26,8 @@ import org.vader.core.server.workflow.TaskUpdateRepository;
 /**
  * Composes the background a task's own short description never carries on its own: the
  * original client-submitted request, any files attached to it, the plan the task is one step of,
- * the larger task a runtime subtask is one step of, the results of any prerequisite tasks, and
+ * the larger task a runtime subtask is one step of, the results of any prerequisite tasks and the
+ * files they saved, and
  * why any earlier attempts at this same task were rejected -- without this, a task like "ensure
  * the report is well-structured" has no way to discover what report, since the planner never
  * restates it in every subtask.
@@ -47,8 +50,11 @@ public class AssignmentContextBuilder {
     @Autowired
     private PromptTemplateRegistry promptTemplateRegistry;
 
-    // Absent when the Python sandbox operator is disabled; attached files are then described as
-    // readable via get_object_content only, rather than as already in a working directory.
+    @Autowired
+    private TaskWorkspaceFileResolver taskWorkspaceFileResolver;
+
+    // Absent when the Python sandbox operator is disabled; files are then described as readable
+    // via get_object_content only, rather than as already in a working directory.
     @Autowired(required = false)
     private TaskAttemptSandboxService taskAttemptSandboxService;
 
@@ -61,12 +67,14 @@ public class AssignmentContextBuilder {
     public String build(final TaskEntity task) {
         var clientPrompt =
             task.owningTaskGraph().getTaskPlan().getWorkflow().getClientPrompt();
+        var files = this.taskWorkspaceFileResolver.filesFor(task);
         var sections = Stream.of(
                 this.requestSection(clientPrompt),
-                this.attachedFilesSection(clientPrompt),
+                this.filesSection(PromptKey.CONTEXT_ATTACHED_FILES, byOrigin(files, false)),
                 this.planSection(task),
                 this.parentSection(task),
                 this.dependencySection(task),
+                this.filesSection(PromptKey.CONTEXT_UPSTREAM_FILES, byOrigin(files, true)),
                 this.previousAttemptsSection(task))
             .filter(Objects::nonNull)
             .toList();
@@ -91,46 +99,44 @@ public class AssignmentContextBuilder {
             new PromptVariablesBuilder().with("plan", String.join("\n", lines)).build());
     }
 
+    private static List<WorkspaceFile> byOrigin(
+            final List<WorkspaceFile> files, final boolean upstream) {
+        return files.stream().filter(file -> file.isUpstream() == upstream).toList();
+    }
+
     /**
-     * Lists the request's attached files. With the sandbox enabled, each is named exactly as
+     * Lists files the task starts with: those attached to the request, or those saved by the
+     * tasks it builds on. With the sandbox enabled, each is named exactly as
      * {@link TaskAttemptSandboxService} stages it -- the model is told a file is already in its
      * working directory under that name, never asked to stage anything itself.
      */
-    private String attachedFilesSection(final ClientPromptEntity clientPrompt) {
+    private String filesSection(final PromptKey section, final List<WorkspaceFile> files) {
         String result = null;
-        if (!clientPrompt.getFiles().isEmpty()) {
-            var lines = this.taskAttemptSandboxService == null
-                ? this.objectStorageFileLines(clientPrompt)
-                : this.workspaceFileLines(clientPrompt);
-            result = this.promptTemplateRegistry.render(PromptKey.CONTEXT_ATTACHED_FILES,
+        if (!files.isEmpty()) {
+            var line = this.taskAttemptSandboxService == null
+                ? PromptKey.CONTEXT_OBJECT_STORAGE_FILE
+                : PromptKey.CONTEXT_WORKSPACE_FILE;
+            var lines = files.stream().map(file -> this.fileLine(line, file)).toList();
+            result = this.promptTemplateRegistry.render(section,
                 new PromptVariablesBuilder().with("files", String.join("\n", lines)).build());
         }
         return result;
     }
 
     /**
-     * Offers exactly one way in -- {@code run_python_code} -- even for text files: given a second
-     * option, a model picks the wrong one for binary files and wastes a turn.
+     * Offers exactly one way in per mode -- {@code run_python_code} in a sandbox, even for text
+     * files: given a second option, a model picks the wrong one for binary files and wastes a
+     * turn.
      */
-    private List<String> workspaceFileLines(final ClientPromptEntity clientPrompt) {
-        return TaskAttemptSandboxService.workspaceFilesFor(clientPrompt).stream()
-            .map(file -> this.promptTemplateRegistry.render(PromptKey.CONTEXT_WORKSPACE_FILE,
-                new PromptVariablesBuilder()
-                    .with("filename", file.filename())
-                    .with("contentType", file.contentType())
-                    .build()))
-            .toList();
-    }
-
-    private List<String> objectStorageFileLines(final ClientPromptEntity clientPrompt) {
-        return clientPrompt.getFiles().stream()
-            .map(file -> this.promptTemplateRegistry.render(PromptKey.CONTEXT_OBJECT_STORAGE_FILE,
-                new PromptVariablesBuilder()
-                    .with("filename", file.getOriginalFilename())
-                    .with("id", file.getId())
-                    .with("contentType", file.getContentType())
-                    .build()))
-            .toList();
+    private String fileLine(final PromptKey line, final WorkspaceFile file) {
+        var variables = new PromptVariablesBuilder()
+            .with("filename", file.filename())
+            .with("contentType", file.contentType())
+            .with("producedBy", file.producedBy());
+        var withId = line == PromptKey.CONTEXT_OBJECT_STORAGE_FILE
+            ? variables.with("id", file.objectMetadataId())
+            : variables;
+        return this.promptTemplateRegistry.render(line, withId.build());
     }
 
     /**

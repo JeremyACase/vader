@@ -103,7 +103,7 @@ local GPU Ollama, and run from any directory.
 | `install-dev.sh` | Install or upgrade from the published images, dev configuration |
 | `install-dev-from-source.sh` | Build every image from the working tree, then install or upgrade with dev |
 | `install-eval.sh` | Build from the working tree and install a **fresh** EVAL release (any existing release, its database and leftover harness Jobs/sandboxes are wiped first) |
-| `eval-baseline.sh` | Install a fresh EVAL release, run every benchmark case once per seed, grade each run with its checker, and write per-run results plus `summary.json` to `build/eval/`, beside copies of the prompts and of `eval.yaml` (resumable with `--skip-install --results DIR`). An experiment is an edit to `deploy/helm/configurations/eval/eval.yaml`, model included, then a baseline |
+| `eval-baseline.sh` | Install a fresh EVAL release, run every benchmark case once per seed, grade each run with its checker, and write per-run results and traces (plan, transcripts, verdicts) plus `summary.json` to `build/eval/`, beside copies of the prompts and of `eval.yaml` (resumable with `--skip-install --results DIR`). An experiment is an edit to `deploy/helm/configurations/eval/eval.yaml`, model included, then a baseline |
 | `uninstall.sh [--cluster]` | Remove the release and operator-created workloads; `--cluster` also deletes the KIND cluster |
 | `ollama-up.sh` / `ollama-down.sh` | Start or remove the local GPU Ollama |
 
@@ -402,7 +402,7 @@ compress it further, not to add structure.
 | `vader.agent-harness.max-tokens` | `200000` | Token cap handed to each harness, enforced server-side |
 | `vader.agent-harness.deadline-seconds` | `600` | Wall-clock deadline handed to each harness; also the Job's `activeDeadlineSeconds` |
 | `vader.agent-harness.max-attempts-per-task` | `3` | Hard ceiling on attempts per task, checked by `OrchestratorAgentService.decideReattempt` before it even consults the reattempt-decision strategy |
-| `vader.inbox.task-attempt-review.llm-retry-interval-ms` | `30000` | How often a review that couldn't reach the LLM (unreachable, or the LLM queue timed out) is retried. It retries for as long as the outage lasts; meanwhile its workflow reads `AWAITING_LLM`, returning to `RUNNING` once the LLM answers. Any other review failure is not retried |
+| `vader.inbox.task-attempt-review.llm-retry-interval-ms` | `30000` | How often a review that couldn't reach the LLM (unreachable, or the LLM queue timed out) is retried. It retries for as long as the outage lasts; meanwhile its workflow reads `AWAITING_LLM`, returning to `RUNNING` once the LLM answers. Any other review failure (e.g. an unparseable reply) is not retried: the attempt counts as failed, unreviewed, and is re-attempted while attempts remain |
 | `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |
 | `vader.llm.request-queue.stall-timeout-seconds` | `60` | The real patience control: a caller gives up once no request on the queue, anywhere, by any replica, has been claimed for this long. A deep-but-healthy queue does not trip this -- only a genuinely stuck backend does |
 | `vader.llm.request-queue.max-wait-seconds` | `1800` | Absolute backstop regardless of stall detection, so a queue that never stalls but also never keeps up cannot block a caller forever |

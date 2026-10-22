@@ -24,8 +24,7 @@ import tools.jackson.databind.ObjectMapper;
  * it returns into a full {@link TaskPlan}, serialized as JSON.
  *
  * <p>The call itself goes through {@link LlmRequestQueue} to {@link DecompositionLlmExecutor},
- * which offers only tools tagged {@code ORCHESTRATION} (the "higher-level agent" role: never
- * sandbox code execution).</p>
+ * which offers the planner no tools.</p>
  *
  * <p>{@link LlmTaskPlan.LlmTask#dependsOn} names earlier tasks by title, matched by
  * {@link TaskTitleMatcher} and constrained to earlier positions so the graph is acyclic by
@@ -62,7 +61,7 @@ public class LlmTaskPlanAdapter {
                 DecompositionLlmExecutor.class,
                 new DecompositionRequest(
                     clientPrompt.getText(), attachedFiles, revisionGuidance));
-            return this.toTaskPlanJson(plan);
+            return this.toTaskPlanJson(plan, attachedFiles);
         } catch (OrchestratorResponseException | OrchestratorUnavailableException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -71,7 +70,9 @@ public class LlmTaskPlanAdapter {
         }
     }
 
-    private String toTaskPlanJson(final LlmTaskPlan llmPlan) throws JacksonException {
+    private String toTaskPlanJson(
+            final LlmTaskPlan llmPlan, final List<AttachedFile> attachedFiles)
+            throws JacksonException {
         if (Objects.isNull(llmPlan)
             || Objects.isNull(llmPlan.objective())
             || Objects.isNull(llmPlan.tasks())
@@ -79,7 +80,8 @@ public class LlmTaskPlanAdapter {
             throw new OrchestratorResponseException(
                 "The local LLM did not return a usable task plan.");
         }
-        return this.objectMapper.writeValueAsString(toTaskPlan(llmPlan));
+        return this.objectMapper.writeValueAsString(
+            toTaskPlan(SingleFileTransformPlanCollapser.collapse(llmPlan, attachedFiles)));
     }
 
     /**

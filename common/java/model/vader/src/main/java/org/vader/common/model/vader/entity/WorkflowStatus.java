@@ -20,5 +20,11 @@ public enum WorkflowStatus {
     SUCCEEDED,
 
     /** Terminal: at least one task permanently failed. */
-    FAILED
+    FAILED,
+
+    /**
+     * Terminal: stopped on request before it settled. No further attempt is dispatched or
+     * reviewed, and any attempt still open when it was cancelled is failed.
+     */
+    CANCELLED
 }

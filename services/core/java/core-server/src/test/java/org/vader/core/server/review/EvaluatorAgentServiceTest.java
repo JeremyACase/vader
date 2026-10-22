@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
-import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.common.model.vader.entity.TaskEntity;
@@ -30,7 +29,7 @@ import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.EvaluationVerdict;
 import org.vader.core.server.review.model.RemainingSubtask;
-import org.vader.core.server.storage.ObjectMetadataRepository;
+import org.vader.core.server.review.model.SavedFilePreview;
 import org.vader.core.server.workflow.PlanOutlineBuilderObjectMother;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskUpdateService;
@@ -45,7 +44,7 @@ class EvaluatorAgentServiceTest {
     private LlmRequestQueue requestQueue;
     private ToolCallEvidenceAdapter toolCallEvidenceAdapter;
     private TaskDecompositionSaga taskDecompositionSaga;
-    private ObjectMetadataRepository objectMetadataRepository;
+    private SavedFilePreviewBuilder savedFilePreviewBuilder;
     private EvaluatorAgentService service;
 
     @BeforeEach
@@ -55,7 +54,7 @@ class EvaluatorAgentServiceTest {
         this.requestQueue = mock(LlmRequestQueue.class);
         this.toolCallEvidenceAdapter = mock(ToolCallEvidenceAdapter.class);
         this.taskDecompositionSaga = mock(TaskDecompositionSaga.class);
-        this.objectMetadataRepository = mock(ObjectMetadataRepository.class);
+        this.savedFilePreviewBuilder = mock(SavedFilePreviewBuilder.class);
 
         this.service = new EvaluatorAgentService();
         ReflectionTestUtils.setField(
@@ -69,7 +68,7 @@ class EvaluatorAgentServiceTest {
         ReflectionTestUtils.setField(
             this.service, "planOutlineBuilder", PlanOutlineBuilderObjectMother.withoutAttempts());
         ReflectionTestUtils.setField(
-            this.service, "objectMetadataRepository", this.objectMetadataRepository);
+            this.service, "savedFilePreviewBuilder", this.savedFilePreviewBuilder);
     }
 
     private TaskEntity task() {
@@ -273,10 +272,9 @@ class EvaluatorAgentServiceTest {
         var task = this.task();
         var attempt = attempt(task, TaskAttemptStatus.SUCCEEDED);
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        var saved = new ObjectMetadataEntity();
-        saved.setOriginalFilename("monthly_revenue.csv");
-        when(this.objectMetadataRepository.findByTaskAttemptIdOrderByCreatedAtAsc(ATTEMPT_ID))
-            .thenReturn(List.of(saved));
+        var saved = new SavedFilePreview(
+            "monthly_revenue.csv", "text/csv", 22, "month,revenue\n2024-01,1", false, false);
+        when(this.savedFilePreviewBuilder.build(ATTEMPT_ID)).thenReturn(List.of(saved));
         when(this.requestQueue.submit(eq(EvaluationLlmExecutor.class), any()))
             .thenReturn(new EvaluationVerdict(true, "saved"));
 
@@ -284,8 +282,7 @@ class EvaluatorAgentServiceTest {
 
         var requestCaptor = ArgumentCaptor.forClass(EvaluationRequest.class);
         verify(this.requestQueue).submit(eq(EvaluationLlmExecutor.class), requestCaptor.capture());
-        assertThat(requestCaptor.getValue().uploadedFilenames())
-            .containsExactly("monthly_revenue.csv");
+        assertThat(requestCaptor.getValue().savedFiles()).containsExactly(saved);
     }
 
     @Test

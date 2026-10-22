@@ -2,10 +2,13 @@ package org.vader.core.server.sandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
+import org.vader.common.model.vader.entity.TaskAttemptEntity;
+import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.core.server.sandbox.model.WorkspaceFile;
 
 class WorkspaceFileNamingTest {
@@ -22,6 +25,18 @@ class WorkspaceFileNamingTest {
         return fileNamed(UUID.randomUUID().toString(), originalFilename);
     }
 
+    private static ObjectMetadataEntity savedBy(
+            final String taskTitle, final String id, final String originalFilename) {
+        var task = new TaskEntity();
+        task.setTitle(taskTitle);
+        var attempt = new TaskAttemptEntity();
+        attempt.setTask(task);
+        var file = fileNamed(id, originalFilename);
+        file.setTaskAttempt(attempt);
+        file.setCreatedAt(OffsetDateTime.now());
+        return file;
+    }
+
     @Test
     void assign_keepsAnOrdinaryFilenameAsIs() {
         var file = fileNamed("EP_Tactics.xlsx");
@@ -29,7 +44,7 @@ class WorkspaceFileNamingTest {
         var assigned = WorkspaceFileNaming.assign(List.of(file));
 
         assertThat(assigned).containsExactly(new WorkspaceFile(
-            file.getId(), "EP_Tactics.xlsx", "application/octet-stream"));
+            file.getId(), "EP_Tactics.xlsx", "application/octet-stream", null));
     }
 
     @Test
@@ -84,5 +99,40 @@ class WorkspaceFileNamingTest {
         var assigned = WorkspaceFileNaming.assign(files);
 
         assertThat(assigned).extracting(WorkspaceFile::filename).containsExactly("a", "b", "c");
+    }
+
+    @Test
+    void assign_namesAttachedFilesFirstAndTagsUpstreamFilesWithTheirTask() {
+        var attached = fileNamed("z", "quarterly.csv");
+        var saved = savedBy("Split revenue", "a", "monthly.csv");
+
+        var assigned = WorkspaceFileNaming.assign(List.of(attached), List.of(saved));
+
+        assertThat(assigned).containsExactly(
+            new WorkspaceFile("z", "quarterly.csv", "application/octet-stream", null),
+            new WorkspaceFile("a", "monthly.csv", "application/octet-stream", "Split revenue"));
+        assertThat(assigned).extracting(WorkspaceFile::isUpstream).containsExactly(false, true);
+    }
+
+    @Test
+    void assign_keepsOnlyTheFirstUpstreamFileOfEachName() {
+        var newer = savedBy("Fix months", "a", "monthly.csv");
+        var older = savedBy("Split revenue", "b", "monthly.csv");
+
+        var assigned = WorkspaceFileNaming.assign(List.of(), List.of(newer, older));
+
+        assertThat(assigned).extracting(WorkspaceFile::objectMetadataId).containsExactly("a");
+        assertThat(assigned).extracting(WorkspaceFile::filename).containsExactly("monthly.csv");
+    }
+
+    @Test
+    void assign_numbersAnUpstreamFileThatClashesWithAnAttachedOne() {
+        var attached = fileNamed("z", "data.csv");
+        var saved = savedBy("Clean data", "a", "data.csv");
+
+        var assigned = WorkspaceFileNaming.assign(List.of(attached), List.of(saved));
+
+        assertThat(assigned).extracting(WorkspaceFile::filename)
+            .containsExactly("data.csv", "data (2).csv");
     }
 }

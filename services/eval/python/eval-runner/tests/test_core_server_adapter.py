@@ -93,6 +93,16 @@ def test_a_prompt_is_submitted_as_multipart_with_its_files(server_url: str, tmp_
     assert parts["files"].get_payload(decode=True) == attachment.read_bytes()
 
 
+def test_cancelling_a_workflow_posts_to_its_cancel_endpoint(server_url: str) -> None:
+    CoreServerHandler.received.clear()
+
+    CoreServerAdapter(server_url).cancel_workflow("workflow-1")
+
+    path, body, _ = CoreServerHandler.received[0]
+    assert path == "/vader/core-server/workflow/workflow-1/cancel"
+    assert body == b""
+
+
 def test_reads_are_retried_before_core_server_is_declared_unreachable() -> None:
     delays: list[float] = []
     adapter = CoreServerAdapter(

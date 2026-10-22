@@ -16,7 +16,12 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 
 from core_python_sandbox_server.logging_config import configure_logging
-from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult, StageFileResult
+from core_python_sandbox_server.models import (
+    ExecutionRequest,
+    ExecutionResult,
+    StageFileResult,
+    WorkspaceFileInfo,
+)
 from core_python_sandbox_server.workspace_code_executor import WorkspaceCodeExecutor
 
 configure_logging()
@@ -60,6 +65,14 @@ def execute(request: ExecutionRequest) -> ExecutionResult:
         result.timed_out,
     )
     return result
+
+
+@app.get("/workspace/files", response_model=list[WorkspaceFileInfo])
+def list_files() -> list[WorkspaceFileInfo]:
+    """Lists the workspace's files by name, size and SHA-256, never their content -- lets
+    core-server save what the agent's code wrote when the attempt ends, without the agent
+    naming each file."""
+    return executor.list_files()
 
 
 @app.put("/workspace/files/{filename:path}", response_model=StageFileResult)

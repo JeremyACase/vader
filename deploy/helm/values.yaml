@@ -61,6 +61,11 @@ vader:
       # unreliable enough that task agents regularly fail on them; the 7b model needs roughly
       # 5-6 GB of memory on the node running Ollama.
       model: qwen2.5:7b
+      # Whether a reasoning model (e.g. qwen3) thinks before it answers: true, false, or high,
+      # medium or low for models that take a level. Leave empty for a model with no thinking mode,
+      # such as qwen2.5 -- nothing is then sent. A model that thinks spends maxOutputTokens on
+      # its thinking too, so a long think can leave a plan or tool call cut off.
+      think:
       # Base URL of an Ollama instance running outside the cluster -- in dev, the one
       # tools/scripts/local/ollama-up.sh starts in Docker so it can use the host's GPU, which
       # KIND nodes can't reach (every local install script sets this to it). When set, the chart

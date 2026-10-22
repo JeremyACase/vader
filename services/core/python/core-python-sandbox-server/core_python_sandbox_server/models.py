@@ -34,6 +34,14 @@ class ExecutionResult(CamelModel):
     timed_out: bool
 
 
+class WorkspaceFileInfo(CamelModel):
+    """One file in the workspace, described without its content."""
+
+    filename: str
+    size: int
+    sha256: str
+
+
 class StageFileResult(CamelModel):
     """Acknowledges a raw file upload into the workspace, with no content echoed back."""
 

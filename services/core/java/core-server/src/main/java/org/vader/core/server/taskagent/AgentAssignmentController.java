@@ -1,5 +1,6 @@
 package org.vader.core.server.taskagent;
 
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -8,6 +9,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.vader.common.model.vader.entity.TaskAttemptStatus;
+import org.vader.core.server.sandbox.TaskAttemptOutputCollectionService;
 import org.vader.core.server.taskagent.model.AssignmentResponse;
 import org.vader.core.server.taskagent.model.HeartbeatRequest;
 import org.vader.core.server.taskagent.model.InferenceRequest;
@@ -39,6 +42,11 @@ public class AgentAssignmentController {
     @Autowired
     private TaskToolInvocationService toolInvocationService;
 
+    // Absent when the Python sandbox operator is disabled: there is then no workspace to save
+    // files from.
+    @Autowired(required = false)
+    private TaskAttemptOutputCollectionService outputCollectionService;
+
     /**
      * Fetches the work order for an assignment.
      *
@@ -67,7 +75,9 @@ public class AgentAssignmentController {
     }
 
     /**
-     * Records an attempt's terminal outcome.
+     * Records an attempt's terminal outcome. A succeeding attempt first has the files its code
+     * left in its sandbox saved, since settling deletes the sandbox and queues the review that
+     * judges the attempt by the files it saved.
      *
      * @param assignmentId the calling harness's assignment id
      * @param request the reported outcome
@@ -77,6 +87,10 @@ public class AgentAssignmentController {
     public ResponseEntity<Void> submitResult(
         @PathVariable final String assignmentId,
         @RequestBody final ResultRequest request) {
+        if (request.status() == TaskAttemptStatus.SUCCEEDED
+                && Objects.nonNull(this.outputCollectionService)) {
+            this.outputCollectionService.collect(assignmentId);
+        }
         this.lifecycleService.submitResult(assignmentId, request);
         return ResponseEntity.noContent().build();
     }

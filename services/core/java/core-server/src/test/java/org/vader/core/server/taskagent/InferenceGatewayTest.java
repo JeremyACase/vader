@@ -13,14 +13,16 @@ import org.vader.core.server.llm.OrchestratorUnavailableException;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 import org.vader.core.server.taskagent.model.TurnUsage;
 
 class InferenceGatewayTest {
 
     private static final TurnUsage USAGE = new TurnUsage(3L, 2L, 40L);
 
-    private static List<ConversationMessage> userTurn(final String text) {
-        return List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null));
+    private static InferenceTurnRequest userTurn(final String text) {
+        return new InferenceTurnRequest(
+            List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null)), 1);
     }
 
     private static InferenceGateway gatewayWith(final LlmRequestQueue requestQueue) {

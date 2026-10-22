@@ -7,9 +7,13 @@ vader:
   orchestrator:
     type: local
     local:
-      # Doesn't fit in an 8 GB GPU, so Ollama splits it with the CPU and generates several times
-      # slower than the 7b: every timeout below is scaled to match.
-      model: qwen2.5:14b
+      # An 8 GB GPU holds about 84% of it at this context window; Ollama runs the rest on the
+      # CPU. The timeouts below are sized for qwen2.5:14b, which is split further and slower, and
+      # are kept so a baseline comparing models changes only the model.
+      model: qwen3.5:9b-q4_K_M
+      # Off: thinking would spend the output cap before the plan or tool call it precedes, and
+      # the prompts are written for a model that answers directly.
+      think: false
       requestTimeoutSeconds: 600
   llm:
     requestQueue:
@@ -17,6 +21,11 @@ vader:
       # queue can go without a claim, so a shorter stall timeout fails callers behind it.
       stallTimeoutSeconds: 660
       maxWaitSeconds: 3600
+  # Off: the benchmark cases are each one script's worth of work, and splitting a failed attempt
+  # into subtasks that each start from a fresh sandbox multiplies attempts without fixing why the
+  # first one failed. A failing attempt is simply retried instead.
+  taskDecomposition:
+    maxDepth: 0
   agentHarness:
     deadlineSeconds: 1800
   operators:
