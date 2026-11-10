@@ -72,7 +72,8 @@ the RBAC Role/RoleBinding. Each operator then has its own flag; the first is the
 operator** (`vader.operators.python-sandbox.enabled=true`), which manages the lifecycle of
 isolated sandbox pods running `core-python-sandbox-server`
 (`services/core/python/core-python-sandbox-server`) -- a small HTTP server that runs submitted
-code as a subprocess against a persistent per-pod workspace and returns its output, with
+code in a persistent Python session (its own process) against a persistent per-pod workspace and
+returns its output, with
 `pandas`/`openpyxl` preinstalled for spreadsheet analysis. Both master and operator flags are off
 by default when unset (e.g. a bare `bootRun`); the Helm chart turns both on.
 
@@ -91,7 +92,8 @@ by default when unset (e.g. a bare `bootRun`); the Helm chart turns both on.
   - `GET /vader/core-server/python-sandbox/sandboxes`.
   - `POST /vader/core-server/python-sandbox/sandboxes/{name}/execute` — body
     `{"code": "...", "files": {"<filename>": "<base64>"}}`; returns
-    `{stdout, stderr, exitCode, timedOut}`.
+    `{stdout, stderr, exitCode, timedOut, sessionReset}` (`sessionReset`: the sandbox's Python
+    session was lost, so earlier calls' variables are gone).
   - `DELETE /vader/core-server/python-sandbox/sandboxes/{name}`.
   - `502` when the Kubernetes API call fails, or when the sandbox's own HTTP server is
     unreachable.

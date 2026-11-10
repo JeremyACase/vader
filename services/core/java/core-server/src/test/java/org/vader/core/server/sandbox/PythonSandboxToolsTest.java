@@ -54,7 +54,7 @@ class PythonSandboxToolsTest {
 
     @Test
     void runPythonCode_delegatesToTheServiceWithCodeAndFiles() {
-        var expected = new SandboxExecutionResult("hi\n", "", 0, false);
+        var expected = new SandboxExecutionResult("hi\n", "", 0, false, false);
         when(this.service.runCode(eq("vader-sandbox-a"), any())).thenReturn(expected);
         var files = Map.of("data.csv", "YSxiCjEsMg==");
 

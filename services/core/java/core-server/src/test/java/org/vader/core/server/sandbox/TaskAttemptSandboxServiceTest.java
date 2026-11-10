@@ -102,7 +102,7 @@ class TaskAttemptSandboxServiceTest {
 
     @Test
     void runCode_provisionsTheAttemptsOwnSandboxThenRunsInIt() {
-        var expected = new SandboxExecutionResult("2\n", "", 0, false);
+        var expected = new SandboxExecutionResult("2\n", "", 0, false, false);
         when(this.sandboxService.ensureReady(this.sandboxName))
             .thenReturn(sandboxIn(this.sandboxName, "Running"));
         when(this.sandboxService.runCode(

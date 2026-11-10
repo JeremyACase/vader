@@ -160,7 +160,7 @@ class PythonSandboxServiceTest {
     @Test
     void runCode_delegatesToTheExecutionClient() {
         var request = new SandboxExecutionRequest("print('hi')", Map.of(), null);
-        var expected = new SandboxExecutionResult("hi\n", "", 0, false);
+        var expected = new SandboxExecutionResult("hi\n", "", 0, false, false);
         when(this.operator.manages("vader-sandbox-a")).thenReturn(true);
         when(this.executionClient.execute("vader-sandbox-a", request)).thenReturn(expected);
 

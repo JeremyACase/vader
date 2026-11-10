@@ -110,7 +110,24 @@ class SandboxExecutionClientTest {
         assertThat(result.stdout()).isEqualTo("hi\n");
         assertThat(result.exitCode()).isEqualTo(0);
         assertThat(result.timedOut()).isFalse();
+        assertThat(result.sessionReset()).isFalse();
         this.mockServer.verify();
+    }
+
+    @Test
+    void execute_carriesTheSandboxsReportThatItsSessionWasLost() {
+        this.mockServer
+            .expect(requestTo("http://vader-sandbox-a.vader.svc.cluster.local:8888/execute"))
+            .andRespond(withSuccess(
+                "{\"stdout\":\"\",\"stderr\":\"\",\"exitCode\":-1,\"timedOut\":true,"
+                    + "\"sessionReset\":true}",
+                MediaType.APPLICATION_JSON));
+
+        var result = this.client.execute(
+            "vader-sandbox-a", new SandboxExecutionRequest("while True: pass", Map.of(), null));
+
+        assertThat(result.timedOut()).isTrue();
+        assertThat(result.sessionReset()).isTrue();
     }
 
     @Test

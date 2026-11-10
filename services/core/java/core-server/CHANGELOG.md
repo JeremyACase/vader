@@ -5,6 +5,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [0.35.0]
 ### Changed
+- A task agent's `run_python_code` calls now share one Python session, and its system prompt
+  and tool description say so: the agent is told to build on what earlier calls defined rather
+  than resubmitting a whole program each call, whose growing transcript was filling the context
+  window long before the turn cap. Sandbox results carry the new `sessionReset` flag through, so
+  the agent learns when a killed or crashed session has lost its definitions.
 - Every prompt Vader sends a model now lives in a StringTemplate file under `prompts/` instead
   of in code, including the task agent's own system prompt and nudges, which the assignment now
   delivers to the harness (replacing its `context` field with `prompts`). Templates are checked

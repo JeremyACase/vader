@@ -35,7 +35,7 @@ class TaskAttemptSandboxToolsTest {
     @Test
     void runPythonCode_runsInTheSandboxOfTheAttemptNamedByTheToolContext() {
         var attemptId = UUID.randomUUID().toString();
-        var expected = new SandboxExecutionResult("hi\n", "", 0, false);
+        var expected = new SandboxExecutionResult("hi\n", "", 0, false, false);
         when(this.service.runCode(attemptId, "print('hi')")).thenReturn(expected);
 
         var result = this.tools.runPythonCode("print('hi')", TaskAttemptToolContext.of(attemptId));

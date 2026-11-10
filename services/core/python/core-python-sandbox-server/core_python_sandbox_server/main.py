@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
@@ -40,8 +42,18 @@ logger.info(
     MAX_TIMEOUT_SECONDS,
 )
 
-app = FastAPI(title="Vader Sandbox Exec Server")
 executor = WorkspaceCodeExecutor(WORKSPACE_DIR, MAX_TIMEOUT_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Ends the interpreter session on shutdown, so no process submitted code started outlives
+    the server."""
+    yield
+    executor.close()
+
+
+app = FastAPI(title="Vader Sandbox Exec Server", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -52,7 +64,7 @@ def health() -> dict[str, str]:
 
 @app.post("/execute", response_model=ExecutionResult)
 def execute(request: ExecutionRequest) -> ExecutionResult:
-    """Runs the submitted code in the persistent workspace and returns its output."""
+    """Runs the submitted code in the persistent session and workspace, returning its output."""
     logger.info(
         "executing submitted code: %d bytes, %d file(s) to stage",
         len(request.code),
@@ -60,9 +72,10 @@ def execute(request: ExecutionRequest) -> ExecutionResult:
     )
     result = executor.execute(request)
     logger.info(
-        "execution finished: exit_code=%s timed_out=%s",
+        "execution finished: exit_code=%s timed_out=%s session_reset=%s",
         result.exit_code,
         result.timed_out,
+        result.session_reset,
     )
     return result
 

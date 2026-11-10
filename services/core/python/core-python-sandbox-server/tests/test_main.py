@@ -24,6 +24,15 @@ def test_execute_runs_code_and_returns_output():
     assert body["stdout"].strip() == "2"
     assert body["exitCode"] == 0
     assert body["timedOut"] is False
+    assert body["sessionReset"] is False
+
+
+def test_execute_keeps_state_between_requests():
+    client.post("/execute", json={"code": "remembered = 'across requests'"})
+
+    response = client.post("/execute", json={"code": "print(remembered)"})
+
+    assert response.json()["stdout"] == "across requests\n"
 
 
 def test_execute_accepts_camel_case_timeout_field():

@@ -16,7 +16,7 @@ prompts and displays results.
 | `services/core/ts/core-ui` | Angular frontend |
 | `services/core/rust/core-agent-harness` | Ephemeral k8s Job: executes exactly one task-graph subtask. All LLM calls are proxied through `core-server` — the harness never talks to an LLM directly. |
 | `services/eval/python/eval-runner` | Not part of the runtime: the benchmark cases EVAL mode measures prompts against (inputs, a checker per case, fixtures proving each checker), and the runner that scores a live EVAL release on them. Dockerized like the other Python module. |
-| `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server executing agent-submitted code as a subprocess against a persistent per-pod workspace, reachable only from `core-server`. |
+| `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server running agent-submitted code in a persistent Python session (its own process, state kept between calls like notebook cells) against a persistent per-pod workspace, reachable only from `core-server`. |
 
 ### core-server package layout
 
