@@ -44,6 +44,12 @@ dependencies {
         implementation("org.bouncycastle:bcprov-jdk18on:${BOUNCYCASTLE_VERSION}") {
             because "MinIO's own BouncyCastle has known CVEs"
         }
+        implementation("com.google.guava:guava:${GUAVA_VERSION}") {
+            because "MinIO's own Guava has known CVEs"
+        }
+        implementation("org.xerial.snappy:snappy-java:${SNAPPY_VERSION}") {
+            because "MinIO's own snappy-java has known CVEs"
+        }
     }
 
     testImplementation "org.springframework.boot:spring-boot-starter-test"

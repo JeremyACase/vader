@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.1]
+### Security
+- Clears the high-severity CVEs the dependency scan reported: core-server pins MinIO's
+  transitive Guava and snappy-java to patched releases, and core-ui moves to Angular 20.3.35 for
+  a router denial-of-service fix.
+
 ## [0.24.0]
 ### Added
 - **Groundwork for measuring and improving Vader's own prompts.** Every model-facing prompt now

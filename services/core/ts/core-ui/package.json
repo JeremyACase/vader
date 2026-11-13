@@ -1,6 +1,6 @@
 {
   "name": "core-ui",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -11,12 +11,12 @@
   },
   "private": true,
   "dependencies": {
-    "@angular/common": "^20.3.32",
-    "@angular/compiler": "^20.3.32",
-    "@angular/core": "^20.3.32",
-    "@angular/forms": "^20.3.32",
-    "@angular/platform-browser": "^20.3.32",
-    "@angular/router": "^20.3.32",
+    "@angular/common": "^20.3.35",
+    "@angular/compiler": "^20.3.35",
+    "@angular/core": "^20.3.35",
+    "@angular/forms": "^20.3.35",
+    "@angular/platform-browser": "^20.3.35",
+    "@angular/router": "^20.3.35",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.0"
@@ -24,7 +24,7 @@
   "devDependencies": {
     "@angular/build": "^20.1.5",
     "@angular/cli": "^20.1.5",
-    "@angular/compiler-cli": "^20.3.32",
+    "@angular/compiler-cli": "^20.3.35",
     "@types/jasmine": "~5.1.0",
     "jasmine-core": "~5.8.0",
     "karma": "~6.4.0",

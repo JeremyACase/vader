@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.1]
+### Security
+- Moves to Angular 20.3.35, which fixes a router denial of service in route outlet matching.
+
 ## [0.21.0]
 ### Added
 - Workflows can show the new `CANCELLED` status, for one stopped on request before it settled.
