@@ -3,6 +3,7 @@ package org.vader.core.server.workflow;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,7 +103,9 @@ public class TaskGraphScheduler {
         var progress = new LinkedHashMap<String, TaskProgress>();
         tasks.forEach(task -> progress.put(task.getId(), this.computeProgress(task)));
         // Deepest first, so a subtask that was itself decomposed settles before its parent looks.
-        tasks.reversed().forEach(task -> this.maybeSettleDecomposed(task, progress));
+        var deepestFirst = new ArrayList<>(tasks);
+        Collections.reverse(deepestFirst);
+        deepestFirst.forEach(task -> this.maybeSettleDecomposed(task, progress));
         this.propagateBlocked(tasks, progress);
 
         tasks.forEach(task -> this.maybeDispatch(task, progress));

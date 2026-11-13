@@ -4,6 +4,23 @@ logging:
 
 vader:
   mode: DEV
+  orchestrator:
+    local:
+      # Sized for a laptop: at the default 16k context the 3b model and its KV cache (~2.5 GB)
+      # fit wholly in a 4 GB GPU, and stay quick on a CPU when there is no GPU. Its tool calls are
+      # less reliable than qwen2.5:7b's, so expect more failed attempts; switch back on a
+      # machine with ~6 GB of GPU memory to spare.
+      model: qwen2.5:3b
+      # Slow hardware can run a single long call past the default 300s.
+      requestTimeoutSeconds: 600
+  llm:
+    requestQueue:
+      # Above requestTimeoutSeconds: with one slot, a single slow call is the longest a healthy
+      # queue can go without a claim.
+      stallTimeoutSeconds: 660
+  agentHarness:
+    # Leaves room for several slow turns per task.
+    deadlineSeconds: 1800
   operators:
     enabled: true
     pythonSandbox:

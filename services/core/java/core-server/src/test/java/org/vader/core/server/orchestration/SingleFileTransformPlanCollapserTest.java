@@ -39,7 +39,7 @@ class SingleFileTransformPlanCollapserTest {
         var collapsed = SingleFileTransformPlanCollapser.collapse(plan, ONE_FILE);
 
         assertThat(collapsed.tasks()).hasSize(1);
-        var task = collapsed.tasks().getFirst();
+        var task = collapsed.tasks().get(0);
         assertThat(task.title()).isEqualTo("Write Monthly Revenue");
         assertThat(task.description()).isEqualTo(
             "1. Read quarterly_revenue.csv.\n"

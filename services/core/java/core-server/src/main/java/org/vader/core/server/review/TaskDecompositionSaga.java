@@ -190,7 +190,7 @@ public class TaskDecompositionSaga {
         subtask.setParentTask(attempt.getTask());
         subtask.setSpawnedByAttempt(attempt);
         if (!savedSoFar.isEmpty()) {
-            subtask.getDependsOn().add(savedSoFar.getLast());
+            subtask.getDependsOn().add(savedSoFar.get(savedSoFar.size() - 1));
         }
         return this.taskRepository.save(subtask);
     }

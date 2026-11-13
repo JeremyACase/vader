@@ -73,6 +73,6 @@ public final class SingleFileTransformPlanCollapser {
         var steps = IntStream.range(0, tasks.size())
             .mapToObj(index -> (index + 1) + ". " + tasks.get(index).description())
             .collect(Collectors.joining("\n"));
-        return new LlmTaskPlan.LlmTask(tasks.getLast().title(), steps, List.of());
+        return new LlmTaskPlan.LlmTask(tasks.get(tasks.size() - 1).title(), steps, List.of());
     }
 }
