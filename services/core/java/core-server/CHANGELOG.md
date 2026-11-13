@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.1]
+### Security
+- Pins MinIO's transitive Guava and snappy-java to patched releases, clearing a Guava
+  deserialization denial of service and snappy-java decompression flaws (unbounded allocation,
+  buffer overflow on malformed input).
+
 ## [0.35.0]
 ### Changed
 - A task agent's `run_python_code` calls now share one Python session, and its system prompt
