@@ -1,3 +1,6 @@
+{{- if not (has (.Values.vader.mode | default "PROD") (list "DEV" "PROD" "TEST" "EVAL")) }}
+{{- fail (printf "vader.mode must be one of DEV, PROD, TEST or EVAL (got %s)." (.Values.vader.mode | default "PROD")) }}
+{{- end }}
 {{- if and (eq .Values.vader.orchestrator.type "scripted") (ne (.Values.vader.mode | default "PROD") "TEST") }}
 {{- fail (printf "vader.orchestrator.type=scripted returns canned results and is only permitted with vader.mode=TEST (got %s). Use vader.orchestrator.type=local." (.Values.vader.mode | default "PROD")) }}
 {{- end }}
@@ -64,9 +67,21 @@ data:
           # one entirely.
           base-url: {{ .Values.vader.orchestrator.local.externalBaseUrl | default (printf "http://vader-ollama:%v" .Values.vader.components.core.ollama.service.port) }}
           chat:
+            {{- if not (kindIs "invalid" .Values.vader.orchestrator.local.think) }}
+            # See vader.orchestrator.local.think.
+            think: {{ .Values.vader.orchestrator.local.think | toString | upper | quote }}
+            {{- end }}
             options:
               model: {{ .Values.vader.orchestrator.local.model }}
-              temperature: 0
+              # The same in every mode, so a benchmark measures the prompts the way they run.
+              # See vader.orchestrator.local.temperature.
+              temperature: {{ required "vader.orchestrator.local.temperature is required when orchestrator.type is local" .Values.vader.orchestrator.local.temperature }}
+              {{- if eq (.Values.vader.mode | default "PROD") "EVAL" }}
+              # EVAL only: a fixed seed makes each benchmark run one repeatable sample of what the
+              # sampled model does, so a baseline can be re-run and extended. See
+              # vader.orchestrator.local.seed.
+              seed: {{ required "vader.orchestrator.local.seed is required when vader.mode is EVAL" .Values.vader.orchestrator.local.seed }}
+              {{- end }}
               # Caps every single response (Ollama's num_predict) so a runaway generation ends
               # instead of holding Ollama's only slot indefinitely. These are Spring AI's default
               # options, merged into every chat call. See vader.orchestrator.local.maxOutputTokens.

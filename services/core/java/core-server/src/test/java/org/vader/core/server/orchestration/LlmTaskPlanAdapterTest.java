@@ -12,6 +12,7 @@ import org.vader.common.model.vader.dto.ClientPrompt;
 import org.vader.common.model.vader.dto.TaskPlan;
 import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.llm.OrchestratorUnavailableException;
+import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 import org.vader.core.server.orchestration.model.LlmTaskPlan;
 import tools.jackson.databind.DeserializationFeature;
@@ -21,7 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 class LlmTaskPlanAdapterTest {
 
     private static final LlmTaskPlan VALID_PLAN = new LlmTaskPlan(
-        "reasoning", "ship it",
+        "reasoning", "ship it", List.of(),
         List.of(
             new LlmTaskPlan.LlmTask("design", "draw it", List.of()),
             new LlmTaskPlan.LlmTask("build", "code it", List.of("design"))));
@@ -74,9 +75,33 @@ class LlmTaskPlanAdapterTest {
     }
 
     @Test
+    void decompose_collapsesSplitSingleFileTransformIntoOneTask() throws Exception {
+        var requestQueue = mock(LlmRequestQueue.class);
+        var attachedFiles = List.of(new AttachedFile("quarterly.csv", "text/csv"));
+        var splitPlan = new LlmTaskPlan("reasoning", "convert it", List.of("monthly.csv"),
+            List.of(
+                new LlmTaskPlan.LlmTask("Read CSV", "read it", List.of()),
+                new LlmTaskPlan.LlmTask("Write CSV", "write it", List.of("Read CSV"))));
+        when(requestQueue.submit(
+            DecompositionLlmExecutor.class,
+            new DecompositionRequest("convert it", attachedFiles, null)))
+            .thenReturn(splitPlan);
+
+        var plan = this.objectMapper.readValue(
+            this.adapter(requestQueue).decompose(promptOf("convert it"), attachedFiles, null),
+            TaskPlan.class);
+
+        assertThat(plan.getTaskGraph().getTasks()).singleElement()
+            .satisfies(task -> {
+                assertThat(task.getTitle()).isEqualTo("Write CSV");
+                assertThat(task.getDependsOnTaskIds()).isEmpty();
+            });
+    }
+
+    @Test
     void decompose_whenModelReturnsNoTasks_throwsOrchestratorResponse() {
         var requestQueue = mock(LlmRequestQueue.class);
-        var emptyPlan = new LlmTaskPlan("reasoning", "ship it", List.of());
+        var emptyPlan = new LlmTaskPlan("reasoning", "ship it", List.of(), List.of());
         when(requestQueue.submit(
             DecompositionLlmExecutor.class,
             new DecompositionRequest("plan a thing", List.of(), null)))
@@ -91,7 +116,7 @@ class LlmTaskPlanAdapterTest {
     @Test
     void decompose_whenTaskDependsOnLaterTask_throwsOrchestratorResponse() {
         var requestQueue = mock(LlmRequestQueue.class);
-        var forwardReferencingPlan = new LlmTaskPlan("reasoning", "ship it", List.of(
+        var forwardReferencingPlan = new LlmTaskPlan("reasoning", "ship it", List.of(), List.of(
             new LlmTaskPlan.LlmTask("design", "draw it", List.of("build")),
             new LlmTaskPlan.LlmTask("build", "code it", List.of())));
         when(requestQueue.submit(
@@ -108,7 +133,7 @@ class LlmTaskPlanAdapterTest {
     @Test
     void decompose_whenTaskDependsOnItself_throwsOrchestratorResponse() {
         var requestQueue = mock(LlmRequestQueue.class);
-        var selfReferencingPlan = new LlmTaskPlan("reasoning", "ship it", List.of(
+        var selfReferencingPlan = new LlmTaskPlan("reasoning", "ship it", List.of(), List.of(
             new LlmTaskPlan.LlmTask("design", "draw it", List.of("design"))));
         when(requestQueue.submit(
             DecompositionLlmExecutor.class,
@@ -124,7 +149,7 @@ class LlmTaskPlanAdapterTest {
     @Test
     void decompose_whenTaskDependsOnAnUnknownTitle_throwsOrchestratorResponse() {
         var requestQueue = mock(LlmRequestQueue.class);
-        var unknownTitlePlan = new LlmTaskPlan("reasoning", "ship it", List.of(
+        var unknownTitlePlan = new LlmTaskPlan("reasoning", "ship it", List.of(), List.of(
             new LlmTaskPlan.LlmTask("design", "draw it", List.of()),
             new LlmTaskPlan.LlmTask("build", "code it", List.of("gather requirements"))));
         when(requestQueue.submit(
@@ -141,7 +166,7 @@ class LlmTaskPlanAdapterTest {
     @Test
     void decompose_toleratesCaseQuotesAndSpacingWhenMatchingTitles() throws Exception {
         var requestQueue = mock(LlmRequestQueue.class);
-        var looselyReferencedPlan = new LlmTaskPlan("reasoning", "analyze it", List.of(
+        var looselyReferencedPlan = new LlmTaskPlan("reasoning", "analyze it", List.of(), List.of(
             new LlmTaskPlan.LlmTask("Read Spreadsheet", "open it", List.of()),
             new LlmTaskPlan.LlmTask("Identify Key Data", "find patterns",
                 List.of("  \"read  spreadsheet\" "))));
@@ -162,7 +187,7 @@ class LlmTaskPlanAdapterTest {
     @Test
     void decompose_whenTitleIsListedTwice_dependsOnItOnce() throws Exception {
         var requestQueue = mock(LlmRequestQueue.class);
-        var duplicatedReferencePlan = new LlmTaskPlan("reasoning", "ship it", List.of(
+        var duplicatedReferencePlan = new LlmTaskPlan("reasoning", "ship it", List.of(), List.of(
             new LlmTaskPlan.LlmTask("design", "draw it", List.of()),
             new LlmTaskPlan.LlmTask("build", "code it", List.of("design", "Design"))));
         when(requestQueue.submit(

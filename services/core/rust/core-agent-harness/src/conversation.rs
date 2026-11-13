@@ -58,6 +58,21 @@ impl ConversationMessage {
         }
     }
 
+    /// An `Assistant` message replaying a prior turn's plain-text reply together with a tool call
+    /// the harness made on its behalf, so the model sees its own words followed by the result.
+    pub fn assistant_text_with_tool_calls(
+        content: impl Into<String>,
+        tool_calls: Vec<ToolCall>,
+    ) -> Self {
+        Self {
+            role: ConversationRole::Assistant,
+            content: Some(content.into()),
+            tool_calls,
+            tool_call_id: None,
+            tool_name: None,
+        }
+    }
+
     /// A `Tool` message: one tool call's result, folded back into the conversation.
     pub fn tool_result(
         tool_call_id: impl Into<String>,

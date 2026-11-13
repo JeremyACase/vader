@@ -86,6 +86,35 @@ class ReattemptDecisionServiceTest {
     }
 
     @Test
+    void reattemptIfAttemptsRemain_dispatchesTheNextAttemptWithoutConsultingTheLlm() {
+        var task = new TaskEntity();
+        task.setId("t1");
+        var attempt = attemptOf(task, 1);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.reattemptIfAttemptsRemain(ATTEMPT_ID);
+
+        verify(this.taskGraphScheduler).dispatch(task, 2);
+        verify(this.requestQueue, never())
+            .submit(eq(ReattemptDecisionLlmExecutor.class), any());
+    }
+
+    @Test
+    void reattemptIfAttemptsRemain_whenAttemptCapReached_recordsItAndDoesNotDispatch() {
+        var task = new TaskEntity();
+        task.setId("t1");
+        var attempt = attemptOf(task, 3);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.reattemptIfAttemptsRemain(ATTEMPT_ID);
+
+        verify(this.taskGraphScheduler, never()).dispatch(any(), any(Integer.class));
+        verify(this.taskUpdateService).record(
+            same(task), same(attempt), eq(TaskUpdateType.UPDATE), any(),
+            eq(TaskUpdateAuthor.ORCHESTRATOR));
+    }
+
+    @Test
     void decideReattempt_whenTheLlmApproves_dispatchesTheNextAttempt() {
         var task = new TaskEntity();
         task.setId("t1");

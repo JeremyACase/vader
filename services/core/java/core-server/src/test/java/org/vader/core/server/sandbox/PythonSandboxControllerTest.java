@@ -72,7 +72,7 @@ class PythonSandboxControllerTest {
     @Test
     void execute_returnsTheRunResult() throws Exception {
         when(this.service.runCode(any(), any())).thenReturn(
-            new SandboxExecutionResult("hi\n", "", 0, false));
+            new SandboxExecutionResult("hi\n", "", 0, false, false));
 
         this.mockMvc.perform(
                 post("/vader/core-server/python-sandbox/sandboxes/vader-sandbox-a/execute")

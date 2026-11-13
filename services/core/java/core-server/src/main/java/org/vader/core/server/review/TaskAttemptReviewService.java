@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
+import org.vader.common.model.vader.entity.WorkflowEntity;
+import org.vader.common.model.vader.entity.WorkflowStatus;
 import org.vader.core.server.events.EventPublishingFacade;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskAttemptSettledEvent;
@@ -64,6 +66,11 @@ public class TaskAttemptReviewService {
     @Transactional
     public void review(final String attemptId) {
         var attempt = this.taskAttemptRepository.findById(attemptId).orElseThrow();
+        // A cancelled workflow's leftover reviews are dropped: nobody is waiting on their verdict,
+        // and each would spend an LLM call.
+        if (workflowOf(attempt).getStatus() == WorkflowStatus.CANCELLED) {
+            return;
+        }
         var verdictType = this.verdictFor(attempt);
         if (needsReattemptDecision(verdictType)) {
             this.reattemptDecisionService.decideReattempt(attemptId);
@@ -102,8 +109,11 @@ public class TaskAttemptReviewService {
     }
 
     private void publishSettled(final TaskAttemptEntity attempt) {
-        var workflowId = attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow().getId();
         this.eventPublishingFacade.publish(
-            new TaskAttemptSettledEvent(workflowId, attempt.getId()));
+            new TaskAttemptSettledEvent(workflowOf(attempt).getId(), attempt.getId()));
+    }
+
+    private static WorkflowEntity workflowOf(final TaskAttemptEntity attempt) {
+        return attempt.getTask().owningTaskGraph().getTaskPlan().getWorkflow();
     }
 }

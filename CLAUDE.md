@@ -15,7 +15,8 @@ prompts and displays results.
 | `services/core/java/core-server` | Spring Boot service (orchestration, operators, storage, MCP) |
 | `services/core/ts/core-ui` | Angular frontend |
 | `services/core/rust/core-agent-harness` | Ephemeral k8s Job: executes exactly one task-graph subtask. All LLM calls are proxied through `core-server` — the harness never talks to an LLM directly. |
-| `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server executing agent-submitted code as a subprocess against a persistent per-pod workspace, reachable only from `core-server`. |
+| `services/eval/python/eval-runner` | Not part of the runtime: the benchmark cases EVAL mode measures prompts against (inputs, a checker per case, fixtures proving each checker), and the runner that scores a live EVAL release on them. Dockerized like the other Python module. |
+| `services/core/python/core-python-sandbox-server` | Runs inside a Python sandbox pod: a small FastAPI server running agent-submitted code in a persistent Python session (its own process, state kept between calls like notebook cells) against a persistent per-pod workspace, reachable only from `core-server`. |
 
 ### core-server package layout
 
@@ -45,6 +46,18 @@ packages, never the reverse.
 An LLM executor lives with the feature whose prompt it holds (e.g. `DecompositionLlmExecutor` in
 `orchestration`), not in `llm`.
 
+### Prompts
+
+All model-facing prompt text lives in StringTemplate files (`< >` delimiters) under
+`core-server/src/main/resources/prompts/<feature>/`, never in code -- including the task agent's
+prompts, which core-server renders and hands the harness with its assignment. Each template has a
+`PromptKey` declaring its variables and the `LlmRequestKind` it belongs to; `PromptTemplateRegistry`
+renders them, refuses to start if a template and its key disagree, and fingerprints each call
+kind so outcomes can be attributed to prompt versions. Express optional sections with
+`<if(var)>...<else>...<endif>` and a `null` variable; keep a multi-line conditional's `<if>` and
+`<endif>` each on a line of their own, since StringTemplate drops the newline after an inline
+`<endif>` that closes a multi-line block.
+
 ## Build and run
 
 Aside from the JVM and the Java server code, no build environment needs to be installed on the
@@ -68,15 +81,31 @@ npm start
 # Agent harness: build/test/lint directly with cargo (also wired into ./gradlew build)
 cd services/core/rust/core-agent-harness && cargo build
 
-# Local LLM: both KIND install scripts run this first -- Ollama in Docker on the host GPU (GPU
-# passthrough works there, not inside KIND nodes), pulling the configured model -- and point
-# Vader at it. Re-runnable on its own; uninstall-ollama.sh [--purge-models] removes it.
-tools/scripts/devs/install-ollama.sh
+# Local LLM: every local install script runs this first -- Ollama in Docker on the host GPU
+# (GPU passthrough works there, not inside KIND nodes), pulling the configured model -- and
+# points Vader at it. Re-runnable on its own; ollama-down.sh [--purge-models] removes it.
+tools/scripts/local/ollama-up.sh
 
 # Python sandbox exec server: lint/test run dockerized (also wired into ./gradlew build) --
 # no host Python install required
 ./gradlew :services:core:python:core-python-sandbox-server:build
 ```
+
+### Local cluster scripts
+
+`tools/scripts/local/` holds one script per goal, each a few lines over the shared helpers in
+`tools/scripts/lib/` (sourced, never run). All target the KIND cluster `vader-agent-0` and the
+local GPU Ollama, and run from any directory.
+
+| Script | Does |
+|---|---|
+| `setup-helm-repos.sh` | One-time: add the Helm repos the chart depends on |
+| `install-dev.sh` | Install or upgrade from the published images, dev configuration |
+| `install-dev-from-source.sh` | Build every image from the working tree, then install or upgrade with dev |
+| `install-eval.sh` | Build from the working tree and install a **fresh** EVAL release (any existing release, its database and leftover harness Jobs/sandboxes are wiped first) |
+| `eval-baseline.sh` | Install a fresh EVAL release, run every benchmark case once per seed, grade each run with its checker, and write per-run results and traces (plan, transcripts, verdicts) plus `summary.json` to `build/eval/`, beside copies of the prompts and of `eval.yaml` (resumable with `--skip-install --results DIR`). An experiment is an edit to `deploy/helm/configurations/eval/eval.yaml`, model included, then a baseline |
+| `uninstall.sh [--cluster]` | Remove the release and operator-created workloads; `--cluster` also deletes the KIND cluster |
+| `ollama-up.sh` / `ollama-down.sh` | Start or remove the local GPU Ollama |
 
 Checkstyle runs on every build. Config is in `common/java/checkstyle/`. The project follows
 Google Java Style with a 100-character line limit. The Google checks only warn, but one check
@@ -339,12 +368,14 @@ compress it further, not to add structure.
 
 | Property | Default | Effect |
 |---|---|---|
-| `vader.mode` | `PROD` | `DEV`, `PROD`, or `TEST`. Canned results are permitted **only** in `TEST` (the devops test pipeline): `vader.orchestrator.type=scripted` is refused -- by the Helm chart at render time and by core-server at startup -- in any other mode. In every mode an unreachable local LLM fails loudly with `OrchestratorUnavailableException`; nothing ever substitutes a canned result |
+| `vader.mode` | `PROD` | `DEV`, `PROD`, `TEST`, or `EVAL`. Canned results are permitted **only** in `TEST` (the devops test pipeline): `vader.orchestrator.type=scripted` is refused -- by the Helm chart at render time and by core-server at startup -- in any other mode. In every mode an unreachable local LLM fails loudly with `OrchestratorUnavailableException`; nothing ever substitutes a canned result. `EVAL` benchmarks the prompts against a baseline (`deploy/helm/configurations/eval`): core-server refuses to start in it unless sampling is pinned (a temperature and a seed), and `GET /vader/core-server/llm/configuration` reports the model, sampling and prompt fingerprints a result was produced under |
 | `vader.orchestrator.type` | `local` (Helm) | `local` (Ollama) or `scripted` (`ScriptedChatModelStub` stands in for the LLM: every real prompt, queue and parser runs, but replies are canned; requires `vader.mode=TEST`) |
 | `vader.orchestrator.local.model` | — | Ollama model name |
-| `spring.ai.ollama.base-url` (Helm: `vader.orchestrator.local.externalBaseUrl`) | in-cluster `http://vader-ollama:11434` | Set the Helm value to use an Ollama outside the cluster (e.g. `install-ollama.sh`'s, on the host GPU); the chart then deploys no Ollama of its own. Both dev KIND install scripts set it to their local Ollama |
+| `spring.ai.ollama.base-url` (Helm: `vader.orchestrator.local.externalBaseUrl`) | in-cluster `http://vader-ollama:11434` | Set the Helm value to use an Ollama outside the cluster (e.g. `ollama-up.sh`'s, on the host GPU); the chart then deploys no Ollama of its own. Every local install script sets it to the local Ollama |
 | `spring.ai.ollama.chat.options.num-predict` (Helm: `vader.orchestrator.local.maxOutputTokens`) | `2048` (Helm) | Hard cap on tokens generated per response, for every Ollama call. Stops a small model's runaway repetition loop from generating forever and holding Ollama's single slot; tune per model |
-| `spring.ai.ollama.chat.options.num-ctx` (Helm: `vader.orchestrator.local.contextTokens`) | `16384` (Helm) | Ollama's context window per call. The prompt budget is this minus `num-predict`; a longer prompt is silently cut from the front, so it must comfortably exceed `num-predict` (the chart refuses to render otherwise) |
+| `spring.ai.ollama.chat.options.num-ctx` (Helm: `vader.orchestrator.local.contextTokens`) | `16384` (Helm) | Ollama's context window per call. The prompt budget is this minus `num-predict`. Over it, Ollama silently drops the oldest messages, keeping every system message and the latest one -- so a task agent loses its opening task message first. Each agent turn's prompt/completion tokens and characters sent are recorded on its transcript, and core-server warns when a turn nears the budget. Must comfortably exceed `num-predict` (the chart refuses to render otherwise) |
+| `spring.ai.ollama.chat.options.temperature` (Helm: `vader.orchestrator.local.temperature`) | `0.7` (Helm) | Sampling temperature for every Ollama call, the same in every mode so a benchmark measures prompts as they run. Above 0, a retry can take a different path and each benchmark seed is a genuine sample. Never compare runs made at different temperatures |
+| `spring.ai.ollama.chat.options.seed` (Helm: `vader.orchestrator.local.seed`) | `42` (Helm) | Sampling seed for every Ollama call, rendered only in `EVAL` mode, where it is required: it makes each benchmark run a repeatable sample, one per seed |
 | `vader.orchestrator.local.request-timeout-seconds` | `300` | Read timeout on every Ollama HTTP call (decomposition, inference turns, evaluation, reattempt decisions, synthesis) -- the JDK HTTP client Spring auto-detects has none of its own, so an unbounded call would otherwise wedge the single-worker `LlmRequestQueue` forever |
 | `vader.orchestrator.max-task-plan-revisions` | `1` | How many times a freshly-decomposed `TaskPlan` may be sent back for revision (a structural problem -- dangling dependency, dependency cycle -- or the refinement critique flags it) before the last plan is used anyway rather than blocking the prompt indefinitely |
 | `vader.task-decomposition.max-depth` | `1` | Lets the evaluator split an attempt's real-but-unfinished work into runtime subtasks (the task succeeds once they all do) instead of failing it. A task at this depth or deeper cannot decompose: `1` means only the planner's own tasks can, never their subtasks; `0` turns decomposition off, making every such verdict a plain failure |
@@ -371,7 +402,7 @@ compress it further, not to add structure.
 | `vader.agent-harness.max-tokens` | `200000` | Token cap handed to each harness, enforced server-side |
 | `vader.agent-harness.deadline-seconds` | `600` | Wall-clock deadline handed to each harness; also the Job's `activeDeadlineSeconds` |
 | `vader.agent-harness.max-attempts-per-task` | `3` | Hard ceiling on attempts per task, checked by `OrchestratorAgentService.decideReattempt` before it even consults the reattempt-decision strategy |
-| `vader.inbox.task-attempt-review.llm-retry-interval-ms` | `30000` | How often a review that couldn't reach the LLM (unreachable, or the LLM queue timed out) is retried. It retries for as long as the outage lasts; meanwhile its workflow reads `AWAITING_LLM`, returning to `RUNNING` once the LLM answers. Any other review failure is not retried |
+| `vader.inbox.task-attempt-review.llm-retry-interval-ms` | `30000` | How often a review that couldn't reach the LLM (unreachable, or the LLM queue timed out) is retried. It retries for as long as the outage lasts; meanwhile its workflow reads `AWAITING_LLM`, returning to `RUNNING` once the LLM answers. Any other review failure (e.g. an unparseable reply) is not retried: the attempt counts as failed, unreviewed, and is re-attempted while attempts remain |
 | `vader.agent-harness.reaper.grace-period-seconds` | `300` | Extra silence allowed past `deadline-seconds` (scheduling/image-pull + final round trip) before an attempt is reaped as `TIMED_OUT` |
 | `vader.llm.request-queue.stall-timeout-seconds` | `60` | The real patience control: a caller gives up once no request on the queue, anywhere, by any replica, has been claimed for this long. A deep-but-healthy queue does not trip this -- only a genuinely stuck backend does |
 | `vader.llm.request-queue.max-wait-seconds` | `1800` | Absolute backstop regardless of stall detection, so a queue that never stalls but also never keeps up cannot block a caller forever |

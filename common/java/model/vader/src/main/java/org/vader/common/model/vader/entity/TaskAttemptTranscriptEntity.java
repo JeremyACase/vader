@@ -51,6 +51,23 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
      */
     private String finishReason;
 
+    /**
+     * Prompt tokens the provider reports evaluating this turn. Ollama may leave out a prefix it
+     * already held in its cache, so this can understate the prompt's size; see
+     * {@code promptCharacters}. {@code null} for turns recorded before this was captured.
+     */
+    private Long promptTokens;
+
+    /** Tokens the model generated this turn; {@code null} for turns recorded before this. */
+    private Long completionTokens;
+
+    /**
+     * Characters sent this turn -- the whole conversation plus the tool definitions -- measured on
+     * what was sent, so it never understates the prompt; {@code null} for turns recorded before
+     * this was captured.
+     */
+    private Long promptCharacters;
+
     @Override
     public String getModelType() {
         return "TaskAttemptTranscript";
@@ -110,5 +127,29 @@ public class TaskAttemptTranscriptEntity extends AbstractModelEntity {
 
     public void setFinishReason(String finishReason) {
         this.finishReason = finishReason;
+    }
+
+    public Long getPromptTokens() {
+        return this.promptTokens;
+    }
+
+    public void setPromptTokens(Long promptTokens) {
+        this.promptTokens = promptTokens;
+    }
+
+    public Long getCompletionTokens() {
+        return this.completionTokens;
+    }
+
+    public void setCompletionTokens(Long completionTokens) {
+        this.completionTokens = completionTokens;
+    }
+
+    public Long getPromptCharacters() {
+        return this.promptCharacters;
+    }
+
+    public void setPromptCharacters(Long promptCharacters) {
+        this.promptCharacters = promptCharacters;
     }
 }

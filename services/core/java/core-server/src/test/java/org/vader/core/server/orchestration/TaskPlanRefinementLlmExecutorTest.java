@@ -21,6 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.dto.Task;
 import org.vader.common.model.vader.dto.TaskGraph;
 import org.vader.common.model.vader.dto.TaskPlan;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementRequest;
 import org.vader.core.server.orchestration.model.TaskPlanRefinementVerdict;
 
@@ -42,6 +43,8 @@ class TaskPlanRefinementLlmExecutorTest {
     private static TaskPlanRefinementLlmExecutor executor(final ChatClient.Builder builder) {
         var executor = new TaskPlanRefinementLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
+        ReflectionTestUtils.setField(
+            executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
         return executor;
     }
 

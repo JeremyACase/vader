@@ -5,10 +5,12 @@ use crate::conversation::{ConversationMessage, InferenceTurn, ToolCall};
 use crate::error::HarnessError;
 use crate::harness_outcome::HarnessOutcome;
 use crate::inference_gateway::InferenceGateway;
-use crate::prompts::{self, EMPTY_REPLY_NUDGE, TASK_INSTRUCTIONS};
+use crate::prompts::AssignmentNudges;
 use crate::stall_detector::StallDetector;
 use crate::tool_executor::ToolExecutor;
-use crate::unfinished_answer_guard::UnfinishedAnswerGuard;
+use crate::unfinished_answer_guard::{
+    unrun_python_code, UnfinishedAnswerGuard, RUN_PYTHON_CODE_TOOL,
+};
 
 /// How many times one run may be sent back for an answer that looks unfinished (see
 /// [`UnfinishedAnswerGuard`]). Two covers the common "propose a fix, nudge, run it, hit another
@@ -51,6 +53,7 @@ pub struct AgentHarnessRunner<C: ControlPlane, G: InferenceGateway, T: ToolExecu
     budget: HarnessBudget,
     stall_detector: StallDetector,
     unfinished_answer_guard: UnfinishedAnswerGuard,
+    nudges: AssignmentNudges,
 }
 
 impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C, G, T> {
@@ -60,6 +63,7 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         tool_executor: T,
         budget: HarnessBudget,
         stall_detector: StallDetector,
+        nudges: AssignmentNudges,
     ) -> Self {
         Self {
             control_plane,
@@ -68,6 +72,7 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             budget,
             stall_detector,
             unfinished_answer_guard: UnfinishedAnswerGuard::new(MAX_UNFINISHED_ANSWER_NUDGES),
+            nudges,
         }
     }
 
@@ -176,8 +181,8 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         self.heartbeat(assignment_id).await;
     }
 
-    /// Decides what a completed turn means: unusable if cut off, a final answer (or a nudge) if
-    /// it called no tools, otherwise a tool exchange to fold into the conversation.
+    /// Decides what a completed turn means: unusable if cut off, a reply to act on if it called no
+    /// tools, otherwise a tool exchange to fold into the conversation.
     async fn respond_to_turn(
         &mut self,
         assignment_id: AssignmentId,
@@ -188,7 +193,8 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
             log::warn!("assignment {assignment_id:?}: reply was cut off at the output token cap");
             Ok(TurnOutcome::CutOff)
         } else if turn.tool_calls.is_empty() {
-            Ok(self.final_answer_or_nudge(assignment_id, messages, turn.content))
+            self.respond_to_reply(assignment_id, messages, turn.content)
+                .await
         } else {
             self.append_tool_exchange(assignment_id, messages, turn.tool_calls)
                 .await
@@ -196,8 +202,50 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
         }
     }
 
+    /// A turn with no tool calls. Python the reply carries but never ran is run on the model's
+    /// behalf (see [`unrun_python_code`]) and the run continues; any other reply is the final
+    /// answer, or gets a nudge.
+    async fn respond_to_reply(
+        &mut self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+        content: Option<String>,
+    ) -> Result<TurnOutcome, HarnessError> {
+        let unrun_code = content
+            .as_deref()
+            .and_then(|answer| unrun_python_code(answer, messages));
+        match (content, unrun_code) {
+            (Some(answer), Some(code)) => self
+                .run_code_from_reply(assignment_id, messages, answer, code)
+                .await
+                .map(|()| TurnOutcome::Continuing),
+            (content, _) => Ok(self.final_answer_or_nudge(assignment_id, messages, content)),
+        }
+    }
+
+    /// Runs the code as the `run_python_code` call the model should have made, then folds the
+    /// reply and the call's result into the conversation as though it had made it -- so the next
+    /// turn sees the output, and the call is audited like any other.
+    async fn run_code_from_reply(
+        &self,
+        assignment_id: AssignmentId,
+        messages: &mut Vec<ConversationMessage>,
+        answer: String,
+        code: String,
+    ) -> Result<(), HarnessError> {
+        log::warn!("assignment {assignment_id:?}: reply carries Python it never ran, running it");
+        let tool_call = reply_code_call(messages.len(), &code);
+        let tool_result = self.invoke_tool_call(assignment_id, &tool_call).await?;
+        messages.push(ConversationMessage::assistant_text_with_tool_calls(
+            answer,
+            vec![tool_call],
+        ));
+        messages.push(tool_result);
+        Ok(())
+    }
+
     /// A turn with no tool calls is the model's final answer -- unless it is blank (see
-    /// [`EMPTY_REPLY_NUDGE`]), in which case the model is nudged to continue instead.
+    /// [`AssignmentNudges::empty_reply`]), in which case the model is nudged to continue instead.
     fn final_answer_or_nudge(
         &mut self,
         assignment_id: AssignmentId,
@@ -206,7 +254,7 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
     ) -> TurnOutcome {
         match content.filter(|content| !content.trim().is_empty()) {
             Some(answer) => self.finished_or_nudged(assignment_id, messages, answer),
-            None => nudge_past_empty_reply(assignment_id, messages),
+            None => nudge_past_empty_reply(assignment_id, messages, &self.nudges.empty_reply),
         }
     }
 
@@ -221,7 +269,10 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
     ) -> TurnOutcome {
         match self.unfinished_answer_guard.review(&answer, messages) {
             None => finished(assignment_id, answer),
-            Some(nudge) => nudge_past_unfinished_answer(assignment_id, messages, answer, nudge),
+            Some(unfinished) => {
+                let nudge = unfinished.nudge(&self.nudges);
+                nudge_past_unfinished_answer(assignment_id, messages, answer, nudge)
+            }
         }
     }
 
@@ -309,11 +360,8 @@ impl<C: ControlPlane, G: InferenceGateway, T: ToolExecutor> AgentHarnessRunner<C
 /// Seeds the conversation: the loop protocol, then the task with its background.
 fn opening_messages(assignment: &Assignment) -> Vec<ConversationMessage> {
     vec![
-        ConversationMessage::system(TASK_INSTRUCTIONS),
-        ConversationMessage::user(prompts::task_message(
-            &assignment.context,
-            &assignment.objective,
-        )),
+        ConversationMessage::system(assignment.prompts.system.as_str()),
+        ConversationMessage::user(assignment.prompts.task.as_str()),
     ]
 }
 
@@ -321,6 +369,16 @@ fn failed_turn(assignment_id: AssignmentId, error: HarnessError) -> HarnessOutco
     log::error!("assignment {assignment_id:?}: turn failed: {error}");
     HarnessOutcome::Failed {
         reason: error.to_string(),
+    }
+}
+
+/// The `run_python_code` call made for code found in a reply. Its id is unique within the run
+/// because the conversation only ever grows.
+fn reply_code_call(message_count: usize, code: &str) -> ToolCall {
+    ToolCall {
+        id: format!("reply-code-{message_count}"),
+        name: RUN_PYTHON_CODE_TOOL.to_string(),
+        arguments_json: serde_json::json!({ "code": code }).to_string(),
     }
 }
 
@@ -332,9 +390,10 @@ fn finished(assignment_id: AssignmentId, answer: String) -> TurnOutcome {
 fn nudge_past_empty_reply(
     assignment_id: AssignmentId,
     messages: &mut Vec<ConversationMessage>,
+    nudge: &str,
 ) -> TurnOutcome {
     log::warn!("assignment {assignment_id:?}: model returned an empty reply, nudging it");
-    messages.push(ConversationMessage::user(EMPTY_REPLY_NUDGE));
+    messages.push(ConversationMessage::user(nudge));
     TurnOutcome::Continuing
 }
 
@@ -356,7 +415,7 @@ mod tests {
     use crate::assignment::TaskId;
     use crate::conversation::ConversationRole;
     use crate::harness_outcome::OUTPUT_CAP_FAILURE_REASON;
-    use crate::prompts::UNEXECUTED_CODE_NUDGE;
+    use crate::prompts::AssignmentPrompts;
     use crate::tool_executor::ToolResult;
     use std::cell::RefCell;
     use std::collections::VecDeque;
@@ -366,12 +425,25 @@ mod tests {
         AssignmentId::parse("00000000-0000-0000-0000-000000000001").unwrap()
     }
 
+    fn nudges() -> AssignmentNudges {
+        AssignmentNudges {
+            empty_reply: "Your last reply was empty.".to_string(),
+            unexecuted_code: "Run your code first.".to_string(),
+            unresolved_error: "Fix the failed call.".to_string(),
+        }
+    }
+
     fn assignment() -> Assignment {
         Assignment {
             task_id: TaskId::parse("00000000-0000-0000-0000-000000000002").unwrap(),
             assignment_id: assignment_id(),
-            objective: "summarize the uploaded spreadsheet".to_string(),
-            context: "Original request from the user:\nAnalyze the attached file.".to_string(),
+            prompts: AssignmentPrompts {
+                system: "You are an autonomous agent.".to_string(),
+                task: "Original request from the user:\nAnalyze the attached file.\n\n\
+                       Your task: summarize the uploaded spreadsheet"
+                    .to_string(),
+                nudges: nudges(),
+            },
             max_turns: 20,
             max_tokens: 200_000,
             deadline_seconds: 600,
@@ -526,6 +598,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -551,6 +624,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -566,7 +640,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_seeds_the_first_turn_with_both_context_and_objective() {
+    async fn run_seeds_the_conversation_with_the_assignments_own_prompts() {
         let control_plane = StubControlPlane::new();
         let inference_gateway = ScriptedInferenceGateway::succeeding(vec![final_turn("ok")]);
         let tool_executor = StubToolExecutor::new();
@@ -576,18 +650,24 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         runner.run(assignment()).await.unwrap();
 
         let first_call_messages = &runner.inference_gateway.messages_seen.borrow()[0];
-        let user_message = first_call_messages
+        let prompts = assignment().prompts;
+        let opening: Vec<_> = first_call_messages
             .iter()
-            .find(|message| message.role == ConversationRole::User)
-            .expect("a user message");
-        let content = user_message.content.as_deref().unwrap_or_default();
-        assert!(content.contains(&assignment().context));
-        assert!(content.contains(&assignment().objective));
+            .map(|message| (message.role, message.content.as_deref()))
+            .collect();
+        assert_eq!(
+            opening,
+            vec![
+                (ConversationRole::System, Some(prompts.system.as_str())),
+                (ConversationRole::User, Some(prompts.task.as_str())),
+            ]
+        );
     }
 
     #[tokio::test]
@@ -604,6 +684,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -650,6 +731,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -663,7 +745,10 @@ mod tests {
         let second_call_messages = &runner.inference_gateway.messages_seen.borrow()[1];
         let last_message = second_call_messages.last().expect("a message");
         assert_eq!(last_message.role, ConversationRole::User);
-        assert_eq!(last_message.content.as_deref(), Some(EMPTY_REPLY_NUDGE));
+        assert_eq!(
+            last_message.content.as_deref(),
+            Some(nudges().empty_reply.as_str())
+        );
     }
 
     #[tokio::test]
@@ -678,6 +763,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -686,13 +772,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_nudges_past_an_answer_with_unrun_code_and_finishes_after_running_it() {
+    async fn run_executes_python_a_reply_never_ran_and_continues_the_run() {
         let control_plane = StubControlPlane::new();
-        let proposal = "Here's the fix:\n```python\nprint(df.describe())\n```\nLet's proceed.";
-        let code_call = "{\"code\":\"print(df.describe())\"}";
+        let proposal = "Let's run it again.
+```python
+print(df.describe())
+```";
         let inference_gateway = ScriptedInferenceGateway::succeeding(vec![
             final_turn(proposal),
-            tool_call_turn("call-1", "run_python_code", code_call),
             final_turn("The mean agility is 0.4."),
         ]);
         let tool_executor = StubToolExecutor::new();
@@ -702,6 +789,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -712,19 +800,30 @@ mod tests {
                 output: "The mean agility is 0.4.".to_string()
             }
         );
+        let calls = runner.tool_executor.calls.borrow();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "run_python_code");
+        assert_eq!(
+            calls[0].arguments_json,
+            "{\"code\":\"print(df.describe())\\n\"}"
+        );
         let second_call_messages = &runner.inference_gateway.messages_seen.borrow()[1];
         let replayed = &second_call_messages[second_call_messages.len() - 2];
         assert_eq!(replayed.role, ConversationRole::Assistant);
         assert_eq!(replayed.content.as_deref(), Some(proposal));
-        let nudge = second_call_messages.last().expect("a message");
-        assert_eq!(nudge.role, ConversationRole::User);
-        assert_eq!(nudge.content.as_deref(), Some(UNEXECUTED_CODE_NUDGE));
+        assert_eq!(replayed.tool_calls, calls.clone());
+        let result = second_call_messages.last().expect("a message");
+        assert_eq!(result.role, ConversationRole::Tool);
+        assert_eq!(result.tool_call_id.as_deref(), Some(calls[0].id.as_str()));
     }
 
     #[tokio::test]
-    async fn run_accepts_an_unfinished_looking_answer_once_the_model_repeats_it() {
+    async fn run_accepts_a_reply_repeating_python_it_already_ran() {
         let control_plane = StubControlPlane::new();
-        let deliverable = "```python\ndef add(a, b):\n    return a + b\n```";
+        let deliverable = "```python
+def add(a, b):
+    return a + b
+```";
         let inference_gateway = ScriptedInferenceGateway::succeeding(vec![
             final_turn(deliverable),
             final_turn(deliverable),
@@ -736,6 +835,69 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
+        );
+
+        let outcome = runner.run(assignment()).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            HarnessOutcome::Succeeded {
+                output: deliverable.to_string()
+            }
+        );
+        assert_eq!(runner.tool_executor.calls.borrow().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn run_nudges_past_an_answer_with_unrun_code_it_cannot_run() {
+        let control_plane = StubControlPlane::new();
+        let proposal = "Run this:
+```bash
+ls -la
+```";
+        let inference_gateway = ScriptedInferenceGateway::succeeding(vec![
+            final_turn(proposal),
+            final_turn("There are 3 files."),
+        ]);
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+            nudges(),
+        );
+
+        runner.run(assignment()).await.unwrap();
+
+        assert!(runner.tool_executor.calls.borrow().is_empty());
+        let second_call_messages = &runner.inference_gateway.messages_seen.borrow()[1];
+        let nudge = second_call_messages.last().expect("a message");
+        assert_eq!(nudge.role, ConversationRole::User);
+        assert_eq!(
+            nudge.content.as_deref(),
+            Some(nudges().unexecuted_code.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn run_accepts_an_unfinished_looking_answer_once_the_model_repeats_it() {
+        let control_plane = StubControlPlane::new();
+        let deliverable = "```javascript\nconst add = (a, b) => a + b;\n```";
+        let inference_gateway = ScriptedInferenceGateway::succeeding(vec![
+            final_turn(deliverable),
+            final_turn(deliverable),
+        ]);
+        let tool_executor = StubToolExecutor::new();
+        let mut runner = AgentHarnessRunner::new(
+            control_plane,
+            inference_gateway,
+            tool_executor,
+            budget(),
+            StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -764,6 +926,7 @@ mod tests {
             tool_executor,
             HarnessBudget::new(2, 200_000, Instant::now() + Duration::from_secs(600)),
             StallDetector::new(10),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -786,6 +949,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();
@@ -806,6 +970,7 @@ mod tests {
             tool_executor,
             budget(),
             StallDetector::new(3),
+            nudges(),
         );
 
         let outcome = runner.run(assignment()).await.unwrap();

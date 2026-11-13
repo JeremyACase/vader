@@ -10,8 +10,8 @@ import java.util.stream.Stream;
  * <p>An outage is either the LLM being unreachable ({@link OrchestratorUnavailableException}, which
  * {@link LlmRequestQueue} throws for an unreachable backend) or a caller giving up on the LLM
  * queue ({@link LlmRequestTimeoutException}). A request the LLM did process but that failed --
- * e.g. output that could not be parsed -- is deliberately not an outage: at temperature 0 the
- * same request would fail the same way on every retry, forever.</p>
+ * e.g. output that could not be parsed -- is deliberately not an outage: outages are retried for
+ * as long as they last, and a request the model keeps getting wrong would be retried forever.</p>
  */
 public final class LlmOutageClassifier {
 

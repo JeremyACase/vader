@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.vader.common.model.vader.entity.ClientPromptEntity;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
@@ -65,6 +66,8 @@ class TaskAttemptSandboxServiceTest {
         this.sandboxName = TaskAttemptSandboxNaming.resolve(this.attemptId);
         this.clientPrompt = new ClientPromptEntity();
         this.service.init();
+        ReflectionTestUtils.setField(this.service, "taskWorkspaceFileResolver",
+            TaskWorkspaceFileResolverObjectMother.withoutUpstreamFiles(this.taskAttemptRepository));
         // Lenient: delete() never looks the attempt up.
         lenient().when(this.taskAttemptRepository.findById(this.attemptId))
             .thenReturn(Optional.of(attemptFor(this.attemptId, this.clientPrompt)));
@@ -99,7 +102,7 @@ class TaskAttemptSandboxServiceTest {
 
     @Test
     void runCode_provisionsTheAttemptsOwnSandboxThenRunsInIt() {
-        var expected = new SandboxExecutionResult("2\n", "", 0, false);
+        var expected = new SandboxExecutionResult("2\n", "", 0, false, false);
         when(this.sandboxService.ensureReady(this.sandboxName))
             .thenReturn(sandboxIn(this.sandboxName, "Running"));
         when(this.sandboxService.runCode(

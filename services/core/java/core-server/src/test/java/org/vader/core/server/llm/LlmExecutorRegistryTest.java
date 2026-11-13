@@ -24,6 +24,21 @@ import tools.jackson.databind.ObjectMapper;
 
 class LlmExecutorRegistryTest {
 
+    /** An executor whose request type is generic, as the queue's decoding must handle. */
+    private static final class ConversationListExecutorStub
+        implements InterfaceLlmExecutor<List<ConversationMessage>, InferenceTurn> {
+
+        @Override
+        public LlmRequestKind kind() {
+            return LlmRequestKind.INFERENCE_TURN;
+        }
+
+        @Override
+        public InferenceTurn execute(final List<ConversationMessage> request) {
+            return null;
+        }
+    }
+
     private final EvaluationLlmExecutor evaluationExecutor = new EvaluationLlmExecutor();
     private final InferenceTurnLlmExecutor inferenceTurnExecutor = new InferenceTurnLlmExecutor();
     private LlmExecutorRegistry registry;
@@ -77,7 +92,7 @@ class LlmExecutorRegistryTest {
     @Test
     void requestTypeOf_keepsGenericTypeArgumentsForDecoding() {
         var type = new ObjectMapper().constructType(
-            LlmExecutorRegistry.requestTypeOf(this.inferenceTurnExecutor));
+            LlmExecutorRegistry.requestTypeOf(new ConversationListExecutorStub()));
 
         assertThat(type.getRawClass()).isEqualTo(List.class);
         assertThat(type.getContentType().getRawClass()).isEqualTo(ConversationMessage.class);

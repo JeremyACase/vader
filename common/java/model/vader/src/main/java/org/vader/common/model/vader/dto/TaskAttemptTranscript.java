@@ -39,6 +39,12 @@ public class TaskAttemptTranscript extends AbstractModel {
      */
     private String finishReason;
 
+    private Long promptTokens;
+
+    private Long completionTokens;
+
+    private Long promptCharacters;
+
     @Override
     public String getModelType() {
         return "TaskAttemptTranscript";
@@ -98,5 +104,29 @@ public class TaskAttemptTranscript extends AbstractModel {
 
     public void setFinishReason(String finishReason) {
         this.finishReason = finishReason;
+    }
+
+    public Long getPromptTokens() {
+        return this.promptTokens;
+    }
+
+    public void setPromptTokens(Long promptTokens) {
+        this.promptTokens = promptTokens;
+    }
+
+    public Long getCompletionTokens() {
+        return this.completionTokens;
+    }
+
+    public void setCompletionTokens(Long completionTokens) {
+        this.completionTokens = completionTokens;
+    }
+
+    public Long getPromptCharacters() {
+        return this.promptCharacters;
+    }
+
+    public void setPromptCharacters(Long promptCharacters) {
+        this.promptCharacters = promptCharacters;
     }
 }

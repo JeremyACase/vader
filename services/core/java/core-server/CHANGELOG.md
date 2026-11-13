@@ -3,6 +3,85 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0]
+### Changed
+- A task agent's `run_python_code` calls now share one Python session, and its system prompt
+  and tool description say so: the agent is told to build on what earlier calls defined rather
+  than resubmitting a whole program each call, whose growing transcript was filling the context
+  window long before the turn cap. Sandbox results carry the new `sessionReset` flag through, so
+  the agent learns when a killed or crashed session has lost its definitions.
+- Every prompt Vader sends a model now lives in a StringTemplate file under `prompts/` instead
+  of in code, including the task agent's own system prompt and nudges, which the assignment now
+  delivers to the harness (replacing its `context` field with `prompts`). Templates are checked
+  against the variables their code supplies at startup, and each LLM call kind gets a logged
+  fingerprint of its templates, the groundwork for attributing outcomes to prompt versions. The
+  wording itself is unchanged.
+- A reattempt is now told what the reviewer saw go wrong in each earlier attempt, as a report to
+  check rather than instructions to follow. The reviewer judges each attempt on its own evidence
+  alone and reports what went wrong without prescribing a fix: shown its earlier verdicts, it
+  tended to repeat them instead of reading the new attempt, and steered retries with them.
+- Runtime decomposition no longer turns one failed step into a failed workflow. Steps that
+  repeat a task already in the plan are dropped before any subtask is created, and a task whose
+  subtask fails is attempted again from scratch (with the subtask's reason) while it has
+  attempts left; the subtasks of a superseded attempt no longer count toward the workflow's
+  outcome or appear in the plan agents see.
+- Plans may now be a single task, and must not contain steps that leave nothing behind (such as
+  only reading a file, which a fresh sandbox loses); the plan critique no longer rejects
+  one-task plans. The reviewer no longer fails an attempt for doing more than its own task and
+  is shown the files the attempt actually saved, and the final summary may no longer claim a
+  file that was never saved.
+- The reviewer now checks a saved file's values against the rules the user's request states,
+  taken in the request's own words, by working a few rows out from each rule and comparing,
+  rather than accepting the agent's account or values that merely look plausible.
+- The planner is no longer offered the database query tools. It read them as the agents'
+  toolset and planned a simple file conversion as impossible, since none of them handle files;
+  it now plans only from what its prompt says the agents can do.
+- A review that fails for any reason but an LLM outage, such as a verdict or reattempt decision
+  the model returned as malformed JSON, no longer leaves its workflow running forever. The
+  attempt counts as failed, unreviewed, and its task is re-attempted while attempts remain.
+- Files now carry over between tasks: everything a task's prerequisites saved with
+  `upload_object` (and, for a runtime subtask, what the attempt it continues saved) is staged in
+  its sandbox beside the request's own files and listed in its context, newest version of each
+  name first. Before, each sandbox started with only the request's files, so a plan split into
+  steps could never hand one step's output to the next. The planner, reviewer and agent prompts
+  say so, and the reviewer no longer proposes steps that only read or load data.
+- A retry now samples afresh in EVAL mode: each attempt offsets the pinned seed by its number
+  (the first keeps it), so a retry no longer replays the attempt before it, while a benchmark run
+  stays repeatable. The agent is also told that every `run_python_code` call is a fresh Python
+  process in which only files persist, and that `upload_object` is a tool, not a Python function.
+- When an attempt succeeds, core-server saves every file its code left in the sandbox that is not
+  already stored unchanged, before the sandbox is deleted. A model that does the work but never
+  calls `upload_object` -- the commonest way a benchmark run failed to deliver -- still delivers
+  it, to the reviewer, to the tasks that build on it and to the user. Needs
+  `core-python-sandbox-server` 0.5.0 for its workspace listing.
+- The reviewer now sees the opening lines of every text file an attempt saved, not only its
+  name, so it can judge what a file holds against the request rather than only that it exists.
+  Any text previews, whatever its extension or recorded type; binary files are listed by type
+  and size only, and previews share a fixed budget so many files cannot crowd out the review.
+  The reviewer also holds a plan's last task to delivering every file the request asks for,
+  under the name the request gives it, so an off-target plan can no longer end in a workflow
+  that succeeds without delivering.
+- A single-file transform -- one attached file in, one deliverable file out -- now always runs
+  as one task. The planner names the files it will deliver, and a plan that splits such a job
+  anyway is merged into one task carrying every step in order. Small planners split these jobs
+  despite being told not to, and each split added a hand-off that could fail the whole workflow.
+- A reasoning model's thinking can now be switched on, off or to a level with
+  `vader.orchestrator.local.think`; left empty, nothing is sent, as before. The EVAL
+  configuration now benchmarks qwen3.5:9b with thinking off.
+### Added
+- A new `EVAL` mode for benchmarking the system's prompts against a baseline: it runs a real
+  local model and refuses to start unless sampling is pinned (an explicit temperature and a
+  fixed seed), so each run is a repeatable sample. Every recorded LLM call now carries its
+  prompt fingerprint and model, and `GET /vader/core-server/llm/configuration` reports the model, its sampling
+  options and every fingerprint in effect, for a benchmark runner to record with each result,
+  and `GET /vader/core-server/llm/prompts` returns the template texts behind each fingerprint.
+  Each agent turn's transcript now records its prompt and completion tokens and the characters
+  it sent, and a warning is logged when a turn nears the context window, past which Ollama
+  silently drops the agent's oldest messages -- its task message first.
+- `POST /vader/core-server/workflow/{id}/cancel` stops a workflow still in progress: it becomes
+  `CANCELLED`, its open attempts are failed (removing their harness Jobs and sandboxes), and no
+  further attempt is dispatched or reviewed, so an abandoned workflow stops spending LLM time.
+
 ## [0.34.0]
 ### Security
 - Moved to Spring Boot 4.1 and Spring AI 2.0 (with Jackson 3), which clears the known CVEs in

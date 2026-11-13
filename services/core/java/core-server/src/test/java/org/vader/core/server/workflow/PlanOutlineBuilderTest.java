@@ -1,16 +1,23 @@
 package org.vader.core.server.workflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
 import org.vader.common.model.vader.entity.TaskGraphEntity;
 import org.vader.core.server.workflow.model.PlanStep;
 
 class PlanOutlineBuilderTest {
 
-    private final PlanOutlineBuilder builder = new PlanOutlineBuilder();
+    private final TaskAttemptRepository taskAttemptRepository = mock(TaskAttemptRepository.class);
+
+    private final PlanOutlineBuilder builder =
+        PlanOutlineBuilderObjectMother.over(this.taskAttemptRepository);
 
     private static TaskEntity task(final String title, final TaskEntity... dependsOn) {
         var task = new TaskEntity();
@@ -56,6 +63,32 @@ class PlanOutlineBuilderTest {
             step("Summarize", 1, true),
             step("Analyze", 0, false),
             step("Assess", 0, false));
+    }
+
+    @Test
+    void build_leavesOutSubtasksOfSupersededAttempts() {
+        var parent = task("Convert");
+        parent.setId("p");
+        var first = attempt("pa1");
+        var second = attempt("pa2");
+        var stale = task("Load");
+        stale.setSpawnedByAttempt(first);
+        var live = task("Build months");
+        live.setSpawnedByAttempt(second);
+        addSubtasks(parent, stale, live);
+        addRoots(new TaskGraphEntity(), parent);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("p"))
+            .thenReturn(Optional.of(second));
+
+        assertThat(this.builder.build(parent)).containsExactly(
+            step("Convert", 0, true),
+            step("Build months", 1, false));
+    }
+
+    private static TaskAttemptEntity attempt(final String id) {
+        var attempt = new TaskAttemptEntity();
+        attempt.setId(id);
+        return attempt;
     }
 
     @Test

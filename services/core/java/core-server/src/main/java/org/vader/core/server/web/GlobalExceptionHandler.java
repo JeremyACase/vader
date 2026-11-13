@@ -21,6 +21,7 @@ import org.vader.core.server.storage.FileStorageException;
 import org.vader.core.server.taskagent.AssignmentAlreadyTerminalException;
 import org.vader.core.server.taskagent.UnknownAssignmentException;
 import org.vader.core.server.taskagent.UnknownToolException;
+import org.vader.core.server.workflow.UnknownWorkflowException;
 
 /**
  * The one place every REST exception is mapped to a response, all in the single
@@ -32,6 +33,20 @@ import org.vader.core.server.taskagent.UnknownToolException;
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /**
+     * Maps an unknown workflow id to a 404.
+     *
+     * @param exception the lookup failure
+     * @param request the originating request
+     * @return a 404 response
+     */
+    @ExceptionHandler(UnknownWorkflowException.class)
+    public ResponseEntity<ErrorResponse> handleUnknownWorkflow(
+        final UnknownWorkflowException exception, final HttpServletRequest request) {
+        logger.warn("Rejected {}: {}", request.getRequestURI(), exception.getMessage());
+        return status(HttpStatus.NOT_FOUND, "unknown_workflow", exception.getMessage());
+    }
 
     /**
      * Maps an unknown assignment id to a 404.

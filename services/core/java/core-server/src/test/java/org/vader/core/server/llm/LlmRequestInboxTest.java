@@ -27,13 +27,17 @@ import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
+import org.vader.core.server.taskagent.model.TurnUsage;
 import tools.jackson.databind.ObjectMapper;
 
 class LlmRequestInboxTest {
 
+    private static final TurnUsage USAGE = new TurnUsage(3L, 2L, 40L);
+
     private static final EvaluationRequest EVALUATION_REQUEST = new EvaluationRequest(
         "user request", "objective", List.of(), "title", "description",
-        TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
+        TaskAttemptStatus.SUCCEEDED, "result", null, null, List.of());
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -87,18 +91,18 @@ class LlmRequestInboxTest {
 
     @Test
     void handle_decodesGenericRequestTypesAndStoresTheResponse() throws Exception {
-        var messages = List.of(
-            new ConversationMessage(ConversationRole.USER, "hi", null, null, null));
-        var message = this.messageOf(LlmRequestKind.INFERENCE_TURN, messages);
-        when(this.inferenceTurnExecutor.execute(messages))
-            .thenReturn(new InferenceTurn("hello", List.of(), 5L, "stop"));
+        var request = new InferenceTurnRequest(
+            List.of(new ConversationMessage(ConversationRole.USER, "hi", null, null, null)), 2);
+        var message = this.messageOf(LlmRequestKind.INFERENCE_TURN, request);
+        when(this.inferenceTurnExecutor.execute(request))
+            .thenReturn(new InferenceTurn("hello", List.of(), 5L, "stop", USAGE));
 
         ReflectionTestUtils.invokeMethod(this.inbox, "handle", message);
 
         var envelope = this.envelopeOf(message);
         assertThat(envelope.isUnreachable()).isFalse();
         assertThat(this.objectMapper.treeToValue(envelope.value(), InferenceTurn.class))
-            .isEqualTo(new InferenceTurn("hello", List.of(), 5L, "stop"));
+            .isEqualTo(new InferenceTurn("hello", List.of(), 5L, "stop", USAGE));
         verify(this.messageRepository).save(message);
     }
 

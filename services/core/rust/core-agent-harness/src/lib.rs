@@ -57,6 +57,7 @@ async fn run_assignment(
         adapter,
         budget_for(&assignment),
         StallDetector::new(DEFAULT_STALL_REPEATS),
+        assignment.prompts.nudges.clone(),
     );
     let outcome = runner.run(assignment).await?;
     log::info!("core-agent-harness finished: {outcome:?}");

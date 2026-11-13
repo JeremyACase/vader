@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -18,14 +17,8 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.method.MethodToolCallbackProvider;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.vader.core.server.mcp.AgentToolAudience;
-import org.vader.core.server.mcp.McpToolCallbackRegistry;
-import org.vader.core.server.mcp.ToolAudienceTag;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.orchestration.model.AttachedFile;
 import org.vader.core.server.orchestration.model.DecompositionRequest;
 
@@ -41,26 +34,6 @@ class DecompositionLlmExecutorTest {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(assistantText))));
     }
 
-    private static McpToolCallbackRegistry registryWith(final ToolCallbackProvider... providers) {
-        @SuppressWarnings("unchecked")
-        ObjectProvider<ToolCallbackProvider> objectProvider = mock(ObjectProvider.class);
-        when(objectProvider.stream()).thenReturn(Stream.of(providers));
-
-        var tags = List.of(providers).stream()
-            .map(provider -> new ToolAudienceTag(
-                provider, java.util.Set.of(AgentToolAudience.ORCHESTRATION)))
-            .toList();
-        @SuppressWarnings("unchecked")
-        ObjectProvider<ToolAudienceTag> tagProvider = mock(ObjectProvider.class);
-        when(tagProvider.stream()).thenAnswer(invocation -> tags.stream());
-
-        var registry = new McpToolCallbackRegistry();
-        ReflectionTestUtils.setField(registry, "toolCallbackProviders", objectProvider);
-        ReflectionTestUtils.setField(registry, "audienceTags", tagProvider);
-        ReflectionTestUtils.invokeMethod(registry, "wire");
-        return registry;
-    }
-
     private static DecompositionRequest request(final String clientPromptText) {
         return new DecompositionRequest(clientPromptText, List.of(), null);
     }
@@ -71,12 +44,11 @@ class DecompositionLlmExecutorTest {
         return promptCaptor.getValue();
     }
 
-    private static DecompositionLlmExecutor executor(
-        final ChatClient.Builder builder, final ToolCallbackProvider... providers) {
-
+    private static DecompositionLlmExecutor executor(final ChatClient.Builder builder) {
         var executor = new DecompositionLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
-        ReflectionTestUtils.setField(executor, "toolCallbackRegistry", registryWith(providers));
+        ReflectionTestUtils.setField(
+            executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
         return executor;
     }
 
@@ -93,21 +65,18 @@ class DecompositionLlmExecutorTest {
     }
 
     @Test
-    void execute_attachesEveryRegisteredToolCallback() {
+    void execute_offersThePlannerNoTools() {
         var chatModel = mock(ChatModel.class);
         when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
         when(chatModel.call(any(Prompt.class))).thenReturn(responseWith(VALID_PLAN_JSON));
-        var provider = MethodToolCallbackProvider.builder()
-            .toolObjects(new DummyTools())
-            .build();
 
-        executor(ChatClient.builder(chatModel), provider).execute(request("anything"));
+        executor(ChatClient.builder(chatModel)).execute(request("anything"));
 
-        var promptCaptor = org.mockito.ArgumentCaptor.forClass(Prompt.class);
-        verify(chatModel).call(promptCaptor.capture());
-        var options = (ToolCallingChatOptions) promptCaptor.getValue().getOptions();
-        assertThat(options.getToolCallbacks())
-            .anyMatch(callback -> callback.getToolDefinition().name().equals("dummy_tool"));
+        var prompt = capturedPrompt(chatModel);
+        assertThat(((ToolCallingChatOptions) prompt.getOptions()).getToolCallbacks())
+            .isNullOrEmpty();
+        assertThat(prompt.getSystemMessage().getText())
+            .doesNotContain("You have been given a set of tools");
     }
 
 
@@ -173,7 +142,7 @@ class DecompositionLlmExecutorTest {
 
         assertThat(capturedPrompt(chatModel).getSystemMessage().getText())
             .contains("upload_object")
-            .contains("do not carry over between tasks")
+            .contains("the only\nfiles that carry over are those a task saves with upload_object")
             .contains("standard library");
     }
 
@@ -206,13 +175,5 @@ class DecompositionLlmExecutorTest {
         executor.execute(request("second"));
 
         verify(builder, times(2)).build();
-    }
-
-    static final class DummyTools {
-
-        @Tool(name = "dummy_tool", description = "A tool that does nothing, for tests.")
-        public String doNothing() {
-            return "ok";
-        }
     }
 }

@@ -45,12 +45,18 @@ public class TaskAttemptSandboxTools {
         name = "run_python_code",
         description = "Run Python code in your own Python sandbox and return its stdout/stderr/"
             + "exit code. Any files attached to the original request are already in the "
-            + "working directory -- open them by the filename your task context gives. The "
-            + "working directory persists across calls for the rest of this task, so a file you "
-            + "write in one call is still there for the next. You see only what the code prints, "
-            + "plus the value of a bare expression on its last line (shown as a notebook would), "
-            + "so print anything else you want to see. The sandbox has no network access: use "
-            + "the standard library, pandas or openpyxl; nothing else can be installed.")
+            + "working directory -- open them by the filename your task context gives. Your "
+            + "calls share one Python session, like cells in a notebook: variables, imports and "
+            + "functions from earlier calls are still defined, so build on them -- load a file "
+            + "once, then inspect or fix it in small steps instead of resending a whole program. "
+            + "If a result has sessionReset true, the session was restarted and everything it "
+            + "defined is gone, so re-run what you still need. The working directory persists "
+            + "for the rest of this task, so a file you write in one call is still there. You see "
+            + "only what the code prints, plus the value of a bare expression on its last line, "
+            + "so print anything else you want to see. upload_object is a separate tool, not a "
+            + "Python function: call it directly, never from this code. The sandbox has no "
+            + "network access: use the standard library, pandas or openpyxl; nothing else can be "
+            + "installed.")
     public SandboxExecutionResult runPythonCode(
         @ToolParam(description = "The Python source to run.")
         final String code,

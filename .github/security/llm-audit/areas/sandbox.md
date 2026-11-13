@@ -2,8 +2,9 @@
 
 The attacker is code an agent submits to `run_python_code`, or anything able to reach a sandbox pod.
 
-- `core-python-sandbox-server`: can submitted code escape its subprocess or per-pod workspace, read
-  the server's own files or environment, or outlive its exec timeout?
+- `core-python-sandbox-server`: can submitted code escape its session worker process or per-pod
+  workspace, read the server's own files or environment, or outlive its exec timeout (including
+  processes it starts, which must die with a killed session)?
 - Is the sandbox server reachable only from core-server? Check the Services and pods the
   `PythonSandboxManifestBuilder` creates, and whether anything in `deploy/helm` restricts traffic to
   them.

@@ -1,6 +1,7 @@
 package org.vader.core.server.taskagent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +19,7 @@ import org.vader.common.model.vader.entity.TaskAttemptStatus;
 import org.vader.common.model.vader.entity.TaskUpdateAuthor;
 import org.vader.common.model.vader.entity.TaskUpdateType;
 import org.vader.core.server.events.EventPublishingFacade;
+import org.vader.core.server.taskagent.model.AssignmentPrompts;
 import org.vader.core.server.taskagent.model.ResultRequest;
 import org.vader.core.server.workflow.TaskAttemptRepository;
 import org.vader.core.server.workflow.TaskAttemptSettledEvent;
@@ -30,7 +33,7 @@ class TaskAttemptLifecycleServiceTest {
     private TaskAttemptRepository taskAttemptRepository;
     private EventPublishingFacade eventPublishingFacade;
     private TaskUpdateService taskUpdateService;
-    private AssignmentContextBuilder assignmentContextBuilder;
+    private AssignmentPromptsBuilder assignmentPromptsBuilder;
     private TaskAttemptLifecycleService service;
 
     @BeforeEach
@@ -38,7 +41,7 @@ class TaskAttemptLifecycleServiceTest {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
         this.eventPublishingFacade = mock(EventPublishingFacade.class);
         this.taskUpdateService = mock(TaskUpdateService.class);
-        this.assignmentContextBuilder = mock(AssignmentContextBuilder.class);
+        this.assignmentPromptsBuilder = mock(AssignmentPromptsBuilder.class);
 
         this.service = new TaskAttemptLifecycleService();
         ReflectionTestUtils.setField(
@@ -47,7 +50,7 @@ class TaskAttemptLifecycleServiceTest {
             this.service, "eventPublishingFacade", this.eventPublishingFacade);
         ReflectionTestUtils.setField(this.service, "taskUpdateService", this.taskUpdateService);
         ReflectionTestUtils.setField(
-            this.service, "assignmentContextBuilder", this.assignmentContextBuilder);
+            this.service, "assignmentPromptsBuilder", this.assignmentPromptsBuilder);
     }
 
     @Test
@@ -104,15 +107,50 @@ class TaskAttemptLifecycleServiceTest {
     }
 
     @Test
-    void fetchAssignment_returnsTheTaskDescriptionAsObjectiveAlongsideTheBuiltContext() {
+    void fetchAssignment_returnsTheTaskDescriptionAsObjectiveAlongsideTheBuiltPrompts() {
         var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
         attempt.getTask().setDescription("Run the corrected cleaning code.");
         when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
-        when(this.assignmentContextBuilder.build(attempt.getTask())).thenReturn("the context");
+        var prompts = Instancio.create(AssignmentPrompts.class);
+        when(this.assignmentPromptsBuilder.build(attempt.getTask())).thenReturn(prompts);
 
         var response = this.service.fetchAssignment(ATTEMPT_ID);
 
         assertThat(response.objective()).isEqualTo("Run the corrected cleaning code.");
-        assertThat(response.context()).isEqualTo("the context");
+        assertThat(response.prompts()).isEqualTo(prompts);
+    }
+
+    @Test
+    void cancel_failsAnOpenAttemptWithTheReasonAndPublishesItsSettlement() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.cancel(ATTEMPT_ID, "Cancelled: the workflow was cancelled.");
+
+        assertThat(attempt.getStatus()).isEqualTo(TaskAttemptStatus.FAILED);
+        assertThat(attempt.getFailureReason()).isEqualTo("Cancelled: the workflow was cancelled.");
+        verify(this.eventPublishingFacade).publish(any(TaskAttemptSettledEvent.class));
+    }
+
+    @Test
+    void cancel_leavesAnAlreadySettledAttemptAlone() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        attempt.setStatus(TaskAttemptStatus.SUCCEEDED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        this.service.cancel(ATTEMPT_ID, "Cancelled: the workflow was cancelled.");
+
+        assertThat(attempt.getStatus()).isEqualTo(TaskAttemptStatus.SUCCEEDED);
+        verify(this.eventPublishingFacade, never()).publish(any());
+    }
+
+    @Test
+    void specFor_refusesAnAttemptCancelledBeforeItsJobWasCreated() {
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        attempt.setStatus(TaskAttemptStatus.FAILED);
+        when(this.taskAttemptRepository.findById(ATTEMPT_ID)).thenReturn(Optional.of(attempt));
+
+        assertThatThrownBy(() -> this.service.specFor(ATTEMPT_ID))
+            .isInstanceOf(AssignmentAlreadyTerminalException.class);
     }
 }

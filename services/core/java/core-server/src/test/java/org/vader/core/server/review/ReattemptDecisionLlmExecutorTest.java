@@ -15,6 +15,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.review.model.ReattemptDecisionRequest;
 
 class ReattemptDecisionLlmExecutorTest {
@@ -29,6 +30,8 @@ class ReattemptDecisionLlmExecutorTest {
     private static ReattemptDecisionLlmExecutor executor(final ChatClient.Builder builder) {
         var executor = new ReattemptDecisionLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
+        ReflectionTestUtils.setField(
+            executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
         return executor;
     }
 

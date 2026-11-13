@@ -97,8 +97,10 @@ public class PythonSandboxTools {
     @Tool(
         name = "run_python_code_in_sandbox",
         description = "Run Python code inside an existing sandbox and return its stdout/stderr/"
-            + "exit code. The sandbox's working directory persists across calls, so a file "
-            + "staged in one call (or a previous run_python_code_in_sandbox call, or "
+            + "exit code. Calls against one sandbox share a Python session, like notebook cells: "
+            + "variables, imports and functions from earlier calls are still defined, unless a "
+            + "result reports sessionReset. The sandbox's working directory persists too, so a "
+            + "file staged in one call (or a previous run_python_code_in_sandbox call, or "
             + "stage_object) is still there for a later one -- stage a file once, then run "
             + "several analysis "
             + "snippets against it. To analyze a previously-uploaded object, stage it first with "

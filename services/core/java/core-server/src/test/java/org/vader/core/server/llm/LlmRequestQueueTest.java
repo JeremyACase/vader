@@ -27,19 +27,26 @@ import org.vader.core.server.taskagent.InferenceTurnLlmExecutor;
 import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.ConversationRole;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
+import org.vader.core.server.taskagent.model.TurnUsage;
 import org.vader.core.server.workflow.WorkflowSynthesisLlmExecutor;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
 import tools.jackson.databind.ObjectMapper;
 
 class LlmRequestQueueTest {
 
+    private static final TurnUsage USAGE = new TurnUsage(3L, 2L, 40L);
+
     private static final EvaluationRequest EVALUATION_REQUEST = new EvaluationRequest(
         "user request", "objective", List.of(), "title", "description",
-        TaskAttemptStatus.SUCCEEDED, "result", null, List.of(), null);
+        TaskAttemptStatus.SUCCEEDED, "result", null, null, List.of());
 
     private LlmRequestOutboxMessageRepository messageRepository;
     private EventPublishingFacade eventPublishingFacade;
     private LlmRequestQueue queue;
+    private final PromptTemplateRegistry promptTemplateRegistry =
+        PromptTemplateRegistryObjectMother.loaded();
+    private final LlmModelNameResolver modelNameResolver = new LlmModelNameResolver();
 
     @BeforeEach
     void setUp() {
@@ -66,6 +73,14 @@ class LlmRequestQueueTest {
         ReflectionTestUtils.setField(this.queue, "executorRegistry", executorRegistry);
         ReflectionTestUtils.setField(this.queue, "stallTimeoutSeconds", 30L);
         ReflectionTestUtils.setField(this.queue, "maxWaitSeconds", 60L);
+        var messageFactory = new LlmRequestOutboxMessageFactory();
+        ReflectionTestUtils.setField(
+            messageFactory, "promptTemplateRegistry", this.promptTemplateRegistry);
+        ReflectionTestUtils.setField(
+            messageFactory, "llmModelNameResolver", this.modelNameResolver);
+        ReflectionTestUtils.setField(this.queue, "messageFactory", messageFactory);
+        ReflectionTestUtils.setField(this.modelNameResolver, "orchestratorType", "local");
+        ReflectionTestUtils.setField(this.modelNameResolver, "localModel", "qwen2.5:7b");
         ReflectionTestUtils.invokeMethod(this.queue, "init");
 
         when(this.messageRepository.save(any())).thenAnswer(call -> call.getArgument(0));
@@ -73,8 +88,9 @@ class LlmRequestQueueTest {
             .thenReturn(Optional.of(java.time.OffsetDateTime.now()));
     }
 
-    private static List<ConversationMessage> userTurn(final String text) {
-        return List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null));
+    private static InferenceTurnRequest userTurn(final String text) {
+        return new InferenceTurnRequest(
+            List.of(new ConversationMessage(ConversationRole.USER, text, null, null, null)), 1);
     }
 
     private void respondWith(final String responseJson) {
@@ -90,11 +106,12 @@ class LlmRequestQueueTest {
     void submit_enqueuesUnderTheExecutorsKindAndPublishesBeforeAwaitingTheResult() {
         this.respondWith(
             "{\"value\":{\"content\":\"hello\",\"toolCalls\":[],\"tokensSpent\":5,"
-                + "\"finishReason\":\"stop\"},\"unreachableReason\":null}");
+                + "\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":3,\"completionTokens\":2,"
+                + "\"promptCharacters\":40}},\"unreachableReason\":null}");
 
         var result = this.queue.submit(InferenceTurnLlmExecutor.class, userTurn("hi"));
 
-        assertThat(result).isEqualTo(new InferenceTurn("hello", List.of(), 5L, "stop"));
+        assertThat(result).isEqualTo(new InferenceTurn("hello", List.of(), 5L, "stop", USAGE));
         var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
         verify(this.messageRepository).save(messageCaptor.capture());
         assertThat(messageCaptor.getValue().getKind()).isEqualTo(LlmRequestKind.INFERENCE_TURN);
@@ -102,6 +119,33 @@ class LlmRequestQueueTest {
         assertThat(messageCaptor.getValue().getRequestJson()).contains("hi");
         verify(this.eventPublishingFacade)
             .publish(new OutboxMessageEnqueuedEvent("LlmRequest"));
+    }
+
+    @Test
+    void submit_stampsTheRequestWithItsKindsPromptFingerprintAndTheModel() {
+        this.respondWith(
+            "{\"value\":{\"passed\":true,\"reasoning\":\"ok\"},\"unreachableReason\":null}");
+
+        this.queue.submit(EvaluationLlmExecutor.class, EVALUATION_REQUEST);
+
+        var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
+        verify(this.messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getPromptFingerprint())
+            .isEqualTo(this.promptTemplateRegistry.fingerprint(LlmRequestKind.EVALUATION));
+        assertThat(messageCaptor.getValue().getModel()).isEqualTo("qwen2.5:7b");
+    }
+
+    @Test
+    void submit_stampsTheOrchestratorTypeAsTheModelWhenNoLocalModelAnswers() {
+        ReflectionTestUtils.setField(this.modelNameResolver, "orchestratorType", "scripted");
+        this.respondWith(
+            "{\"value\":{\"passed\":true,\"reasoning\":\"ok\"},\"unreachableReason\":null}");
+
+        this.queue.submit(EvaluationLlmExecutor.class, EVALUATION_REQUEST);
+
+        var messageCaptor = ArgumentCaptor.forClass(LlmRequestOutboxMessageEntity.class);
+        verify(this.messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getModel()).isEqualTo("scripted");
     }
 
     @Test

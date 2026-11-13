@@ -5,6 +5,20 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+### Added
+- `GET /workspace/files` lists the workspace's files by name, size and SHA-256, without their
+  content, so `core-server` can save what an agent's code wrote when its attempt ends.
+
+### Changed
+- Submitted code now runs in one persistent Python session per sandbox, like notebook cells:
+  variables, imports and functions survive from one call to the next, so an agent can load data
+  once and work on it in small steps rather than resubmitting a whole program each call. The
+  session still lives in its own process. A timeout interrupts the overrunning code and keeps the
+  session; only code that ignores the interrupt is killed, with any processes it started. A
+  result's new `sessionReset` flag tells the caller when the session was lost (killed or crashed)
+  and earlier definitions are gone.
+
 ## [0.4.1]
 ### Security
 - The image applies Debian security patches at build time, so a stale base image does not ship

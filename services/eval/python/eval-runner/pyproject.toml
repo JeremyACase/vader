@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["eval_runner", "monthly_grading"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "cases"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# The grading the cases' checkers share lives beside them, in cases/monthly_grading.
+mypy_path = "cases"

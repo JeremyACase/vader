@@ -56,10 +56,7 @@ public class ReattemptDecisionService {
         var attempt = this.taskAttemptRepository.findById(attemptId).orElseThrow();
         var task = attempt.getTask();
 
-        if (attempt.getAttemptNumber() >= this.maxAttemptsPerTask) {
-            this.taskUpdateService.record(task, attempt, TaskUpdateType.UPDATE,
-                "Attempt cap (" + this.maxAttemptsPerTask + ") reached; not re-attempting.",
-                TaskUpdateAuthor.ORCHESTRATOR);
+        if (this.recordCapIfReached(attempt)) {
             return;
         }
 
@@ -75,6 +72,31 @@ public class ReattemptDecisionService {
         if (decision.shouldReattempt()) {
             this.taskGraphScheduler.dispatch(task, attempt.getAttemptNumber() + 1);
         }
+    }
+
+    /**
+     * Re-attempts a failed attempt's task while attempts remain, without consulting the LLM: for
+     * an attempt whose review yielded no usable reply, where asking again could fail the same way.
+     *
+     * @param attemptId the failed attempt's id
+     */
+    @Transactional
+    public void reattemptIfAttemptsRemain(final String attemptId) {
+        var attempt = this.taskAttemptRepository.findById(attemptId).orElseThrow();
+        if (!this.recordCapIfReached(attempt)) {
+            this.taskGraphScheduler.dispatch(attempt.getTask(), attempt.getAttemptNumber() + 1);
+        }
+    }
+
+    /** Records that the attempt cap is reached, if it is, and says whether it was. */
+    private boolean recordCapIfReached(final TaskAttemptEntity attempt) {
+        var reached = attempt.getAttemptNumber() >= this.maxAttemptsPerTask;
+        if (reached) {
+            this.taskUpdateService.record(attempt.getTask(), attempt, TaskUpdateType.UPDATE,
+                "Attempt cap (" + this.maxAttemptsPerTask + ") reached; not re-attempting.",
+                TaskUpdateAuthor.ORCHESTRATOR);
+        }
+        return reached;
     }
 
     private String latestFailureReasoning(final TaskAttemptEntity attempt) {

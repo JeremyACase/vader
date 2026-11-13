@@ -26,12 +26,26 @@ class ExecutionRequest(CamelModel):
 
 
 class ExecutionResult(CamelModel):
-    """The outcome of running one ExecutionRequest."""
+    """The outcome of running one ExecutionRequest.
+
+    ``session_reset`` is true when the Python session was lost during or before this call -- its
+    process was killed after ignoring a timeout's interrupt, or died -- so variables, imports and
+    functions from earlier calls are gone. Workspace files are unaffected.
+    """
 
     stdout: str
     stderr: str
     exit_code: int
     timed_out: bool
+    session_reset: bool = False
+
+
+class WorkspaceFileInfo(CamelModel):
+    """One file in the workspace, described without its content."""
+
+    filename: str
+    size: int
+    sha256: str
 
 
 class StageFileResult(CamelModel):

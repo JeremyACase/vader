@@ -21,8 +21,8 @@ import org.vader.core.server.workflow.TaskUpdateService;
 /**
  * Owns every status transition a {@code TaskAttempt} goes through, from dispatch to a terminal
  * outcome -- the durable audit trail behind "log everything from prompt to workflow finished."
- * Backs {@code TaskAssignmentInbox} (dispatch bookkeeping), {@code TaskAttemptReaper} and the
- * status half of {@code AgentAssignmentController}.
+ * Backs {@code TaskAssignmentInbox} (dispatch bookkeeping), {@code TaskAttemptReaper},
+ * {@code WorkflowCancellationService} and the status half of {@code AgentAssignmentController}.
  *
  * <p>Every public method re-fetches the attempt fresh by id rather than accepting a caller-held
  * reference, the same reasoning {@code QueueMessageProcessor} documents: each call is its own
@@ -41,7 +41,7 @@ public class TaskAttemptLifecycleService {
     private TaskUpdateService taskUpdateService;
 
     @Autowired
-    private AssignmentContextBuilder assignmentContextBuilder;
+    private AssignmentPromptsBuilder assignmentPromptsBuilder;
 
     @Value("${vader.agent-harness.max-turns:20}")
     private int maxTurns;
@@ -54,14 +54,16 @@ public class TaskAttemptLifecycleService {
 
     /**
      * Resolves the task/assignment identity a Job manifest needs, for {@code TaskAssignmentInbox}
-     * to dispatch.
+     * to dispatch. Refuses an attempt settled while it waited, so a cancelled attempt never gets a
+     * Job.
      *
      * @param assignmentId the attempt id about to be dispatched
      * @return the resolved spec
+     * @throws AssignmentAlreadyTerminalException if the attempt already settled
      */
     @Transactional
     public AgentHarnessSpec specFor(final String assignmentId) {
-        var attempt = this.require(assignmentId);
+        var attempt = this.requireOpen(assignmentId);
         return new AgentHarnessSpec(attempt.getTask().getId(), attempt.getId());
     }
 
@@ -69,10 +71,11 @@ public class TaskAttemptLifecycleService {
      * Records that a harness Job was successfully created for this attempt.
      *
      * @param assignmentId the dispatched attempt id
+     * @throws AssignmentAlreadyTerminalException if the attempt settled while its Job was created
      */
     @Transactional
     public void markDispatched(final String assignmentId) {
-        var attempt = this.require(assignmentId);
+        var attempt = this.requireOpen(assignmentId);
         attempt.setStatus(TaskAttemptStatus.DISPATCHED);
         attempt.setDispatchedAt(OffsetDateTime.now());
         this.taskAttemptRepository.save(attempt);
@@ -118,7 +121,7 @@ public class TaskAttemptLifecycleService {
             task.getId(),
             attempt.getId(),
             task.getDescription(),
-            this.assignmentContextBuilder.build(task),
+            this.assignmentPromptsBuilder.build(task),
             this.maxTurns,
             this.maxTokens,
             this.deadlineSeconds);
@@ -149,6 +152,22 @@ public class TaskAttemptLifecycleService {
     public void submitResult(final String assignmentId, final ResultRequest request) {
         var attempt = this.requireOpen(assignmentId);
         this.settle(attempt, request.status(), request.output(), request.failureReason());
+    }
+
+    /**
+     * Fails an attempt that is still open because its workflow was cancelled. Settling it deletes
+     * its harness Job and sandbox, and the harness's next call is refused. An attempt that already
+     * settled is left as it is.
+     *
+     * @param assignmentId the attempt to stop
+     * @param reason why it was stopped, recorded as its failure reason
+     */
+    @Transactional
+    public void cancel(final String assignmentId, final String reason) {
+        var attempt = this.require(assignmentId);
+        if (!isTerminal(attempt.getStatus())) {
+            this.settle(attempt, TaskAttemptStatus.FAILED, null, reason);
+        }
     }
 
     /**

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -13,24 +14,42 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.ObjectMetadataEntity;
 import org.vader.common.model.vader.entity.TaskAttemptEntity;
 import org.vader.common.model.vader.entity.TaskEntity;
+import org.vader.common.model.vader.entity.TaskUpdateEntity;
+import org.vader.common.model.vader.entity.TaskUpdateType;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.sandbox.TaskAttemptSandboxService;
-import org.vader.core.server.workflow.PlanOutlineBuilder;
+import org.vader.core.server.sandbox.TaskWorkspaceFileResolverObjectMother;
+import org.vader.core.server.storage.ObjectMetadataRepository;
+import org.vader.core.server.workflow.PlanOutlineBuilderObjectMother;
 import org.vader.core.server.workflow.TaskAttemptRepository;
+import org.vader.core.server.workflow.TaskUpdateRepository;
 
 class AssignmentContextBuilderTest {
 
     private static final String WORKFLOW_ID = "wwwwwwww-1111-2222-3333-444444444444";
 
     private TaskAttemptRepository taskAttemptRepository;
+    private TaskUpdateRepository taskUpdateRepository;
+    private ObjectMetadataRepository objectMetadataRepository;
     private AssignmentContextBuilder builder;
 
     @BeforeEach
     void setUp() {
         this.taskAttemptRepository = mock(TaskAttemptRepository.class);
+        this.taskUpdateRepository = mock(TaskUpdateRepository.class);
+        this.objectMetadataRepository = mock(ObjectMetadataRepository.class);
         this.builder = new AssignmentContextBuilder();
+        ReflectionTestUtils.setField(this.builder, "taskWorkspaceFileResolver",
+            TaskWorkspaceFileResolverObjectMother.over(
+                this.taskAttemptRepository, this.objectMetadataRepository));
         ReflectionTestUtils.setField(
             this.builder, "taskAttemptRepository", this.taskAttemptRepository);
-        ReflectionTestUtils.setField(this.builder, "planOutlineBuilder", new PlanOutlineBuilder());
+        ReflectionTestUtils.setField(
+            this.builder, "taskUpdateRepository", this.taskUpdateRepository);
+        ReflectionTestUtils.setField(this.builder, "planOutlineBuilder",
+            PlanOutlineBuilderObjectMother.over(this.taskAttemptRepository));
+        ReflectionTestUtils.setField(
+            this.builder, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
     }
 
     private static TaskAttemptEntity attemptWithAttachedFile(final String originalFilename) {
@@ -136,6 +155,36 @@ class AssignmentContextBuilderTest {
     }
 
     @Test
+    void build_withTheSandboxEnabled_listsFilesPrerequisitesSavedAsInTheWorkingDirectory() {
+        ReflectionTestUtils.setField(
+            this.builder, "taskAttemptSandboxService", mock(TaskAttemptSandboxService.class));
+        var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
+        var dependency = new TaskEntity();
+        dependency.setId("dep-task-id");
+        dependency.setTitle("Split revenue");
+        attempt.getTask().setDependsOn(Set.of(dependency));
+        var dependencyAttempt = new TaskAttemptEntity();
+        dependencyAttempt.setId("dep-attempt-id");
+        dependencyAttempt.setTask(dependency);
+        when(this.taskAttemptRepository.findFirstByTaskIdOrderByAttemptNumberDesc("dep-task-id"))
+            .thenReturn(Optional.of(dependencyAttempt));
+        var saved = new ObjectMetadataEntity();
+        saved.setOriginalFilename("monthly.csv");
+        saved.setContentType("text/csv");
+        saved.setTaskAttempt(dependencyAttempt);
+        when(this.objectMetadataRepository.findByTaskAttemptIdOrderByCreatedAtAsc("dep-attempt-id"))
+            .thenReturn(List.of(saved));
+
+        var context = this.builder.build(attempt.getTask());
+
+        assertThat(context)
+            .contains("Files saved by the earlier tasks your task builds on")
+            .contains("- \"monthly.csv\" (type: text/csv, saved by \"Split revenue\") -- already in"
+                + " your Python working directory")
+            .doesNotContain("Files attached to the original request");
+    }
+
+    @Test
     void build_framesPrerequisiteResultsAsDataRatherThanInstructions() {
         var attempt = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID);
         var dependency = new TaskEntity();
@@ -196,6 +245,55 @@ class AssignmentContextBuilderTest {
         assertThat(context)
             .contains("No missing values remain.")
             .doesNotContain("Let's proceed.");
+    }
+
+    /** An attempt at the task, rejected for {@code reason} when one is given. */
+    private TaskAttemptEntity attemptNumbered(
+            final TaskEntity task, final int number, final String reason) {
+        var attempt = new TaskAttemptEntity();
+        attempt.setId(UUID.randomUUID().toString());
+        attempt.setTask(task);
+        attempt.setAttemptNumber(number);
+        var verdict = Optional.ofNullable(reason).map(description -> {
+            var update = new TaskUpdateEntity();
+            update.setType(TaskUpdateType.FAILED);
+            update.setDescription(description);
+            return update;
+        });
+        when(this.taskUpdateRepository.findFirstByTaskAttemptIdAndTypeInOrderByCreatedAtDesc(
+                attempt.getId(), List.of(TaskUpdateType.FAILED, TaskUpdateType.TIMED_OUT)))
+            .thenReturn(verdict);
+        return attempt;
+    }
+
+    @Test
+    void build_forReattempt_givesWhyEachEarlierAttemptWasRejectedOldestFirst() {
+        var task = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID).getTask();
+        var first = this.attemptNumbered(task, 1, "Never uploaded monthly_revenue.csv.");
+        var second = this.attemptNumbered(task, 2, "The months were not in order.");
+        var current = this.attemptNumbered(task, 3, null);
+        when(this.taskAttemptRepository.findByTaskIdOrderByAttemptNumberDesc(task.getId()))
+            .thenReturn(List.of(current, second, first));
+
+        var context = this.builder.build(task);
+
+        assertThat(context)
+            .contains("attempted before")
+            .contains("- Attempt 1: Never uploaded monthly_revenue.csv.\n"
+                + "- Attempt 2: The months were not in order.")
+            .doesNotContain("Attempt 3");
+    }
+
+    @Test
+    void build_forFirstAttempt_saysNothingAboutEarlierAttempts() {
+        var task = TaskAttemptObjectMother.attemptInWorkflow(WORKFLOW_ID).getTask();
+        var current = this.attemptNumbered(task, 1, null);
+        when(this.taskAttemptRepository.findByTaskIdOrderByAttemptNumberDesc(task.getId()))
+            .thenReturn(List.of(current));
+
+        var context = this.builder.build(task);
+
+        assertThat(context).doesNotContain("attempted before");
     }
 
     @Test

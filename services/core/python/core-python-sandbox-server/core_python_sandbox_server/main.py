@@ -10,13 +10,20 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 
 from core_python_sandbox_server.logging_config import configure_logging
-from core_python_sandbox_server.models import ExecutionRequest, ExecutionResult, StageFileResult
+from core_python_sandbox_server.models import (
+    ExecutionRequest,
+    ExecutionResult,
+    StageFileResult,
+    WorkspaceFileInfo,
+)
 from core_python_sandbox_server.workspace_code_executor import WorkspaceCodeExecutor
 
 configure_logging()
@@ -35,8 +42,18 @@ logger.info(
     MAX_TIMEOUT_SECONDS,
 )
 
-app = FastAPI(title="Vader Sandbox Exec Server")
 executor = WorkspaceCodeExecutor(WORKSPACE_DIR, MAX_TIMEOUT_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Ends the interpreter session on shutdown, so no process submitted code started outlives
+    the server."""
+    yield
+    executor.close()
+
+
+app = FastAPI(title="Vader Sandbox Exec Server", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -47,7 +64,7 @@ def health() -> dict[str, str]:
 
 @app.post("/execute", response_model=ExecutionResult)
 def execute(request: ExecutionRequest) -> ExecutionResult:
-    """Runs the submitted code in the persistent workspace and returns its output."""
+    """Runs the submitted code in the persistent session and workspace, returning its output."""
     logger.info(
         "executing submitted code: %d bytes, %d file(s) to stage",
         len(request.code),
@@ -55,11 +72,20 @@ def execute(request: ExecutionRequest) -> ExecutionResult:
     )
     result = executor.execute(request)
     logger.info(
-        "execution finished: exit_code=%s timed_out=%s",
+        "execution finished: exit_code=%s timed_out=%s session_reset=%s",
         result.exit_code,
         result.timed_out,
+        result.session_reset,
     )
     return result
+
+
+@app.get("/workspace/files", response_model=list[WorkspaceFileInfo])
+def list_files() -> list[WorkspaceFileInfo]:
+    """Lists the workspace's files by name, size and SHA-256, never their content -- lets
+    core-server save what the agent's code wrote when the attempt ends, without the agent
+    naming each file."""
+    return executor.list_files()
 
 
 @app.put("/workspace/files/{filename:path}", response_model=StageFileResult)

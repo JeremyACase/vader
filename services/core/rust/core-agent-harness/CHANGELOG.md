@@ -5,6 +5,19 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+### Changed
+- A reply that carries Python the model never ran no longer ends the run, or gets a nudge a small
+  model tends to answer with more prose: the harness runs that code as the `run_python_code` call
+  the model should have made, feeds the result back, and the run continues. Nudges remain for
+  other unfinished answers, such as unrun code in another language.
+
+## [0.5.0]
+### Changed
+- The harness carries no prompt text of its own: its system prompt, opening task message and
+  nudges all arrive with the assignment, rendered by core-server, so every prompt is versioned in
+  one place. Requires a core-server that sends `prompts` with the assignment (0.35.0 or later).
+
 ## [0.4.3]
 ### Security
 - The container image runs as uid 1000, matching the Job's pod security context, instead of root.

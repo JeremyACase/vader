@@ -13,7 +13,9 @@ import java.util.List;
  * UUID-patterned ids, timestamps or a recursive subtask tree.</p>
  *
  * <p>{@code reasoning} is the first field so the model writes its chain-of-thought before
- * committing to the structured plan fields.</p>
+ * committing to the structured plan fields. {@code deliverables} comes before {@code tasks} so
+ * the model names what it is producing before it decides how to split the work; it is what
+ * {@code SingleFileTransformPlanCollapser} keys on.</p>
  */
 @JsonClassDescription("A problem decomposed into a short list of actionable tasks")
 public record LlmTaskPlan(
@@ -27,8 +29,15 @@ public record LlmTaskPlan(
     String objective,
 
     @JsonPropertyDescription(
-        "2 to 6 top-level tasks that together accomplish the objective, listed in the order "
-            + "they would naturally happen")
+        "The filename of every file the user wants delivered to them, exactly as the request "
+            + "names it -- e.g. [\"summary.csv\"]. Empty when the user wants an answer rather "
+            + "than a file.")
+    List<String> deliverables,
+
+    @JsonPropertyDescription(
+        "1 to 6 top-level tasks that together accomplish the objective -- just one when a "
+            + "single agent can do the whole job -- listed in the order they would naturally "
+            + "happen")
     List<LlmTask> tasks) {
 
     /**

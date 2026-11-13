@@ -1,0 +1,1 @@
+- "<filename>" (id: <id>, type: <contentType><if(producedBy)>, saved by "<producedBy>"<endif>) -- read small text content directly with get_object_content and this id.

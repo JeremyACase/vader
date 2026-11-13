@@ -13,11 +13,13 @@ logging:
   vader: INFO
 
 vader:
-  # Allowable values are: DEV, PROD, TEST. Canned results are permitted ONLY in TEST: the chart
-  # refuses to render, and core-server refuses to start, with orchestrator.type "scripted" in any
-  # other mode. In DEV and PROD an unreachable LLM always fails loudly -- nothing ever substitutes
-  # a canned result for a real request. This chart's out-of-the-box default is DEV; a real
-  # deployment should set PROD, and only the devops test pipeline (configurations/test) sets TEST.
+  # Allowable values are: DEV, PROD, TEST, EVAL. Canned results are permitted ONLY in TEST: the
+  # chart refuses to render, and core-server refuses to start, with orchestrator.type "scripted"
+  # in any other mode. In every other mode an unreachable LLM always fails loudly -- nothing ever
+  # substitutes a canned result for a real request. EVAL benchmarks the system's prompts against a
+  # baseline: it needs a real local model and pins sampling with orchestrator.local.seed. This
+  # chart's out-of-the-box default is DEV; a real deployment should set PROD, only the devops
+  # test pipeline (configurations/test) sets TEST, and configurations/eval sets EVAL.
   mode: DEV
   swagger:
     # When true, core-server serves the OpenAPI spec at /v3/api-docs and Swagger UI at
@@ -59,9 +61,14 @@ vader:
       # unreliable enough that task agents regularly fail on them; the 7b model needs roughly
       # 5-6 GB of memory on the node running Ollama.
       model: qwen2.5:7b
+      # Whether a reasoning model (e.g. qwen3) thinks before it answers: true, false, or high,
+      # medium or low for models that take a level. Leave empty for a model with no thinking mode,
+      # such as qwen2.5 -- nothing is then sent. A model that thinks spends maxOutputTokens on
+      # its thinking too, so a long think can leave a plan or tool call cut off.
+      think:
       # Base URL of an Ollama instance running outside the cluster -- in dev, the one
-      # tools/scripts/devs/install-ollama.sh starts in Docker so it can use the host's GPU, which
-      # KIND nodes can't reach (both KIND install scripts set this to it). When set, the chart
+      # tools/scripts/local/ollama-up.sh starts in Docker so it can use the host's GPU, which
+      # KIND nodes can't reach (every local install script sets this to it). When set, the chart
       # deploys no Ollama of its own and core-server calls this URL instead. Leave empty to run
       # Ollama in-cluster.
       externalBaseUrl: ""
@@ -71,7 +78,7 @@ vader:
       requestTimeoutSeconds: 300
       # Hard cap on how many tokens the model may generate in any single response (Ollama's
       # num_predict), applied to every call: decomposition, agent inference turns, evaluation,
-      # reattempt decisions, refinement, synthesis. Without it a small model at temperature 0 can
+      # reattempt decisions, refinement, synthesis. Without it a small model can
       # fall into a repetition loop and generate forever -- past requestTimeoutSeconds, and even
       # after core-server gives up, holding Ollama's only slot so every later call queues behind
       # it. A response that genuinely needs more than this is cut off and fails loudly (e.g. an
@@ -80,13 +87,26 @@ vader:
       maxOutputTokens: 2048
       # Ollama's context window (num_ctx) for every call, prompt and reply together. Ollama
       # reserves maxOutputTokens of it for the reply, so the prompt budget is contextTokens minus
-      # maxOutputTokens -- and a prompt over that budget is silently cut from the front, dropping
-      # the system instructions first. Ollama's own default (4096) left only ~2k tokens of prompt,
-      # which task-plan decomposition and any agent turn carrying a tool result easily exceed.
+      # maxOutputTokens -- and a conversation over that budget silently loses its oldest messages:
+      # Ollama keeps every system message and the latest one, so for a task agent the opening task
+      # message (the request, the plan and its own task) goes first. core-server logs a warning
+      # when an agent turn nears the budget. Ollama's own default (4096) left only ~2k tokens of
+      # prompt, which task-plan decomposition and any agent turn carrying a tool result easily
+      # exceed.
       # Must be larger than maxOutputTokens (the chart refuses to render otherwise). Costs KV-cache
       # memory on the Ollama node: roughly 1 GB per 16k tokens for qwen2.5:7b. qwen2.5 was trained
       # on 32k, so there is no benefit going above 32768.
       contextTokens: 16384
+      # Sampling temperature for every Ollama call, in every mode, so a benchmark (mode EVAL)
+      # measures the prompts under the same sampling they run with. Above 0 the model samples
+      # rather than always taking its likeliest token: a retry with the same input can take a
+      # different path, and a benchmark's seeds are genuinely different samples. 0.7 is what
+      # Qwen recommends for qwen2.5-instruct; retune with the model.
+      temperature: 0.7
+      # The sampling seed every Ollama call uses in mode EVAL (ignored in every other mode).
+      # It makes each benchmark run a repeatable sample; the baseline script runs one per seed.
+      # Never compare runs made with different temperatures.
+      seed: 42
       # How long the core-server Helm system test waits for each submitted prompt to be
       # decomposed into a workflow. A real model on modest hardware takes minutes per
       # decomposition, and a later prompt also queues behind earlier workflows' agent calls on the

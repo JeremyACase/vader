@@ -18,15 +18,17 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.vader.common.model.vader.entity.TaskAttemptStatus;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.review.model.EvaluationRequest;
 import org.vader.core.server.review.model.RemainingSubtask;
+import org.vader.core.server.review.model.SavedFilePreview;
 import org.vader.core.server.workflow.model.PlanStep;
 
 class EvaluationLlmExecutorTest {
 
     private static final EvaluationRequest REQUEST = new EvaluationRequest(
         "the user request", "the objective", List.of(), "title", "description",
-        TaskAttemptStatus.SUCCEEDED, "the result", null, List.of(), null);
+        TaskAttemptStatus.SUCCEEDED, "the result", null, null, List.of());
 
     private static ChatResponse responseWith(final String assistantText) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(assistantText))));
@@ -35,6 +37,8 @@ class EvaluationLlmExecutorTest {
     private static EvaluationLlmExecutor executor(final ChatClient.Builder builder) {
         var executor = new EvaluationLlmExecutor();
         ReflectionTestUtils.setField(executor, "chatClientBuilder", builder);
+        ReflectionTestUtils.setField(
+            executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
         return executor;
     }
 
@@ -84,7 +88,9 @@ class EvaluationLlmExecutorTest {
                 new PlanStep("Assess feasibility", "Decide if it can work.", 0, false)),
             "title", "description",
             TaskAttemptStatus.SUCCEEDED, "Let's proceed.", null,
-            List.of(), "The agent's last tool call was run_python_code: it FAILED.");
+            "The agent's last tool call was run_python_code: it FAILED.",
+            List.of(new SavedFilePreview(
+                "monthly_revenue.csv", "text/csv", 22, "month,revenue\n2024-01,1", false, false)));
 
         executor(ChatClient.builder(chatModel)).execute(request);
 
@@ -92,11 +98,58 @@ class EvaluationLlmExecutorTest {
         verify(chatModel).call(promptCaptor.capture());
         assertThat(promptCaptor.getValue().getContents())
             .contains("run_python_code: it FAILED")
+            .contains("- \"monthly_revenue.csv\" (text/csv, 22 bytes)\n"
+                + "Its opening lines:\n"
+                + "----- start of \"monthly_revenue.csv\" -----\n"
+                + "month,revenue\n2024-01,1\n"
+                + "----- end of \"monthly_revenue.csv\" -----")
             .contains("The user's request: Can this spreadsheet work in fiscal quarters?")
             .contains("(objective: Assess a fiscal-quarter conversion)")
             .contains("- Analyze: Describe the spreadsheet.\n"
                 + "  - title: description   <-- the task under review\n"
                 + "- Assess feasibility: Decide if it can work.")
             .contains("remainingSubtasks");
+    }
+
+    @Test
+    void execute_saysWhyEachUnpreviewedFileShowsNoContent() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+            responseWith("{\"passed\":true,\"reasoning\":\"saved\"}"));
+        var request = new EvaluationRequest(
+            "the user request", "the objective", List.of(), "title", "description",
+            TaskAttemptStatus.SUCCEEDED, "the result", null, null,
+            List.of(
+                new SavedFilePreview("log.txt", "text/plain", 9000, "first", true, false),
+                new SavedFilePreview("chart.png", "image/png", 512, null, false, true),
+                new SavedFilePreview("blank.md", "text/markdown", 0, null, false, false),
+                new SavedFilePreview("late.csv", null, 40, null, false, false)));
+
+        executor(ChatClient.builder(chatModel)).execute(request);
+
+        var promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getContents())
+            .contains("Its opening lines (the file continues past them):")
+            .contains("- \"chart.png\" (image/png, 512 bytes)\n"
+                + "Binary, so its content is not shown.")
+            .contains("- \"blank.md\" (text/markdown, 0 bytes)\nThe file is empty.")
+            .contains("- \"late.csv\" (type unknown, 40 bytes)\n"
+                + "Its content is not shown: the files before it used up the preview space.");
+    }
+
+    @Test
+    void execute_saysSoWhenTheAttemptSavedNoFiles() {
+        var chatModel = mock(ChatModel.class);
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+            responseWith("{\"passed\":false,\"reasoning\":\"nothing saved\"}"));
+
+        executor(ChatClient.builder(chatModel)).execute(REQUEST);
+
+        var promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getContents()).contains("The attempt saved no files.");
     }
 }

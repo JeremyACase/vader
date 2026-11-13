@@ -18,6 +18,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.vader.core.server.llm.PromptTemplateRegistryObjectMother;
 import org.vader.core.server.workflow.model.DeliveredFile;
 import org.vader.core.server.workflow.model.TaskOutcome;
 import org.vader.core.server.workflow.model.WorkflowSynthesisRequest;
@@ -36,6 +37,8 @@ class WorkflowSynthesisLlmExecutorTest {
         this.executor = new WorkflowSynthesisLlmExecutor();
         ReflectionTestUtils.setField(
             this.executor, "chatClientBuilder", ChatClient.builder(this.chatModel));
+        ReflectionTestUtils.setField(
+            this.executor, "promptTemplateRegistry", PromptTemplateRegistryObjectMother.loaded());
     }
 
     private static ChatResponse responseWith(final String assistantText) {

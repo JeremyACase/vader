@@ -9,8 +9,8 @@ metadata:
     # Only rendered when vader.operators.pythonSandbox.enabled is true. Drives the operator's
     # REST surface (which shares its service layer with the MCP tools) through a full
     # create -> list -> execute -> delete -> list round trip against the real cluster,
-    # including a real core-python-sandbox-server call and a check that a staged file
-    # survives across calls. The sandbox itself is only reachable through core-server (see
+    # including a real core-python-sandbox-server call and checks that a staged file and a
+    # defined variable both survive across calls. The sandbox itself is only reachable through core-server (see
     # vader_test_sandbox_isolation.yaml), so every call here goes through core-server.
 spec:
   restartPolicy: Never
@@ -79,6 +79,21 @@ spec:
           [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading staged file, got $STATUS"; exit 1; }
           echo "$BODY" | grep -q '"stdout":"hello' || { echo "❌ staged file not readable: $BODY"; exit 1; }
           echo "✅ a file staged in one call was readable in a later call"
+
+          echo "== A variable defined in one call is still defined in a later call =="
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+            -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+            -d '{"code":"remembered = 6 * 7"}' || true)
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 defining a variable, got $STATUS"; exit 1; }
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
+            -X POST "$BASE/$NAME/execute" -H "Content-Type: application/json" \
+            -d '{"code":"remembered"}' || true)
+          BODY=$(cat "$BODY_FILE")
+          echo "HTTP $STATUS -- $BODY"
+          [ "$STATUS" = "200" ] || { echo "❌ expected HTTP 200 reading a variable, got $STATUS"; exit 1; }
+          echo "$BODY" | grep -q '"stdout":"42' || { echo "❌ variable not kept: $BODY"; exit 1; }
+          echo "$BODY" | grep -q '"sessionReset":false' || { echo "❌ session reported lost: $BODY"; exit 1; }
+          echo "✅ the Python session persisted between calls"
 
           echo "== Delete the sandbox =="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \

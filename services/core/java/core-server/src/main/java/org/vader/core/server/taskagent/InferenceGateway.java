@@ -1,14 +1,13 @@
 package org.vader.core.server.taskagent;
 
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.vader.core.server.llm.LlmRequestQueue;
 import org.vader.core.server.llm.OrchestratorUnavailableException;
-import org.vader.core.server.taskagent.model.ConversationMessage;
 import org.vader.core.server.taskagent.model.InferenceTurn;
+import org.vader.core.server.taskagent.model.InferenceTurnRequest;
 
 /**
  * The only path from {@code /vader/core-server/agent/inference} to a model: this, not the
@@ -30,13 +29,13 @@ public class InferenceGateway {
     /**
      * Completes one turn.
      *
-     * @param messages the running conversation so far
+     * @param request the running conversation so far, and the attempt it belongs to
      * @return the model's response: either a final answer, or a request to call one or more
      *     tools before it can continue
      */
-    public InferenceTurn complete(final List<ConversationMessage> messages) {
+    public InferenceTurn complete(final InferenceTurnRequest request) {
         try {
-            return this.requestQueue.submit(InferenceTurnLlmExecutor.class, messages);
+            return this.requestQueue.submit(InferenceTurnLlmExecutor.class, request);
         } catch (RuntimeException e) {
             logger.warn("Local LLM inference call failed: {}", e.getMessage());
             throw new OrchestratorUnavailableException(

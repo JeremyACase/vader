@@ -1,101 +1,32 @@
-//! Every piece of text the harness sends the model. Kept apart from the loop that sends it, so the
-//! wording can be read and tuned in one place without touching control flow.
+//! Every piece of text the harness sends the model. `core-server` renders all of it and hands it
+//! over with the assignment, so Vader's prompts live, and are versioned, in one place; the
+//! harness only decides *when* each one is sent.
 
-/// Frames the action-loop protocol for the model: call tools as needed, and a plain-text reply
-/// with no further tool calls is what ends the run. Without this, a model has no way to know that
-/// declining to call a tool is itself the signal to stop -- it would otherwise be indistinguishable
-/// from simply not having tried yet.
-///
-/// Explicitly forbids asking a clarifying question as the final reply: nothing in this loop ever
-/// reads a response back to the model, so a question is never answered -- it just gets reported
-/// as though it were the finished result. The user message that follows always carries the
-/// background (the original request, any attached files, the plan the task is one step of, and
-/// any prerequisite tasks' results) that a lone task description wouldn't otherwise include,
-/// specifically so the model has what it needs to avoid needing to ask in the first place. The
-/// plan is what keeps it to its own task: the request alone reads as its whole to-do list.
-///
-/// Says nothing about creating or staging into a sandbox: `core-server` provisions the attempt's
-/// own sandbox and stages every attached file into it on the first `run_python_code` call, so
-/// the model never has a sandbox name to carry between calls (and get wrong).
-///
-/// Does say to upload any file meant for the user: the sandbox dies with the run, and an uploaded
-/// file is the only form in which the workflow's final answer can hand it over.
-pub const TASK_INSTRUCTIONS: &str = "You are an autonomous agent completing one task from a \
-    larger workflow. No human is available to answer follow-up questions during this run -- you \
-    must gather anything you need yourself, using your available tools, rather than asking a \
-    clarifying question. The next message gives you the task plus background: the original \
-    request, any files attached to it, the plan your task is one step of, and the results of any \
-    prerequisite tasks. Do only your own task: the rest of the request belongs to the plan's \
-    other tasks, which run separately, so leave that work to them. If a file is \
-    mentioned, do not assume you already know what it contains: every attached file is already \
-    in your Python working directory, so inspect it with run_python_code, opening it by exactly \
-    the filename you are given. Wait for each tool result before relying on it in a later call. \
-    If your task produces a file the user should receive -- code, a script, a report, a document \
-    -- write the complete file with run_python_code and save it with upload_object, then name the \
-    file in your final answer. Your sandbox is discarded when this run ends, so a file you do not \
-    upload is lost. When you have fully completed the task, reply \
-    with your final answer as plain text and do not call any more tools; that reply is what ends \
-    this run and is treated as your finished result, not a question. Never end the run by asking \
-    a question or requesting clarification -- if something is genuinely still missing after using \
-    your tools, state your best attempt and explain what was missing instead.";
+use serde::{Deserialize, Serialize};
 
-/// Sent back to the model when it ends a turn with neither tool calls nor any text. Treating an
-/// empty message as the final answer would report the task `Succeeded` with no output at all, so
-/// the run is nudged to keep going instead. A model that keeps answering blank is still bounded:
-/// every blank turn fingerprints identically, so the stall detector ends the run as `Stalled`.
-pub const EMPTY_REPLY_NUDGE: &str = "Your last reply was empty -- it contained no text and no \
-    tool calls. Continue the task: call a tool if you still need information, or reply with your \
-    final answer as plain text.";
-
-/// Sent back when a final answer contains a fenced code block the model never executed. Reported
-/// as-is, "here's the corrected approach, let's proceed" plus unrun code would be handed
-/// downstream as though the work were done.
-pub const UNEXECUTED_CODE_NUDGE: &str = "Your reply contains code that you have not run, so it \
-    is not a finished result yet: nothing in it has been executed. Run the code with \
-    run_python_code and base your answer on its output. If the code itself is the deliverable, \
-    reply again with the same final answer.";
-
-/// Sent back when a final answer follows a tool call that failed, with nothing succeeding since --
-/// whatever that call was doing is still undone, however confident the reply sounds. Unless that
-/// call was outside the task: then the fix is to drop it, not to keep retrying work another task
-/// owns.
-pub const UNRESOLVED_ERROR_NUDGE: &str = "Your last tool call failed and nothing has succeeded \
-    since, so the work it was doing is not done yet. If that work is part of your task, fix the \
-    problem and run it again. If it is outside your task, drop it and reply with your task's own \
-    results instead. If the task is genuinely complete regardless, reply again with the same \
-    final answer.";
-
-/// Builds the opening `User` message: the background first, then the task itself, so the model
-/// reads the objective with its context already in hand.
-pub fn task_message(context: &str, objective: &str) -> String {
-    format!("{context}\n\nYour task: {objective}")
+/// The prompts for one assignment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignmentPrompts {
+    /// Frames the action-loop protocol: call tools as needed, and a plain-text reply with no
+    /// further tool calls is what ends the run.
+    pub system: String,
+    /// The opening user message: the task's background, then the task itself.
+    pub task: String,
+    pub nudges: AssignmentNudges,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn prompts_have_no_runs_of_spaces_from_line_wrapping() {
-        [
-            TASK_INSTRUCTIONS,
-            EMPTY_REPLY_NUDGE,
-            UNEXECUTED_CODE_NUDGE,
-            UNRESOLVED_ERROR_NUDGE,
-        ]
-        .iter()
-        .for_each(|prompt| assert!(!prompt.contains("  "), "{prompt:?}"));
-    }
-
-    #[test]
-    fn task_instructions_ask_for_deliverable_files_to_be_uploaded() {
-        assert!(TASK_INSTRUCTIONS.contains("save it with upload_object"));
-    }
-
-    #[test]
-    fn task_message_carries_both_context_and_objective() {
-        let message = task_message("some background", "do the thing");
-        assert!(message.contains("some background"));
-        assert!(message.ends_with("Your task: do the thing"));
-    }
+/// What to send back in place of accepting a reply as the run's final answer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignmentNudges {
+    /// After a turn with neither tool calls nor any text. Treating an empty message as the final
+    /// answer would report the task `Succeeded` with no output at all. A model that keeps
+    /// answering blank is still bounded: every blank turn fingerprints identically, so the stall
+    /// detector ends the run as `Stalled`.
+    pub empty_reply: String,
+    /// After a final answer carrying a fenced code block the model never executed.
+    pub unexecuted_code: String,
+    /// After a final answer that follows a failed tool call, with nothing succeeding since.
+    pub unresolved_error: String,
 }

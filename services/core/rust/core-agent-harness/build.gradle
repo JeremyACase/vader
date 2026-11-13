@@ -3,9 +3,8 @@ plugins {
 }
 
 // Every cargo invocation below runs inside Docker, never against a host toolchain -- some
-// machines running this build don't have (or can't run) a local Rust install. See
-// tools/scripts/devs/agent-core-harness-dockerized-build.sh for the equivalent standalone script.
-// The named volumes are created automatically by `docker run -v <name>:...` on first use.
+// machines running this build don't have (or can't run) a local Rust install. The named volumes
+// are created automatically by `docker run -v <name>:...` on first use.
 //
 // NOTE: dockerRunCargo is a Closure (not a `def method(...)`), assigned to a local variable --
 // only that form closes over the script-level locals below (rustImage, etc.) when called from
